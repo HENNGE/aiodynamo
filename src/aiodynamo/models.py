@@ -21,6 +21,7 @@ class Meta(Enum):
     constant = auto()
     field_type = auto()
     key_type = auto()
+    alias = auto()
 
 
 class FieldTypes(Enum):
@@ -38,6 +39,21 @@ def get_type(key_type):
         return 'B'
     else:
         raise InvalidModel(f'Invalid key type {key_type}')
+
+
+def name(field):
+    alias = field.metadata.get(Meta.alias, NULL)
+    if alias is NULL:
+        return field.name
+    else:
+        return alias
+
+
+def convert(field, value):
+    if field.convert:
+        return field.convert(value)
+    else:
+        return value
 
 
 @attr.s(frozen=True)
@@ -60,8 +76,8 @@ class HashRangeEncoder:
             else:
                 hash_key = constant
         return {
-            self.hash_field.name: hash_key,
-            self.range_field.name: range_key,
+            self.hash_field.name: convert(self.hash_field, hash_key),
+            self.range_field.name: convert(self.range_field, range_key),
         }
 
     def build_hash(self, **kwargs):
@@ -71,22 +87,22 @@ class HashRangeEncoder:
             raise InvalidKey('Hash key not provided')
         if kwargs:
             raise InvalidKey('Too many values provided')
-        return self.hash_field.name, value
+        return name(self.hash_field), convert(self.hash_field, value)
     
     def pop(self, data):
         return {
-            self.hash_field.name: data.pop(self.hash_field.name),
-            self.range_field.name: data.pop(self.range_field.name),
+            name(self.hash_field): data.pop(self.hash_field.name),
+            name(self.range_field): data.pop(self.range_field.name),
         }
 
     def schema(self):
         return [
             {
-                'AttributeName': self.hash_field.name,
+                'AttributeName': name(self.hash_field),
                 'KeyType': 'HASH',
             },
             {
-                'AttributeName': self.range_field.name,
+                'AttributeName': name(self.range_field),
                 'KeyType': 'RANGE',
             },
         ]
@@ -94,11 +110,11 @@ class HashRangeEncoder:
     def attributes(self):
         return [
             {
-                'AttributeName': self.hash_field.name,
+                'AttributeName': name(self.hash_field),
                 'AttributeType': get_type(self.hash_field.metadata[Meta.key_type]),
             },
             {
-                'AttributeName': self.range_field.name,
+                'AttributeName': name(self.range_field),
                 'AttributeType': get_type(self.range_field.metadata[Meta.key_type]),
             }
         ]
@@ -116,7 +132,7 @@ class HashEncoder:
         if kwargs:
             raise InvalidKey('Too many values provided')
         return {
-            self.hash_field.name: value,
+            name(self.hash_field): convert(self.hash_field, value),
         }
 
     def build_hash(self, **kwargs):
@@ -126,17 +142,17 @@ class HashEncoder:
             raise InvalidKey('Hash key not provided')
         if kwargs:
             raise InvalidKey('Too many values provided')
-        return self.hash_field.name, value
+        return name(self.hash_field), convert(self.hash_field, value)
 
     def pop(self, data):
         return {
-            self.hash_field.name: data.pop(self.hash_field.name),
+            name(self.hash_field): data.pop(self.hash_field.name),
         }
 
     def schema(self):
         return [
             {
-                'AttributeName': self.hash_field.name,
+                'AttributeName': name(self.hash_field),
                 'KeyType': 'HASH',
             },
         ]
@@ -144,7 +160,7 @@ class HashEncoder:
     def attributes(self):
         return [
             {
-                'AttributeName': self.hash_field.name,
+                'AttributeName': name(self.hash_field),
                 'AttributeType': get_type(self.hash_field.metadata[Meta.key_type]),
             },
         ]
@@ -168,8 +184,22 @@ def extract_hash_range(fields: List[attr.Attribute]):
     return hash_field, range_field
 
 
+def get_anti_aliases(fields):
+    anti_aliases = {}
+    for field in fields:
+        alias = field.metadata.get(Meta.alias, NULL)
+        if alias is NULL:
+            anti_aliases[field.name] = field.name
+        else:
+            anti_aliases[alias] = field.name
+    return anti_aliases
+
+
 @attr.s(frozen=True)
 class ModelConfig:
+    model = attr.ib()
+    fields = attr.ib()
+    anti_aliases = attr.ib()
     hash_field = attr.ib()
     range_field = attr.ib()
     key_encoder = attr.ib()
@@ -189,9 +219,12 @@ class ModelConfig:
         else:
             key_encoder = HashEncoder(hash_field)
         return cls(
+            model=model,
             hash_field=hash_field,
             range_field=range_field,
-            key_encoder=key_encoder
+            key_encoder=key_encoder,
+            anti_aliases=get_anti_aliases(fields),
+            fields={field.name: field for field in fields},
         )
 
     def build_hash_key(self, **kwargs):
@@ -209,13 +242,29 @@ class ModelConfig:
     def key_attributes(self):
         return self.key_encoder.attributes()
 
+    def alias(self, data):
+        return {
+            name(self.fields[key]): value for key, value in data.items()
+        }
+
+    def anti_alias(self, data):
+        return {
+            self.anti_aliases[key]: value for key, value in data.items()
+        }
+
+    def gather(self, instance):
+        return attr.asdict(
+            instance,
+            filter=lambda attr, _: attr.metadata.get(Meta.field_type, NULL) != NULL
+        )
+
     def model_init_factory(self, real_init):
         @wraps(real_init)
         def wrapper(this, **kwargs):
             constant = self.hash_field.metadata.get(Meta.constant, NULL)
             if constant is not NULL:
                 kwargs[self.hash_field.name] = constant
-            return real_init(this,**kwargs)
+            return real_init(this, **kwargs)
         return wrapper
 
 
@@ -230,29 +279,46 @@ def modify(self, **updates):
     return new
 
 
-def field(**kwargs):
+def field(*, alias=NULL, **kwargs):
     return attr.ib(metadata={
-        Meta.field_type: FieldTypes.normal
+        Meta.field_type: FieldTypes.normal,
+        Meta.alias: alias,
     }, **kwargs)
 
 
-def hash_key(key_type: TKeyType, *, constant=NULL,  **kwargs):
+def hash_key(key_type: TKeyType, *, constant=NULL, alias=NULL, **kwargs):
     return attr.ib(metadata={
         Meta.constant: constant,
         Meta.key_type: key_type,
-        Meta.field_type: FieldTypes.hash
+        Meta.field_type: FieldTypes.hash,
+        Meta.alias: alias,
     }, **kwargs)
 
 
-def range_key(key_type: TKeyType, **kwargs):
+def range_key(key_type: TKeyType, *, alias=NULL, **kwargs):
     return attr.ib(metadata={
         Meta.key_type: key_type,
-        Meta.field_type: FieldTypes.range
+        Meta.field_type: FieldTypes.range,
+        Meta.alias: alias,
     }, **kwargs)
+
+
+def post_init(self):
+    try:
+        handler = self.__post_init__
+    except AttributeError:
+        return
+
+    def setter(**kwargs):
+        for k, v in kwargs.items():
+            object.__setattr__(self, k, v)
+
+    handler(setter)
 
 
 def model(*, keys: Keys):
     def deco(cls: Type[TModel]) -> Type[TModel]:
+        cls.__attrs_post_init__ = post_init
         cls = attr.s(frozen=True)(cls)
         cls.__aiodynamodb__ = config = ModelConfig.from_model(keys, cls)
         cls.__init__ = config.model_init_factory(cls.__init__)

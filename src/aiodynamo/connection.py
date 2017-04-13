@@ -61,8 +61,9 @@ class Connection:
         """
         table = self.router[instance.__class__]
         config = helpers.get_config(instance)
-        data = attr.asdict(instance)
-        encoded_data = helpers.serialize(data)
+        data = config.gather(instance)
+        aliased= config.alias(data)
+        encoded_data = helpers.serialize(aliased)
         await self.client.put_item(
             TableName=table,
             Item=encoded_data,
@@ -77,11 +78,12 @@ class Connection:
         cls = instance.__class__
         table = self.router[cls]
         config = helpers.get_config(instance)
-        diff = helpers.get_diff(cls, attr.asdict(instance), attr.asdict(old))
-        data = attr.asdict(instance)
+        diff = helpers.get_diff(cls, config.gather(instance), config.gather(old))
+        data = config.gather(instance)
         key = config.pop_key(data)
         encoded_key = helpers.serialize(key)
-        ue, ean, eav = helpers.encode_update_expression(diff)
+        alias_diff = config.alias(diff)
+        ue, ean, eav = helpers.encode_update_expression(alias_diff)
         await self.client.update_item(
             TableName=table,
             Key=encoded_key,
@@ -96,7 +98,7 @@ class Connection:
         """
         table = self.router[instance.__class__]
         config = helpers.get_config(instance)
-        data = attr.asdict(instance)
+        data = config.gather(instance)
         key = config.pop_key(data)
         encoded_key = helpers.serialize(key)
         await self.client.delete_item(
@@ -119,7 +121,7 @@ class Connection:
         except KeyError:
             raise NotFound()
         else:
-            return cls(**helpers.deserialize(raw_item))
+            return cls(**config.anti_alias(helpers.deserialize(raw_item)))
 
     async def query(self, cls: Type[TModel], **kwargs) -> AsyncIterator[TModel]:
         table = self.router[cls]
@@ -142,4 +144,4 @@ class Connection:
             container='Items'
         )
         async for item in iterator:
-            yield cls(**helpers.deserialize(item))
+            yield cls(**config.anti_alias(helpers.deserialize(item)))

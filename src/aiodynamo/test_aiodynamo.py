@@ -108,7 +108,7 @@ async def test_query(dynamo_client):
     class MyModel:
         r = range_key(str)
         h = hash_key(str)
-        x = attr.ib()
+        x = field()
     router = {
         MyModel: 'my-table'
     }
@@ -139,3 +139,44 @@ async def test_fixed_hash(dynamo_client):
     db_instance = await db.lookup(MyModel, r='test')
     assert instance == db_instance
     assert db_instance.h == 'hashkey'
+
+@runner
+async def test_alias(dynamo_client):
+    @model(keys=Keys.Hash)
+    class MyModel:
+        h = hash_key(str, alias='hash_key')
+    router = {
+        MyModel: 'my-table'
+    }
+    db = Connection(router=router, client=dynamo_client)
+    await db.create_table(MyModel, read_cap=5, write_cap=5)
+    response = await dynamo_client.describe_table(TableName='my-table')
+    assert response['Table']['KeySchema'] == [{
+        'AttributeName': 'hash_key',
+        'KeyType': 'HASH'
+    }]
+    instance = MyModel(h='h')
+    await db.save(instance)
+    db_instance = await db.lookup(MyModel, h='h')
+    assert instance == db_instance
+
+
+@runner
+async def test_non_field(dynamo_client):
+    @model(keys=Keys.Hash)
+    class MyModel:
+        key = hash_key(str)
+        attr = attr.ib(default='not-attr')
+
+    router = {
+        MyModel: 'my-table'
+    }
+    db = Connection(router=router, client=dynamo_client)
+    await db.create_table(MyModel, read_cap=5, write_cap=5)
+
+    instance = MyModel(key='mykey', attr='attr')
+    await db.save(instance)
+    db_instance = await db.lookup(MyModel, key='mykey')
+    assert db_instance != instance
+    assert db_instance.attr == 'not-attr'
+    assert attr.assoc(db_instance, attr='attr') == instance
