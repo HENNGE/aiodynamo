@@ -318,22 +318,8 @@ def range_key(key_type: TKeyType, *, alias=NULL, **kwargs):
     }, **kwargs)
 
 
-def post_init(self):
-    try:
-        handler = self.__post_init__
-    except AttributeError:
-        return
-
-    def setter(**kwargs):
-        for k, v in kwargs.items():
-            object.__setattr__(self, k, v)
-
-    handler(setter)
-
-
 def model(*, keys: Keys):
     def deco(cls: Type[TModel]) -> Type[TModel]:
-        cls.__attrs_post_init__ = post_init
         cls = attr.s(frozen=True)(cls)
         cls.__aiodynamodb__ = config = ModelConfig.from_model(keys, cls)
         cls.__init__ = config.model_init_factory(cls.__init__)
