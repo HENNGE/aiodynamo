@@ -1,22 +1,37 @@
 from enum import auto, Enum
 from functools import wraps
-from typing import Type, Union, List
+from typing import Type, Union, List, Any
 
 import attr
 
-from .types import TModel
+from .types import TModel, DynamoValue, DynamoObject
 from .exceptions import InvalidModel, InvalidKey
 
 NULL = object()
 TKeyType = Union[Type[str], Type[int], Type[bytes]]
 
 
+__all__ = [
+    'Keys',
+    'model',
+    'field',
+    'hash_key',
+    'range_key'
+]
+
+
 class Keys(Enum):
+    """
+    Specify which key schema your table uses
+    """
     HashRange = auto()
     Hash = auto()
 
 
 class Meta(Enum):
+    """
+    Internal enum for attrs metadata keys
+    """
     constant = auto()
     field_type = auto()
     key_type = auto()
@@ -25,12 +40,18 @@ class Meta(Enum):
 
 
 class FieldTypes(Enum):
+    """
+    Internal enum to tag fields
+    """
     normal = auto()
     hash = auto()
     range = auto()
 
 
-def get_type(key_type):
+def get_type(key_type: Union[Type[str], Type[int], Type[bytes]]) -> str:
+    """
+    Convert key type from Python builtin to dynamo code
+    """
     if key_type is str:
         return 'S'
     elif key_type is int:
@@ -41,7 +62,10 @@ def get_type(key_type):
         raise InvalidModel(f'Invalid key type {key_type}')
 
 
-def name(field):
+def name(field: attr.Attribute) -> str:
+    """
+    Return field name in the database
+    """
     alias = field.metadata.get(Meta.alias, NULL)
     if alias is NULL:
         return field.name
@@ -49,7 +73,10 @@ def name(field):
         return alias
 
 
-def convert(field, value):
+def convert(field: attr.Attribute, value: Any) -> DynamoValue:
+    """
+    Possibly convert the value of a field
+    """
     if field.convert:
         return field.convert(value)
     else:
@@ -57,11 +84,72 @@ def convert(field, value):
 
 
 @attr.s(frozen=True)
-class HashRangeEncoder:
+class HashEncoder:
     hash_field = attr.ib()
-    range_field = attr.ib()
 
     def build(self, **kwargs):
+        """
+        Build a key from keyword arguments. This is used in `Key` arguments in
+        dynamo APIs
+        """
+        try:
+            value = kwargs.pop(self.hash_field.name)
+        except KeyError:
+            raise InvalidKey('Hash key not provided')
+        if kwargs:
+            raise InvalidKey('Too many values provided')
+        return {
+            name(self.hash_field): convert(self.hash_field, value),
+        }
+
+    def build_hash(self, **kwargs):
+        """
+        Build only the hash key from keyword arguments. This is used for 
+        filters.
+        """
+        try:
+            value = kwargs.pop(self.hash_field.name)
+        except KeyError:
+            raise InvalidKey('Hash key not provided')
+        if kwargs:
+            raise InvalidKey('Too many values provided')
+        return name(self.hash_field), convert(self.hash_field, value)
+
+    def pop(self, data):
+        """
+        Pop the key from a dictionary of data.
+        """
+        return {
+            name(self.hash_field): data.pop(self.hash_field.name),
+        }
+
+    def schema(self):
+        """
+        Return the key schema, useful for creating the table.
+        """
+        return [{
+            'AttributeName': name(self.hash_field),
+            'KeyType': 'HASH',
+        }]
+
+    def attributes(self):
+        """
+        Return the key attributes, useful for creating the table.
+        """
+        return [{
+            'AttributeName': name(self.hash_field),
+            'AttributeType': get_type(self.hash_field.metadata[Meta.key_type]),
+        }]
+
+
+@attr.s(frozen=True)
+class HashRangeEncoder(HashEncoder):
+    """
+    Encoder object for Hash/Range key type models
+    """
+    range_field = attr.ib()
+
+    def build(self, **kwargs) -> DynamoObject:
         hash_key = kwargs.pop(self.hash_field.name, NULL)
         try:
             range_key = kwargs.pop(self.range_field.name)
@@ -80,90 +168,24 @@ class HashRangeEncoder:
             name(self.range_field): convert(self.range_field, range_key),
         }
 
-    def build_hash(self, **kwargs):
-        try:
-            value = kwargs.pop(self.hash_field.name)
-        except KeyError:
-            raise InvalidKey('Hash key not provided')
-        if kwargs:
-            raise InvalidKey('Too many values provided')
-        return name(self.hash_field), convert(self.hash_field, value)
-
-    def pop(self, data):
+    def pop(self, data: DynamoObject) -> DynamoObject:
         return {
-            name(self.hash_field): data.pop(self.hash_field.name),
+            **super().pop(data),
             name(self.range_field): data.pop(self.range_field.name),
+
         }
 
     def schema(self):
-        return [
-            {
-                'AttributeName': name(self.hash_field),
-                'KeyType': 'HASH',
-            },
-            {
-                'AttributeName': name(self.range_field),
-                'KeyType': 'RANGE',
-            },
-        ]
+        return super().schema() + [{
+            'AttributeName': name(self.range_field),
+            'KeyType': 'RANGE',
+        }]
 
     def attributes(self):
-        return [
-            {
-                'AttributeName': name(self.hash_field),
-                'AttributeType': get_type(self.hash_field.metadata[Meta.key_type]),
-            },
-            {
-                'AttributeName': name(self.range_field),
-                'AttributeType': get_type(self.range_field.metadata[Meta.key_type]),
-            }
-        ]
-
-
-@attr.s(frozen=True)
-class HashEncoder:
-    hash_field = attr.ib()
-
-    def build(self, **kwargs):
-        try:
-            value = kwargs.pop(self.hash_field.name)
-        except KeyError:
-            raise InvalidKey('Hash key not provided')
-        if kwargs:
-            raise InvalidKey('Too many values provided')
-        return {
-            name(self.hash_field): convert(self.hash_field, value),
-        }
-
-    def build_hash(self, **kwargs):
-        try:
-            value = kwargs.pop(self.hash_field.name)
-        except KeyError:
-            raise InvalidKey('Hash key not provided')
-        if kwargs:
-            raise InvalidKey('Too many values provided')
-        return name(self.hash_field), convert(self.hash_field, value)
-
-    def pop(self, data):
-        return {
-            name(self.hash_field): data.pop(self.hash_field.name),
-        }
-
-    def schema(self):
-        return [
-            {
-                'AttributeName': name(self.hash_field),
-                'KeyType': 'HASH',
-            },
-        ]
-
-    def attributes(self):
-        return [
-            {
-                'AttributeName': name(self.hash_field),
-                'AttributeType': get_type(self.hash_field.metadata[Meta.key_type]),
-            },
-        ]
+        return super().attributes() + [{
+            'AttributeName': name(self.range_field),
+            'AttributeType': get_type(self.range_field.metadata[Meta.key_type]),
+        }]
 
 
 def extract_hash_range(fields: List[attr.Attribute]):
@@ -206,6 +228,10 @@ class ModelConfig:
 
     @classmethod
     def from_model(cls, keys: Keys, model: Type[TModel]) -> 'ModelConfig':
+        """
+        Build model config from a model class.
+        """
+
         fields = attr.fields(model)
         hash_field, range_field = extract_hash_range(fields)
         if hash_field is None:
@@ -233,7 +259,7 @@ class ModelConfig:
     def build_key(self, **kwargs):
         return self.key_encoder.build(**kwargs)
 
-    def pop_key(self, data):
+    def pop_key(self, data: DynamoObject) -> DynamoObject:
         return self.key_encoder.pop(data)
 
     def key_schema(self):
@@ -242,17 +268,26 @@ class ModelConfig:
     def key_attributes(self):
         return self.key_encoder.attributes()
 
-    def alias(self, data):
+    def alias(self, data: DynamoObject) -> DynamoObject:
+        """
+        Alias python keys to database field names
+        """
         return {
             name(self.fields[key]): value for key, value in data.items()
         }
 
-    def anti_alias(self, data):
+    def anti_alias(self, data: DynamoObject) -> DynamoObject:
+        """
+        Unalias database field names to python keys
+        """
         return {
             self.anti_aliases[key]: value for key, value in data.items()
         }
 
-    def from_database(self, data):
+    def from_database(self, data: DynamoObject) -> TModel:
+        """
+        Convert data from the database to a model instance
+        """
         data = self.anti_alias(data)
         for key, field in self.fields.items():
             try:
@@ -261,7 +296,10 @@ class ModelConfig:
                 pass
         return self.model(**data)
 
-    def gather(self, instance):
+    def gather(self, instance: TModel) -> DynamoObject:
+        """
+        Encode model instance to dynamodb object.
+        """
         data = attr.asdict(
             instance,
             filter=lambda attr, _: attr.metadata.get(Meta.field_type, NULL) != NULL
@@ -273,6 +311,9 @@ class ModelConfig:
         return data
 
     def model_init_factory(self, real_init):
+        """
+        Builds an __init__ function for the model which sets constant hash keys.
+        """
         @wraps(real_init)
         def wrapper(this, **kwargs):
             constant = self.hash_field.metadata.get(Meta.constant, NULL)
@@ -283,6 +324,9 @@ class ModelConfig:
 
 
 def modify(self, **updates):
+    """
+    Like attr.assoc, but remembers original instance for diffing.
+    """
     try:
         old = self.__aiodynamodb_old__
     except AttributeError:
@@ -294,6 +338,13 @@ def modify(self, **updates):
 
 
 def field(*, alias=NULL, auto=NULL, default=attr.NOTHING, **kwargs):
+    """
+    Define a model field.
+    
+    Use `alias` if you want the python keys and dynamo field names to differ.
+    `auto` can be used to set an automatic value when saving the instance (good
+    for modification timestamps).
+    """
     if callable(default) and not isinstance(default, attr.Factory):
         default = attr.Factory(default)
     return attr.ib(metadata={
@@ -304,6 +355,13 @@ def field(*, alias=NULL, auto=NULL, default=attr.NOTHING, **kwargs):
 
 
 def hash_key(key_type: TKeyType, *, constant=NULL, alias=NULL, **kwargs):
+    """
+    Define the hash key field for your model. 
+    
+    `key_type` must be `str`, `int` or `bytes` depending on the key type you
+    want to use. When used together with a range key, you can set `constant` to 
+    a constant value.
+    """
     return attr.ib(metadata={
         Meta.constant: constant,
         Meta.key_type: key_type,
@@ -313,6 +371,12 @@ def hash_key(key_type: TKeyType, *, constant=NULL, alias=NULL, **kwargs):
 
 
 def range_key(key_type: TKeyType, *, alias=NULL, **kwargs):
+    """
+    Define the range key field for your model (if any).
+    
+    `key_type` must be `str`, `int` or `bytes` depending on the key type you
+    want to use.
+    """
     return attr.ib(metadata={
         Meta.key_type: key_type,
         Meta.field_type: FieldTypes.range,
@@ -321,6 +385,9 @@ def range_key(key_type: TKeyType, *, alias=NULL, **kwargs):
 
 
 def model(*, keys: Keys):
+    """
+    Register a class as a model.
+    """
     def deco(cls: Type[TModel]) -> Type[TModel]:
         cls = attr.s(frozen=True)(cls)
         cls.__aiodynamodb__ = config = ModelConfig.from_model(keys, cls)

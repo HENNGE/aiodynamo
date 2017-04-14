@@ -69,6 +69,13 @@ class ValueEncoder(DynamoEncoder):
 
 
 def encode_update_expression(data: TDiff) -> Tuple[str, Dict[str, str], EncodedObject]:
+    """
+    Encode a diff into an UpdateExpression, ExpressionAttributeNames and 
+    ExpressionAttributeValues.
+    
+    Currently only does SET but could be expanded with a smarter diff to do
+    cool things.
+    """
     ue_bits = []
     ean = NameEncoder()
     eav = ValueEncoder()
@@ -81,6 +88,9 @@ def encode_update_expression(data: TDiff) -> Tuple[str, Dict[str, str], EncodedO
 
 
 def boto_err(exc: ClientError, code: str) -> bool:
+    """
+    Check if a boto error is a certain error.
+    """
     try:
         return exc.response['Error']['Code'] == code
     except KeyError:

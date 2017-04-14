@@ -70,9 +70,6 @@ class Connection:
             pass
 
     async def save(self, instance):
-        """
-        Save instance to the database.
-        """
         table = self.router[instance.__class__]
         config = helpers.get_config(instance)
         data = config.gather(instance)
@@ -107,9 +104,6 @@ class Connection:
         )
 
     async def delete(self, instance):
-        """
-        Delete instance from the database.
-        """
         table = self.router[instance.__class__]
         config = helpers.get_config(instance)
         data = config.gather(instance)
