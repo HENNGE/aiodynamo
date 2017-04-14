@@ -27,4 +27,4 @@ EncodedValue = Union[
 ]
 EncodedObject = Dict[str, Dict[str, EncodedValue]]
 
-TModel = TypeVar('Model')
+TModel = TypeVar('TModel')
