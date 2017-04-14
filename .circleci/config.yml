@@ -9,9 +9,9 @@ jobs:
       - run: pip install -e .
       - run: pip install -r test-requirements.txt
       - run: pip install -r ci-requirements.txt
-      - run: pytest --verbose --cov=src/aiodynamo --cov-report=html:reports/coverage/ --junitxml=reports/junit/
+      - run: pytest --verbose --cov=src/aiodynamo --cov-report=html:reports/coverage/ --junitxml=reports/results/junit.xml
       - store_artifacts:
           path: reports/coverage/
           destination: reports
       - store_test_results:
-          path: reports/junit/
+          path: reports/results/
