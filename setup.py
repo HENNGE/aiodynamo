@@ -9,5 +9,6 @@ setup(
     install_requires=[
         'attrs',
         'aiobotocore',
+        'boto3',
     ]
 )
