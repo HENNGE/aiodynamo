@@ -3,8 +3,8 @@ from typing import Dict, Type, AsyncIterator
 
 from aiobotocore import get_session
 
-from aiodynamo.types import TModel
 from . import helpers
+from .types import TModel
 from .exceptions import NotFound, NotModified
 
 

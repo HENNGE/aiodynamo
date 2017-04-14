@@ -1,18 +1,16 @@
 import asyncio
 from functools import wraps
-
-import attr
 import itertools
-
-from . import Connection, model, Keys, field, hash_key, range_key
-from .exceptions import NotModified, NotFound
-
 import multiprocessing
 
+import attr
 import pytest
 from aiobotocore import get_session
 from moto.server import DomainDispatcherApplication, create_backend_app
 from werkzeug.serving import make_server
+
+from . import Connection, model, Keys, field, hash_key, range_key
+from .exceptions import NotModified, NotFound
 
 
 def dynamo(port_queue):

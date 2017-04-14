@@ -1,6 +1,5 @@
 from enum import auto, Enum
 from functools import wraps
-
 from typing import Type, Union, List
 
 import attr
@@ -89,7 +88,7 @@ class HashRangeEncoder:
         if kwargs:
             raise InvalidKey('Too many values provided')
         return name(self.hash_field), convert(self.hash_field, value)
-    
+
     def pop(self, data):
         return {
             name(self.hash_field): data.pop(self.hash_field.name),
@@ -165,7 +164,7 @@ class HashEncoder:
                 'AttributeType': get_type(self.hash_field.metadata[Meta.key_type]),
             },
         ]
-    
+
 
 def extract_hash_range(fields: List[attr.Attribute]):
     hash_field = None
