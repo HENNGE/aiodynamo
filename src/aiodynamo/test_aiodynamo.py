@@ -2,6 +2,7 @@ import asyncio
 from functools import wraps
 
 import attr
+import itertools
 
 from . import Connection, model, Keys, field, hash_key, range_key
 from .exceptions import NotModified, NotFound
@@ -140,6 +141,7 @@ async def test_fixed_hash(dynamo_client):
     assert instance == db_instance
     assert db_instance.h == 'hashkey'
 
+
 @runner
 async def test_alias(dynamo_client):
     @model(keys=Keys.Hash)
@@ -180,3 +182,68 @@ async def test_non_field(dynamo_client):
     assert db_instance != instance
     assert db_instance.attr == 'not-attr'
     assert attr.assoc(db_instance, attr='attr') == instance
+
+
+@runner
+async def test_to_from_db_convert(dynamo_client):
+    def prefixed(prefix: str):
+        def to_db(suffix: str) -> str:
+            return prefix + suffix
+
+        def from_db(value: str) -> str:
+            if value.startswith(prefix):
+                return value[len(prefix):]
+            else:
+                return value
+
+        to_db.from_db = from_db
+        return to_db
+
+    @model(keys=Keys.Hash)
+    class MyModel:
+        prefixed_key = hash_key(str, convert=prefixed('TEST'))
+
+        @property
+        def unprefixed(self):
+            return self.prefixed_key[4:]
+
+    router = {
+        MyModel: 'my-model'
+    }
+    db = Connection(router=router, client=dynamo_client)
+    await db.create_table(MyModel, read_cap=5, write_cap=5)
+
+    instance = MyModel(prefixed_key='suffix')
+    assert instance.prefixed_key == 'TESTsuffix'
+    assert instance.unprefixed == 'suffix'
+    await db.save(instance)
+    response = await db.client.get_item(
+        TableName='my-model',
+        Key={'prefixed_key': {'S': 'TESTsuffix'}}
+    )
+    assert response['Item']['prefixed_key'] == {'S': 'TESTsuffix'}
+    db_instance = await db.lookup(MyModel, prefixed_key='suffix')
+    assert db_instance == instance
+
+@runner
+async def test_auto_field(dynamo_client):
+    counter = itertools.count(start=1)
+
+    @model(keys=Keys.Hash)
+    class MyModel:
+        key = hash_key(str)
+        auto_field = field(auto=lambda: next(counter), default=0)
+
+    router = {
+        MyModel: 'my-model'
+    }
+
+    db = Connection(router=router, client=dynamo_client)
+    await db.create_table(MyModel, read_cap=5, write_cap=5)
+
+    instance = MyModel(key='test')
+    assert instance.auto_field == 0
+    await db.save(instance)
+    db_instance = await db.lookup(MyModel, key='test')
+    assert db_instance != instance
+    assert db_instance.auto_field == 1

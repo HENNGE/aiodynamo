@@ -22,6 +22,7 @@ class Meta(Enum):
     field_type = auto()
     key_type = auto()
     alias = auto()
+    auto = auto()
 
 
 class FieldTypes(Enum):
@@ -252,11 +253,25 @@ class ModelConfig:
             self.anti_aliases[key]: value for key, value in data.items()
         }
 
+    def from_database(self, data):
+        data = self.anti_alias(data)
+        for key, field in self.fields.items():
+            try:
+                data[key] = field.convert.from_db(data[key])
+            except (AttributeError, KeyError):
+                pass
+        return self.model(**data)
+
     def gather(self, instance):
-        return attr.asdict(
+        data = attr.asdict(
             instance,
             filter=lambda attr, _: attr.metadata.get(Meta.field_type, NULL) != NULL
         )
+        for key, field in self.fields.items():
+            auto_gen = field.metadata.get(Meta.auto, NULL)
+            if auto_gen is not NULL:
+                data[key] = auto_gen()
+        return data
 
     def model_init_factory(self, real_init):
         @wraps(real_init)
@@ -279,10 +294,11 @@ def modify(self, **updates):
     return new
 
 
-def field(*, alias=NULL, **kwargs):
+def field(*, alias=NULL, auto=NULL, **kwargs):
     return attr.ib(metadata={
         Meta.field_type: FieldTypes.normal,
         Meta.alias: alias,
+        Meta.auto: auto
     }, **kwargs)
 
 
@@ -291,7 +307,7 @@ def hash_key(key_type: TKeyType, *, constant=NULL, alias=NULL, **kwargs):
         Meta.constant: constant,
         Meta.key_type: key_type,
         Meta.field_type: FieldTypes.hash,
-        Meta.alias: alias,
+        Meta.alias: alias
     }, **kwargs)
 
 
@@ -299,7 +315,7 @@ def range_key(key_type: TKeyType, *, alias=NULL, **kwargs):
     return attr.ib(metadata={
         Meta.key_type: key_type,
         Meta.field_type: FieldTypes.range,
-        Meta.alias: alias,
+        Meta.alias: alias
     }, **kwargs)
 
 

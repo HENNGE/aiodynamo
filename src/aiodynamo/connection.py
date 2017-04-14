@@ -121,7 +121,7 @@ class Connection:
         except KeyError:
             raise NotFound()
         else:
-            return cls(**config.anti_alias(helpers.deserialize(raw_item)))
+            return config.from_database(helpers.deserialize(raw_item))
 
     async def query(self, cls: Type[TModel], **kwargs) -> AsyncIterator[TModel]:
         table = self.router[cls]
@@ -144,4 +144,4 @@ class Connection:
             container='Items'
         )
         async for item in iterator:
-            yield cls(**config.anti_alias(helpers.deserialize(item)))
+            yield config.from_database(helpers.deserialize(item))
