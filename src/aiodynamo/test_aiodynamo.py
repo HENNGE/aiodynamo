@@ -247,3 +247,40 @@ async def test_auto_field(dynamo_client):
     db_instance = await db.lookup(MyModel, key='test')
     assert db_instance != instance
     assert db_instance.auto_field == 1
+
+
+@runner
+async def test_routing(dynamo_client):
+    @model(keys=Keys.Hash)
+    class A:
+        key = hash_key(str)
+
+    @model(keys=Keys.Hash)
+    class B:
+        key = hash_key(str)
+
+    router = {
+        A: 'table-a',
+        B: 'table-b',
+    }
+
+    db = Connection(router=router, client=dynamo_client)
+    await db.create_table(A, read_cap=5, write_cap=5)
+    await db.create_table(B, read_cap=5, write_cap=5)
+
+    a = A(key='test')
+    b = B(key='test')
+
+    assert a != b
+    assert attr.asdict(a) == attr.asdict(b)
+
+    await db.save(a)
+    await db.save(b)
+
+    db_a = await db.lookup(A, key='test')
+    db_b = await db.lookup(B, key='test')
+
+    assert db_a != db_b
+
+    assert db_a == a
+    assert db_b == b
