@@ -16,3 +16,7 @@ class InvalidModel(AioDynamoError):
 
 class InvalidKey(AioDynamoError):
     pass
+
+
+class TableAlreadyExists(AioDynamoError):
+    pass

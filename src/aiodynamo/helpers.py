@@ -1,3 +1,4 @@
+from botocore.exceptions import ClientError
 from typing import TypeVar, Type, Tuple, Dict, Union
 
 import attr
@@ -77,3 +78,10 @@ def encode_update_expression(data: TDiff) -> Tuple[str, Dict[str, str], EncodedO
         ue_bits.append(f'{key} = {value}')
     joined = ', '.join(ue_bits)
     return f'SET {joined}', ean.gather(), eav.gather()
+
+
+def boto_err(exc: ClientError, code: str) -> bool:
+    try:
+        return exc.response['Error']['Code'] == code
+    except KeyError:
+        return False

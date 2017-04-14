@@ -76,8 +76,8 @@ class HashRangeEncoder:
             else:
                 hash_key = constant
         return {
-            self.hash_field.name: convert(self.hash_field, hash_key),
-            self.range_field.name: convert(self.range_field, range_key),
+            name(self.hash_field): convert(self.hash_field, hash_key),
+            name(self.range_field): convert(self.range_field, range_key),
         }
 
     def build_hash(self, **kwargs):
@@ -293,12 +293,14 @@ def modify(self, **updates):
     return new
 
 
-def field(*, alias=NULL, auto=NULL, **kwargs):
+def field(*, alias=NULL, auto=NULL, default=attr.NOTHING, **kwargs):
+    if callable(default) and not isinstance(default, attr.Factory):
+        default = attr.Factory(default)
     return attr.ib(metadata={
         Meta.field_type: FieldTypes.normal,
         Meta.alias: alias,
         Meta.auto: auto
-    }, **kwargs)
+    }, default=default, **kwargs)
 
 
 def hash_key(key_type: TKeyType, *, constant=NULL, alias=NULL, **kwargs):

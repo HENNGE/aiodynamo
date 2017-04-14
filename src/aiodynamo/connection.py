@@ -1,11 +1,13 @@
 import attr
+from botocore.exceptions import ClientError
 from typing import Dict, Type, AsyncIterator
 
 from aiobotocore import get_session
 
+from aiodynamo.helpers import boto_err
 from . import helpers
 from .types import TModel
-from .exceptions import NotFound, NotModified
+from .exceptions import NotFound, NotModified, TableAlreadyExists
 
 
 async def _iterator(config: 'BotoCoreIterator'):
@@ -45,15 +47,27 @@ class Connection:
     async def create_table(self, cls, *, read_cap: int, write_cap: int):
         table = self.router[cls]
         config = helpers.get_config(cls)
-        await self.client.create_table(
-            TableName=table,
-            KeySchema=config.key_schema(),
-            AttributeDefinitions=config.key_attributes(),
-            ProvisionedThroughput={
-                'ReadCapacityUnits': read_cap,
-                'WriteCapacityUnits': write_cap,
-            }
-        )
+        try:
+            await self.client.create_table(
+                TableName=table,
+                KeySchema=config.key_schema(),
+                AttributeDefinitions=config.key_attributes(),
+                ProvisionedThroughput={
+                    'ReadCapacityUnits': read_cap,
+                    'WriteCapacityUnits': write_cap,
+                }
+            )
+        except ClientError as exc:
+            if boto_err(exc, 'ResourceInUseException'):
+                raise TableAlreadyExists()
+            else:
+                raise
+
+    async def create_table_if_not_exists(self, cls, *, read_cap: int, write_cap: int):
+        try:
+            await self.create_table(cls, read_cap=read_cap, write_cap=write_cap)
+        except TableAlreadyExists:
+            pass
 
     async def save(self, instance):
         """

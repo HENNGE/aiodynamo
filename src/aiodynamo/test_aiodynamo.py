@@ -162,6 +162,32 @@ async def test_alias(dynamo_client):
 
 
 @runner
+async def test_alias_hr(dynamo_client):
+    @model(keys=Keys.HashRange)
+    class MyModel:
+        h = hash_key(str, alias='hash_key')
+        r = range_key(str, alias='range_key')
+    router = {
+        MyModel: 'my-table'
+    }
+    db = Connection(router=router, client=dynamo_client)
+    await db.create_table(MyModel, read_cap=5, write_cap=5)
+    response = await dynamo_client.describe_table(TableName='my-table')
+    assert response['Table']['KeySchema'] == [{
+        'AttributeName': 'hash_key',
+        'KeyType': 'HASH'
+    },{
+        'AttributeName': 'range_key',
+        'KeyType': 'RANGE'
+    }]
+    instance = MyModel(h='hv', r='rv')
+    await db.save(instance)
+    db_instance = await db.lookup(MyModel, h='hv', r='rv')
+    assert instance == db_instance
+
+
+
+@runner
 async def test_non_field(dynamo_client):
     @model(keys=Keys.Hash)
     class MyModel:
