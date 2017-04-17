@@ -6,6 +6,7 @@ import attr
 
 from .types import TModel, DynamoValue, DynamoObject
 from .exceptions import InvalidModel, InvalidKey
+from .helpers import remove_empty_strings
 
 NULL = object()
 TKeyType = Union[Type[str], Type[int], Type[bytes]]
@@ -81,6 +82,16 @@ def convert(field: attr.Attribute, value: Any) -> DynamoValue:
         return field.convert(value)
     else:
         return value
+
+
+def gather_filter(attr, value):
+    return (
+        attr.metadata.get(Meta.field_type, NULL) != NULL
+        and
+        value != ''
+        and
+        value != set()
+    )
 
 
 @attr.s(frozen=True)
@@ -227,6 +238,10 @@ class ModelConfig:
     key_encoder = attr.ib()
 
     @classmethod
+    def get(cls, instance_or_model: Union[TModel, Type[TModel]]) -> 'ModelConfig':
+        return instance_or_model.__aiodynamodb__
+
+    @classmethod
     def from_model(cls, keys: Keys, model: Type[TModel]) -> 'ModelConfig':
         """
         Build model config from a model class.
@@ -302,7 +317,8 @@ class ModelConfig:
         """
         data = attr.asdict(
             instance,
-            filter=lambda attr, _: attr.metadata.get(Meta.field_type, NULL) != NULL
+            filter=gather_filter,
+            retain_collection_types=True,
         )
         for key, field in self.fields.items():
             auto_gen = field.metadata.get(Meta.auto, NULL)
@@ -337,7 +353,7 @@ def modify(self, **updates):
     return new
 
 
-def field(*, alias=NULL, auto=NULL, default=attr.NOTHING, **kwargs):
+def field(*, alias=NULL, auto=NULL, default=attr.NOTHING, convert=None, **kwargs):
     """
     Define a model field.
     
@@ -347,11 +363,15 @@ def field(*, alias=NULL, auto=NULL, default=attr.NOTHING, **kwargs):
     """
     if callable(default) and not isinstance(default, attr.Factory):
         default = attr.Factory(default)
+    if convert is None:
+        convert = remove_empty_strings
+    else:
+        convert = lambda x: remove_empty_strings(convert(x))
     return attr.ib(metadata={
         Meta.field_type: FieldTypes.normal,
         Meta.alias: alias,
         Meta.auto: auto
-    }, default=default, **kwargs)
+    }, default=default, convert=convert, **kwargs)
 
 
 def hash_key(key_type: TKeyType, *, constant=NULL, alias=NULL, **kwargs):

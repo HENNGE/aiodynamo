@@ -1,12 +1,15 @@
+from inspect import isclass
+
 import attr
 from botocore.exceptions import ClientError
-from typing import Dict, Type, AsyncIterator
+from typing import Dict, Type, AsyncIterator, Union
 
 from aiobotocore import get_session
 
-from aiodynamo.helpers import boto_err
 from . import helpers
 from .types import TModel
+from .models import ModelConfig
+from .helpers import boto_err
 from .exceptions import NotFound, NotModified, TableAlreadyExists
 
 
@@ -44,9 +47,15 @@ class Connection:
         self.router = router
         self.client = client or get_session().create_client('dynamodb')
 
+    def get_table_name(self, instance_or_class: Union[TModel, Type[TModel]]) -> str:
+        if isclass(instance_or_class):
+            return self.router[instance_or_class]
+        else:
+            return self.router[instance_or_class.__class__]
+
     async def create_table(self, cls, *, read_cap: int, write_cap: int):
-        table = self.router[cls]
-        config = helpers.get_config(cls)
+        table = self.get_table_name(cls)
+        config = ModelConfig.get(cls)
         try:
             await self.client.create_table(
                 TableName=table,
@@ -70,10 +79,10 @@ class Connection:
             pass
 
     async def save(self, instance):
-        table = self.router[instance.__class__]
-        config = helpers.get_config(instance)
+        table = self.get_table_name(instance)
+        config = ModelConfig.get(instance)
         data = config.gather(instance)
-        aliased= config.alias(data)
+        aliased = config.alias(data)
         encoded_data = helpers.serialize(aliased)
         await self.client.put_item(
             TableName=table,
@@ -87,8 +96,8 @@ class Connection:
         except AttributeError:
             raise NotModified('Cannot update non-modified instance')
         cls = instance.__class__
-        table = self.router[cls]
-        config = helpers.get_config(instance)
+        table = self.get_table_name(cls)
+        config = ModelConfig.get(instance)
         diff = helpers.get_diff(cls, config.gather(instance), config.gather(old))
         data = config.gather(instance)
         key = config.pop_key(data)
@@ -104,8 +113,8 @@ class Connection:
         )
 
     async def delete(self, instance):
-        table = self.router[instance.__class__]
-        config = helpers.get_config(instance)
+        table = self.get_table_name(instance)
+        config = ModelConfig.get(instance)
         data = config.gather(instance)
         key = config.pop_key(data)
         encoded_key = helpers.serialize(key)
@@ -116,8 +125,8 @@ class Connection:
         )
 
     async def lookup(self, cls, **key):
-        table = self.router[cls]
-        config = helpers.get_config(cls)
+        table = self.get_table_name(cls)
+        config = ModelConfig.get(cls)
         key = config.build_key(**key)
         encoded_key = helpers.serialize(key)
         response = await self.client.get_item(
@@ -132,8 +141,8 @@ class Connection:
             return config.from_database(helpers.deserialize(raw_item))
 
     async def query(self, cls: Type[TModel], **kwargs) -> AsyncIterator[TModel]:
-        table = self.router[cls]
-        config = helpers.get_config(cls)
+        table = self.get_table_name(cls)
+        config = ModelConfig.get(cls)
         key, value = config.build_hash_key(**kwargs)
         iterator = BotoCoreIterator(
             func=self.client.query,

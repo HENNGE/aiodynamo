@@ -3,12 +3,16 @@ jobs:
   build:
     docker:
       - image: python:3.6
+        environment:
+          DYNAMODB_ENDPOINT_URL: http://localhost:8000
+      - image: ojii/dynamodb-local:latest
     working_directory: /home/ubuntu/aiodynamo
     steps:
       - checkout
       - run: pip install -e .
       - run: pip install -r test-requirements.txt
       - run: pip install -r ci-requirements.txt
+      - run: find . -regex '.*__pycache__.*' -delete
       - run: pytest --verbose --cov=src/aiodynamo --cov-report=html:reports/coverage/ --junitxml=reports/results/junit.xml
       - store_artifacts:
           path: reports/coverage/

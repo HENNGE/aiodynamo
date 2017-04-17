@@ -1,48 +1,42 @@
 import asyncio
+import os
 from functools import wraps
 import itertools
-import multiprocessing
 
 import attr
 import pytest
 from aiobotocore import get_session
-from moto.server import DomainDispatcherApplication, create_backend_app
-from werkzeug.serving import make_server
 
-from . import Connection, model, Keys, field, hash_key, range_key
-from .exceptions import NotModified, NotFound
+from aiodynamo import Connection, model, Keys, field, hash_key, range_key
+from aiodynamo.exceptions import NotModified, NotFound
+from aiodynamo.helpers import remove_empty_strings
 
 
-def dynamo(port_queue):
-    main_app = DomainDispatcherApplication(
-        create_backend_app,
-        service='dynamodb2'
-    )
-    server = make_server(host='localhost', port=0, app=main_app, threaded=True)
-    port_queue.put(server.port)
-    server.serve_forever()
+async def cleanup(client):
+    response = await client.list_tables()
+    for table in response['TableNames']:
+        await client.delete_table(TableName=table)
 
 
 @pytest.fixture()
 def dynamo_client():
-    port_queue = multiprocessing.Queue()
-    process = multiprocessing.Process(target=dynamo, args=(port_queue,))
-    client = None
     try:
-        process.start()
-        port = port_queue.get(timeout=5)
-        client = get_session().create_client(
-            'dynamodb',
-            endpoint_url=f'http://localhost:{port}',
-            region_name='us-east-1',
-            aws_access_key_id='local',
-            aws_secret_access_key='local',
-        )
+        endpoint_url = os.environ['DYNAMODB_ENDPOINT_URL']
+    except KeyError:
+        raise pytest.skip('No endpoint url specified')
+    client = get_session().create_client(
+        'dynamodb',
+        endpoint_url=endpoint_url,
+        region_name='us-east-1',
+        aws_access_key_id='local',
+        aws_secret_access_key='local',
+    )
+    try:
         yield client
     finally:
-        if client:
-            client.close()
-        process.terminate()
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(cleanup(client))
+        client.close()
 
 
 def runner(func):
@@ -308,3 +302,49 @@ async def test_routing(dynamo_client):
 
     assert db_a == a
     assert db_b == b
+
+
+@runner
+@pytest.mark.parametrize('test_value', [
+    '',
+    [''],
+    {'key': ''},
+    {'key1': '', 'key2': 'key2'},
+    {'', 'notempty'},
+    {''},
+    0,
+    [0],
+    [None],
+    None
+], ids=repr)
+async def test_empty_strings(dynamo_client, test_value):
+    @model(keys=Keys.Hash)
+    class MyModel:
+        key = hash_key(str)
+        value = field(default=type(test_value))
+
+    router = {
+        MyModel: 'my-model',
+    }
+    db = Connection(router=router, client=dynamo_client)
+    await db.create_table(MyModel, read_cap=5, write_cap=5)
+    instance = MyModel(key='key', value=test_value)
+    await db.save(instance)
+    db_instance = await db.lookup(MyModel, key='key')
+    assert db_instance == instance
+
+
+@pytest.mark.parametrize('value, expected', [
+    ('', ''),
+    ([''], []),
+    ({'key': ''}, {}),
+    ({'key1': '', 'key2': 'key2'}, {'key2': 'key2'}),
+    ({'', 'notempty'}, {'notempty'}),
+    ({''}, set()),
+    (0, 0),
+    ([0], [0]),
+    ([None], [None]),
+    (None, None)
+], ids=repr)
+def test_remove_empty_strings(value, expected):
+    assert remove_empty_strings(value) == expected

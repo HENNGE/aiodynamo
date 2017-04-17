@@ -1,14 +1,14 @@
-from botocore.exceptions import ClientError
 from typing import TypeVar, Type, Tuple, Dict, Union
 
 import attr
+from botocore.exceptions import ClientError
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 
-from .models import ModelConfig
-from .types import DynamoObject, EncodedObject, TModel
-
+from .types import DynamoObject, EncodedObject, TModel, DynamoValue
 
 TDiff = TypeVar('Diff')
+
+EMPTY_STRING = TypeVar('EMPTY_STRING')
 
 Serializer = TypeSerializer()
 Deserializer = TypeDeserializer()
@@ -24,10 +24,6 @@ def deserialize(data: EncodedObject) -> DynamoObject:
     return {
         key: Deserializer.deserialize(value) for key, value in data.items()
     }
-
-
-def get_config(instance: Union[TModel, Type[TModel]]) -> ModelConfig:
-    return instance.__aiodynamodb__
 
 
 def get_diff(cls: Type[TModel], new: DynamoObject, old: DynamoObject) -> TDiff:
@@ -95,3 +91,39 @@ def boto_err(exc: ClientError, code: str) -> bool:
         return exc.response['Error']['Code'] == code
     except KeyError:
         return False
+
+
+def _remove_empty_strings(value: DynamoValue) -> Union[DynamoValue, EMPTY_STRING]:
+    if value == '':
+        return EMPTY_STRING
+    elif isinstance(value, dict):
+        clean = {}
+        for key, attr_value in value.items():
+            clean_value = _remove_empty_strings(attr_value)
+            if clean_value is not EMPTY_STRING:
+                clean[key] = clean_value
+        return clean
+    elif isinstance(value, list):
+        clean = []
+        for item in value:
+            clean_item = _remove_empty_strings(item)
+            if clean_item is not EMPTY_STRING:
+                clean.append(clean_item)
+        return clean
+    elif isinstance(value, set):
+        clean = set()
+        for item in value:
+            clean_item = _remove_empty_strings(item)
+            if clean_item is not EMPTY_STRING:
+                clean.add(clean_item)
+        return clean
+    else:
+        return value
+
+
+def remove_empty_strings(value: DynamoValue) -> DynamoValue:
+    clean = _remove_empty_strings(value)
+    if clean is EMPTY_STRING:
+        return ''
+    else:
+        return clean
