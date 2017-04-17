@@ -11,7 +11,6 @@ jobs:
       - checkout
       - run: pip install -e .
       - run: pip install -r test-requirements.txt
-      - run: pip install -r ci-requirements.txt
       - run: find . -regex '.*__pycache__.*' -delete
       - run: pytest --verbose --cov=src/aiodynamo --cov-report=html:reports/coverage/ --junitxml=reports/results/junit.xml
       - store_artifacts:
