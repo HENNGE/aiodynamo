@@ -1,5 +1,6 @@
 import asyncio
 import os
+import warnings
 from functools import wraps
 import itertools
 
@@ -8,7 +9,7 @@ import pytest
 from aiobotocore import get_session
 
 from aiodynamo import Connection, model, Keys, field, hash_key, range_key
-from aiodynamo.exceptions import NotModified, NotFound
+from aiodynamo.exceptions import NotModified, NotFound, InvalidModel
 from aiodynamo.helpers import remove_empty_strings
 
 
@@ -20,7 +21,7 @@ class ConnectionContext:
     def table_name(model):
         return f'table-{model.__name__}'
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Connection:
         try:
             endpoint_url = os.environ['DYNAMODB_ENDPOINT_URL']
         except KeyError:
@@ -55,12 +56,21 @@ def connection(*models):
     return ConnectionContext(models)
 
 
+def check_unawaited(logs):
+    return [
+        str(log.message) for log in logs
+        if not str(log.message).endswith(' was never awaited.')
+    ]
+
+
 def runner(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        loop = asyncio.get_event_loop()
-        task = loop.create_task(func(*args, **kwargs))
-        loop.run_until_complete(task)
+        with warnings.catch_warnings(record=True) as logs:
+            loop = asyncio.get_event_loop()
+            task = loop.create_task(func(*args, **kwargs))
+            loop.run_until_complete(task)
+            assert not check_unawaited(logs)
     return wrapper
 
 
@@ -318,3 +328,68 @@ async def test_empty_strings(test_value):
 ], ids=repr)
 def test_remove_empty_strings(value, expected):
     assert remove_empty_strings(value) == expected
+
+
+def test_double_hash_key():
+    class MyModel:
+        h1 = hash_key(str)
+        h2 = hash_key(str)
+
+    with pytest.raises(InvalidModel):
+        model(keys=Keys.HashRange)(MyModel)
+
+
+@runner
+async def test_projection_expression():
+    @model(keys=Keys.HashRange)
+    class MyModel:
+        h = hash_key(str)
+        r = range_key(str)
+        v = field()
+
+    async with connection(MyModel) as db:
+        await db.save(MyModel(h='h', r='a', v='1'))
+        await db.save(MyModel(h='h', r='b', v='2'))
+        values = ['1', '2']
+        async for partial in db.query(MyModel, h='h', attrs=['v']):
+            expected = values.pop(0)
+            assert partial.v == expected
+            assert attr.asdict(partial) == {'v': expected}
+
+
+@runner
+async def test_start_key():
+    @model(keys=Keys.HashRange)
+    class MyModel:
+        h = hash_key(str)
+        r = range_key(str)
+        v = field()
+
+    async with connection(MyModel) as db:
+        await db.save(MyModel(h='h', r='a', v='1'))
+        instance = MyModel(h='h', r='b', v='2')
+        await db.save(instance)
+        count = 0
+        async for db_instance in db.query(MyModel, h='h', start_key='a'):
+            assert db_instance == instance
+            count += 1
+        assert count == 1
+
+
+@runner
+async def test_limit():
+    @model(keys=Keys.HashRange)
+    class MyModel:
+        h = hash_key(str)
+        r = range_key(str)
+        v = field()
+
+    async with connection(MyModel) as db:
+        instance = MyModel(h='h', r='a', v='1')
+        await db.save(instance)
+        await db.save(MyModel(h='h', r='b', v='2'))
+        count = 0
+        async for db_instance in db.query(MyModel, h='h', limit=1):
+            assert db_instance == instance
+            count += 1
+        assert count == 1

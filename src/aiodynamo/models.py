@@ -4,9 +4,9 @@ from typing import Type, Union, List, Any
 
 import attr
 
-from .types import TModel, DynamoValue, DynamoObject
+from .types import TModel, DynamoValue, DynamoObject, EncodedObject
 from .exceptions import InvalidModel, InvalidKey
-from .helpers import remove_empty_strings
+from .helpers import remove_empty_strings, deserialize
 
 NULL = object()
 TKeyType = Union[Type[str], Type[int], Type[bytes]]
@@ -126,13 +126,27 @@ class HashEncoder:
             raise InvalidKey('Too many values provided')
         return name(self.hash_field), convert(self.hash_field, value)
 
+    def build_range_key(self, value):
+        raise InvalidKey('Model has no range key')
+
     def pop(self, data):
         """
         Pop the key from a dictionary of data.
         """
-        return {
-            name(self.hash_field): data.pop(self.hash_field.name),
-        }
+        try:
+            return {
+                name(self.hash_field): data.pop(self.hash_field.name),
+            }
+        except KeyError:
+            raise InvalidKey('Hash key not provided')
+
+    def pop_hash(self, kwargs):
+        try:
+            return {
+                name(self.hash_field): kwargs.pop(self.hash_field.name),
+            }
+        except KeyError:
+            raise InvalidKey('Hash key not provided')
 
     def schema(self):
         """
@@ -179,12 +193,19 @@ class HashRangeEncoder(HashEncoder):
             name(self.range_field): convert(self.range_field, range_key),
         }
 
-    def pop(self, data: DynamoObject) -> DynamoObject:
+    def build_range_key(self, value):
         return {
-            **super().pop(data),
-            name(self.range_field): data.pop(self.range_field.name),
-
+            name(self.range_field): convert(self.range_field, value)
         }
+
+    def pop(self, data: DynamoObject) -> DynamoObject:
+        try:
+            return {
+                **super().pop(data),
+                name(self.range_field): data.pop(self.range_field.name),
+            }
+        except KeyError:
+            raise InvalidKey('Range key not provided')
 
     def schema(self):
         return super().schema() + [{
@@ -271,6 +292,12 @@ class ModelConfig:
     def build_hash_key(self, **kwargs):
         return self.key_encoder.build_hash(**kwargs)
 
+    def pop_hash_key(self, kwargs):
+        return self.key_encoder.pop_hash(kwargs)
+
+    def build_range_key(self, value):
+        return self.key_encoder.build_range_key(value)
+
     def build_key(self, **kwargs):
         return self.key_encoder.build(**kwargs)
 
@@ -299,11 +326,12 @@ class ModelConfig:
             self.anti_aliases[key]: value for key, value in data.items()
         }
 
-    def from_database(self, data: DynamoObject) -> TModel:
+    def from_database(self, raw_item: EncodedObject) -> TModel:
         """
         Convert data from the database to a model instance
         """
-        data = self.anti_alias(data)
+        decoded = deserialize(raw_item)
+        data = self.anti_alias(decoded)
         for key, field in self.fields.items():
             try:
                 data[key] = field.convert.from_db(data[key])

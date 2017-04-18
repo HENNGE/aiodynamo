@@ -127,3 +127,37 @@ def remove_empty_strings(value: DynamoValue) -> DynamoValue:
         return ''
     else:
         return clean
+
+
+@attr.s
+class Tracker:
+    prefix = attr.ib()
+    data = attr.ib(default=attr.Factory(dict))
+    index = attr.ib(default=0)
+
+    def track(self, thing):
+        if thing not in self.data:
+            self.data[thing] = f'{self.prefix}{self.index}'
+            self.index += 1
+        return self.data[thing]
+
+    def collect(self):
+        return {value: key for key, value in self.data.items()}
+
+
+class Substitutes:
+    def __init__(self):
+        self.values = Tracker(':v')
+        self.names = Tracker('#n')
+
+    def name(self, name):
+        return self.names.track(name)
+
+    def value(self, value):
+        return self.values.track(value)
+
+    def get_names(self):
+        return self.names.collect()
+
+    def get_values(self):
+        return self.values.collect()

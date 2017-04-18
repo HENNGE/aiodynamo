@@ -1,20 +1,22 @@
 from inspect import isclass
 
 import attr
+from boto3.dynamodb.conditions import ConditionBase
 from botocore.exceptions import ClientError
-from typing import Dict, Type, AsyncIterator, Union
+from typing import Dict, Type, AsyncIterator, Union, Optional, List
 
 from aiobotocore import get_session
 
 from . import helpers
-from .types import TModel
+from .types import TModel, EncodedObject
 from .models import ModelConfig
-from .helpers import boto_err
+from .helpers import boto_err, Substitutes
 from .exceptions import NotFound, NotModified, TableAlreadyExists
 
 
 async def _iterator(config: 'BotoCoreIterator'):
-    token = None
+    token = config.initial
+    got = 0
     while True:
         if token is not None:
             token_kwargs = {
@@ -25,6 +27,9 @@ async def _iterator(config: 'BotoCoreIterator'):
         response = await config.func(**{**config.kwargs, **token_kwargs})
         for item in response.get(config.container, []):
             yield item
+            got += 1
+            if config.limit and config.limit == got:
+                break
         token = response.get(config.response_key, None)
         if token is None:
             break
@@ -37,9 +42,26 @@ class BotoCoreIterator:
     request_key = attr.ib()
     response_key = attr.ib()
     container = attr.ib()
+    initial = attr.ib(default=None)
+    limit = attr.ib(default=None)
 
     def __aiter__(self):
         return _iterator(self)
+
+
+def encode_attrs(attrs, substitutes):
+    return ','.join(map(substitutes.name, attrs))
+
+
+def attr_builder(attrs):
+    cls = attr.make_class('PartialObject', attrs)
+
+    def builder(raw_item: EncodedObject) -> cls:
+        data = helpers.deserialize(raw_item)
+        return cls(**data)
+
+    return builder
+
 
 
 class Connection:
@@ -138,27 +160,74 @@ class Connection:
         except KeyError:
             raise NotFound()
         else:
-            return config.from_database(helpers.deserialize(raw_item))
+            return config.from_database(raw_item)
 
-    async def query(self, cls: Type[TModel], **kwargs) -> AsyncIterator[TModel]:
+    async def query(self,
+                    cls: Type[TModel],
+                    *,
+                    attrs: Optional[List[str]]=None,
+                    limit: Optional[int]=None,
+                    start_key: Optional[Union[str, bytes, int]]=None,
+                    range_filter: Optional[ConditionBase]=None,
+                    **hash_key) -> AsyncIterator[TModel]:
         table = self.get_table_name(cls)
         config = ModelConfig.get(cls)
-        key, value = config.build_hash_key(**kwargs)
+        h_key, h_value = config.build_hash_key(**hash_key)
+
+        substitutes = Substitutes()
+
+        sub_hash_key = substitutes.name(h_key)
+        sub_hash_value = substitutes.value(h_value)
+
+        kce = f'{sub_hash_key} = {sub_hash_value}'
+
+        kwargs = {
+            'TableName': table,
+            'KeyConditionExpression': kce,
+        }
+
+        if attrs:
+            kwargs['ProjectionExpression'] = encode_attrs(attrs, substitutes)
+
+        kwargs.update({
+            'ExpressionAttributeNames': substitutes.get_names(),
+            'ExpressionAttributeValues': helpers.serialize(
+                substitutes.get_values()
+            )
+        })
+
+        if range_filter:
+            info = range_filter.get_expression()
+            r_key, r_value = info['values']
+            sub_r_key = substitutes.name(r_key.name)
+            sub_r_value = substitutes.value(r_value)
+            range_filter_expr = info['format'].format(
+                sub_r_key,
+                sub_r_value,
+                operator=info['operator'],
+            )
+            kce += f' AND {range_filter_expr}'
+
+        if start_key is not None:
+            start_key = helpers.serialize({
+                h_key: h_value,
+                **config.build_range_key(start_key)
+            })
+
         iterator = BotoCoreIterator(
             func=self.client.query,
-            kwargs={
-                'TableName': table,
-                'KeyConditionExpression': '#k = :v',
-                'ExpressionAttributeNames': {
-                    '#k': key,
-                },
-                'ExpressionAttributeValues': helpers.serialize({
-                    ':v': value
-                })
-            },
+            kwargs=kwargs,
             request_key='ExclusiveStartKey',
             response_key='LastEvaluatedKey',
-            container='Items'
+            container='Items',
+            limit=limit,
+            initial=start_key,
         )
+
+        if attrs:
+            builder = attr_builder(attrs)
+        else:
+            builder = config.from_database
+
         async for item in iterator:
-            yield config.from_database(helpers.deserialize(item))
+            yield builder(item)
