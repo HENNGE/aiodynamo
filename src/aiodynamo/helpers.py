@@ -1,4 +1,4 @@
-from typing import TypeVar, Type, Tuple, Dict, Union
+from typing import TypeVar, Type, Tuple, Dict, Union, Iterator
 
 import attr
 from botocore.exceptions import ClientError
@@ -16,7 +16,7 @@ Deserializer = TypeDeserializer()
 
 def serialize(data: DynamoObject) -> EncodedObject:
     return {
-        key: Serializer.serialize(value) for key, value in data.items()
+        key: Serializer.serialize(value) for key, value in remove_empty_strings(data).items()
     }
 
 

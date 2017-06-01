@@ -1,17 +1,13 @@
-from inspect import isclass
-
-import attr
-from boto3.dynamodb.conditions import ConditionBase
-from botocore.exceptions import ClientError
-from typing import Dict, Type, AsyncIterator, Union, Optional, List
+from typing import Dict, Type, Optional, List, Iterator, Tuple
 
 from aiobotocore import get_session
+import attr
+from aiobotocore.client import AioBaseClient
+from boto3.dynamodb import conditions
+from botocore.exceptions import ClientError
 
-from . import helpers
-from .types import TModel, EncodedObject
-from .models import ModelConfig
-from .helpers import boto_err, Substitutes
-from .exceptions import NotFound, NotModified, TableAlreadyExists
+from aiodynamo.types import DynamoValue
+from . import helpers, exceptions, models
 
 
 async def _iterator(config: 'BotoCoreIterator'):
@@ -25,11 +21,14 @@ async def _iterator(config: 'BotoCoreIterator'):
         else:
             token_kwargs = {}
         response = await config.func(**{**config.kwargs, **token_kwargs})
-        for item in response.get(config.container, []):
-            yield item
-            got += 1
-            if config.limit and config.limit == got:
-                break
+        if config.container:
+            for item in response.get(config.container, []):
+                yield item
+                got += 1
+                if config.limit and config.limit == got:
+                    break
+        else:
+            yield response
         token = response.get(config.response_key, None)
         if token is None:
             break
@@ -41,7 +40,7 @@ class BotoCoreIterator:
     kwargs = attr.ib()
     request_key = attr.ib()
     response_key = attr.ib()
-    container = attr.ib()
+    container = attr.ib(default=None)
     initial = attr.ib(default=None)
     limit = attr.ib(default=None)
 
@@ -49,107 +48,52 @@ class BotoCoreIterator:
         return _iterator(self)
 
 
-def encode_attrs(attrs, substitutes):
-    return ','.join(map(substitutes.name, attrs))
-
-
-def attr_builder(attrs):
-    cls = attr.make_class('PartialObject', attrs)
-
-    def builder(raw_item: EncodedObject) -> cls:
-        data = helpers.deserialize(raw_item)
-        return cls(**data)
-
-    return builder
-
-
-
 class Connection:
-    def __init__(self, *, router: Dict[TModel, str], client=None):
+    def __init__(self, *, router: Dict[Type[models.Model], str], client: Optional[AioBaseClient]=None):
         self.router = router
         self.client = client or get_session().create_client('dynamodb')
 
-    def get_table_name(self, instance_or_class: Union[TModel, Type[TModel]]) -> str:
-        if isclass(instance_or_class):
-            return self.router[instance_or_class]
-        else:
-            return self.router[instance_or_class.__class__]
-
     async def create_table(self, cls, *, read_cap: int, write_cap: int):
-        table = self.get_table_name(cls)
-        config = ModelConfig.get(cls)
+        table = self.router[cls]
+        config = models.get_config(cls)
         try:
             await self.client.create_table(
                 TableName=table,
-                KeySchema=config.key_schema(),
-                AttributeDefinitions=config.key_attributes(),
+                KeySchema=config.key_schema,
+                AttributeDefinitions=config.key_attributes,
                 ProvisionedThroughput={
                     'ReadCapacityUnits': read_cap,
                     'WriteCapacityUnits': write_cap,
                 }
             )
         except ClientError as exc:
-            if boto_err(exc, 'ResourceInUseException'):
-                raise TableAlreadyExists()
+            if helpers.boto_err(exc, 'ResourceInUseException'):
+                raise exceptions.TableAlreadyExists()
             else:
                 raise
 
     async def create_table_if_not_exists(self, cls, *, read_cap: int, write_cap: int):
         try:
             await self.create_table(cls, read_cap=read_cap, write_cap=write_cap)
-        except TableAlreadyExists:
+        except exceptions.TableAlreadyExists:
             pass
 
-    async def save(self, instance):
-        table = self.get_table_name(instance)
-        config = ModelConfig.get(instance)
-        data = config.gather(instance)
-        aliased = config.alias(data)
-        encoded_data = helpers.serialize(aliased)
+    async def save(self, instance: models.Model):
+        cls = instance.__class__
+        table = self.router[cls]
+        config = models.get_config(cls)
+        data = config.encode(instance)
+        encoded_data = helpers.serialize(data)
         await self.client.put_item(
             TableName=table,
             Item=encoded_data,
             ReturnValues='NONE',
         )
 
-    async def update(self, instance):
-        try:
-            old = instance.__aiodynamodb_old__
-        except AttributeError:
-            raise NotModified('Cannot update non-modified instance')
-        cls = instance.__class__
-        table = self.get_table_name(cls)
-        config = ModelConfig.get(instance)
-        diff = helpers.get_diff(cls, config.gather(instance), config.gather(old))
-        data = config.gather(instance)
-        key = config.pop_key(data)
-        encoded_key = helpers.serialize(key)
-        alias_diff = config.alias(diff)
-        ue, ean, eav = helpers.encode_update_expression(alias_diff)
-        await self.client.update_item(
-            TableName=table,
-            Key=encoded_key,
-            UpdateExpression=ue,
-            ExpressionAttributeNames=ean,
-            ExpressionAttributeValues=eav,
-        )
-
-    async def delete(self, instance):
-        table = self.get_table_name(instance)
-        config = ModelConfig.get(instance)
-        data = config.gather(instance)
-        key = config.pop_key(data)
-        encoded_key = helpers.serialize(key)
-        await self.client.delete_item(
-            TableName=table,
-            Key=encoded_key,
-            ReturnValues='NONE',
-        )
-
-    async def lookup(self, cls, **key):
-        table = self.get_table_name(cls)
-        config = ModelConfig.get(cls)
-        key = config.build_key(**key)
+    async def get(self, cls: Type[models.Model], *key: DynamoValue) -> models.Model:
+        table = self.router[cls]
+        config = models.get_config(cls)
+        key = config.encode_key(*key)
         encoded_key = helpers.serialize(key)
         response = await self.client.get_item(
             TableName=table,
@@ -158,76 +102,90 @@ class Connection:
         try:
             raw_item = response['Item']
         except KeyError:
-            raise NotFound()
+            raise exceptions.NotFound()
         else:
-            return config.from_database(raw_item)
+            data = helpers.deserialize(raw_item)
+            return config.from_database(data)
 
-    async def query(self,
-                    cls: Type[TModel],
-                    *,
-                    attrs: Optional[List[str]]=None,
-                    limit: Optional[int]=None,
-                    start_key: Optional[Union[str, bytes, int]]=None,
-                    range_filter: Optional[ConditionBase]=None,
-                    **hash_key) -> AsyncIterator[TModel]:
-        table = self.get_table_name(cls)
-        config = ModelConfig.get(cls)
-        h_key, h_value = config.build_hash_key(**hash_key)
+    async def query_attrs(self, cls: Type[models.Model], attrs: List[str], *key: DynamoValue) -> Iterator[Tuple[DynamoValue]]:
+        table = self.router[cls]
+        config = models.get_config(cls)
+        key = config.encode_key(*key)
 
-        substitutes = Substitutes()
+        condition = None
+        for name, value in key.items():
+            if condition is None:
+                condition = conditions.Key(name).eq(value)
+            else:
+                condition &= conditions.Key(name).eq(value)
 
-        sub_hash_key = substitutes.name(h_key)
-        sub_hash_value = substitutes.value(h_value)
+        builder = conditions.ConditionExpressionBuilder()
+        kce, ean, eav = builder.build_expression(condition, True)
 
-        kce = f'{sub_hash_key} = {sub_hash_value}'
+        pe_ean = {}
+        for index, attr in enumerate(attrs):
+            if attr not in config.fields:
+                raise ValueError(f'Invalid attr {attr} not found in field definition')
+            pe_ean[f'#a{index}'] = attr
+        pe = ','.join(pe_ean.keys())
+        ean.update(pe_ean)
 
         kwargs = {
-            'TableName': table,
             'KeyConditionExpression': kce,
+            'TableName': table,
+            'ProjectionExpression': pe,
         }
-
-        if attrs:
-            kwargs['ProjectionExpression'] = encode_attrs(attrs, substitutes)
-
-        kwargs.update({
-            'ExpressionAttributeNames': substitutes.get_names(),
-            'ExpressionAttributeValues': helpers.serialize(
-                substitutes.get_values()
-            )
-        })
-
-        if range_filter:
-            info = range_filter.get_expression()
-            r_key, r_value = info['values']
-            sub_r_key = substitutes.name(r_key.name)
-            sub_r_value = substitutes.value(r_value)
-            range_filter_expr = info['format'].format(
-                sub_r_key,
-                sub_r_value,
-                operator=info['operator'],
-            )
-            kce += f' AND {range_filter_expr}'
-
-        if start_key is not None:
-            start_key = helpers.serialize({
-                h_key: h_value,
-                **config.build_range_key(start_key)
-            })
-
+        if ean:
+            kwargs['ExpressionAttributeNames'] = ean
+        if eav:
+            kwargs['ExpressionAttributeValues'] = helpers.serialize(eav)
         iterator = BotoCoreIterator(
             func=self.client.query,
             kwargs=kwargs,
             request_key='ExclusiveStartKey',
             response_key='LastEvaluatedKey',
-            container='Items',
-            limit=limit,
-            initial=start_key,
+            container='Items'
         )
 
-        if attrs:
-            builder = attr_builder(attrs)
-        else:
-            builder = config.from_database
+        async for raw_item in iterator:
+            item = helpers.deserialize(raw_item)
+            yield tuple(item.get(attr, config.fields[attr].default) for attr in attrs)
 
-        async for item in iterator:
-            yield builder(item)
+    async def paged_query(self, cls: Type[models.Model], key: DynamoValue, per_page: int, page: int) -> Iterator[models.Model]:
+        raise NotImplementedError()
+
+    async def count(self, cls: Type[models.Model], *key: DynamoValue) -> int:
+        table = self.router[cls]
+        config = models.get_config(cls)
+        key = config.encode_key(*key)
+
+        condition = None
+        for name, value in key.items():
+            if condition is None:
+                condition = conditions.Key(name).eq(value)
+            else:
+                condition &= conditions.Key(name).eq(value)
+
+        builder = conditions.ConditionExpressionBuilder()
+        kce, ean, eav = builder.build_expression(condition, True)
+
+        kwargs = {
+            'KeyConditionExpression': kce,
+            'Select': 'COUNT',
+            'TableName': table,
+        }
+        if ean:
+            kwargs['ExpressionAttributeNames'] = ean
+        if eav:
+            kwargs['ExpressionAttributeValues'] = helpers.serialize(eav)
+        iterator = BotoCoreIterator(
+            func=self.client.query,
+            kwargs=kwargs,
+            request_key='ExclusiveStartKey',
+            response_key='LastEvaluatedKey',
+        )
+
+        count = 0
+        async for page in iterator:
+            count += page['Count']
+        return count

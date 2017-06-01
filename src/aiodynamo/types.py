@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Union, Set, List, Dict, TypeVar
+from typing import Union, Set, List, Dict, TypeVar, Type
 
 DynamoValue = Union[
     None,
@@ -14,6 +14,8 @@ DynamoValue = Union[
     List['DynamoValue'],
     Dict[str, 'DynamoValue']
 ]
+
+DynamoKeyType = Union[Type[str], Type[bytes], Type[int]]
 
 DynamoObject = Dict[str, DynamoValue]
 
