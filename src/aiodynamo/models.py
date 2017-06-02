@@ -1,4 +1,7 @@
-from typing import Dict, List, Iterator, Tuple, Optional, Type, Union, Callable
+from typing import (
+    Dict, List, Iterator, Tuple, Optional, Type, Union, Callable,
+    TypeVar,
+)
 
 import attr
 
@@ -24,13 +27,16 @@ def get_key_type(key_type: DynamoKeyType) -> str:
 class Model:
     aiodynamodb_original_instance = constants.FRESH
 
-    def modify(self, **attrs) -> 'Model':
+    def modify(self, **attrs) -> 'TModel':
         new = attr.evolve(self, **attrs)
         new.aiodynamodb_original_instance = self.aiodynamodb_original_instance
         return new
 
 
-def iterencode(instance: Model, fields: Dict[str, 'Field'], keys: List[str]) -> Iterator[Tuple[str, DynamoValue]]:
+TModel = TypeVar('TModel', bound=Model)
+
+
+def iterencode(instance: TModel, fields: Dict[str, 'Field'], keys: List[str]) -> Iterator[Tuple[str, DynamoValue]]:
     original = getattr(instance, constants.ORIGINAL_INSTANCE_ATTR_NAME)
     for name, field in fields.items():
         value = getattr(instance, name)
@@ -49,7 +55,7 @@ class Config:
     hash_key: 'Key' = attr.ib()
     range_key: Optional['Key'] = attr.ib()
     fields: Dict[str, 'Field'] = attr.ib()
-    model: Type[Model] = attr.ib()
+    model: Type[TModel] = attr.ib()
     key_schema: List[Dict[str, str]] = attr.ib(init=False)
     key_attributes: List[Dict[str, str]] = attr.ib(init=False)
     key_names: List[str] = attr.ib(init=False)
@@ -75,7 +81,7 @@ class Config:
             })
             self.key_names.append(self.range_key.name)
 
-    def from_database(self, data: Dict[str, DynamoValue]) -> Model:
+    def from_database(self, data: Dict[str, DynamoValue]) -> TModel:
         cleaned = {
             key: value
             for
@@ -85,11 +91,11 @@ class Config:
             if
             key in self.fields
         }
-        instance = self.model(**cleaned)
+        instance: TModel = self.model(**cleaned)
         setattr(instance, constants.ORIGINAL_INSTANCE_ATTR_NAME, instance)
         return instance
 
-    def encode(self, instance: Model) -> Dict[str, DynamoValue]:
+    def encode(self, instance: TModel) -> Dict[str, DynamoValue]:
         return dict(
             iterencode(
                 instance,
@@ -97,6 +103,16 @@ class Config:
                 self.key_names
             )
         )
+
+    def get_key(self, instance: TModel) -> Dict[str, DynamoValue]:
+        return {
+            name: getattr(instance, name)
+            for
+            name
+            in
+            self.key_names
+        }
+
 
     def encode_key(self, value1=constants.NOTHING, value2=constants.NOTHING) -> Dict[str, DynamoValue]:
         """
@@ -180,15 +196,14 @@ class ConstKey(Key):
     value = attr.ib()
 
 
-_registry: Dict[Type[Model], Config] = {}
+_registry: Dict[Type[TModel], Config] = {}
 
 
-def get_config(cls: Type[Model]) -> Config:
+def get_config(cls: Type[TModel]) -> Config:
     return _registry[cls]
 
 
-def register(*, hash_key: Key, range_key: Optional[Key] = None) -> Callable[
-    [Type[Model]], Type[Model]]:
+def register(*, hash_key: Key, range_key: Optional[Key] = None) -> Callable[[Type[TModel]], Type[TModel]]:
     if not isinstance(hash_key, Key):
         raise TypeError('Hash key must be a Key')
     if range_key:
@@ -197,7 +212,7 @@ def register(*, hash_key: Key, range_key: Optional[Key] = None) -> Callable[
         if not isinstance(range_key, Key):
             raise TypeError('Range key must be a Key')
 
-    def decorator(cls: Type[Model]) -> Type[Model]:
+    def decorator(cls: Type[TModel]) -> Type[TModel]:
         if not issubclass(cls, Model):
             raise TypeError('Can only register Model subclasses')
         cls = attr.s(cls)
