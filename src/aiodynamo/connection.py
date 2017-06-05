@@ -15,18 +15,6 @@ from . import helpers, exceptions, models
 from .models import TModel
 
 
-def key_to_condition(key: Dict[str, DynamoValue]) -> Tuple[str, Dict[str, str], Dict[str, DynamoValue]]:
-    condition = None
-    for name, value in key.items():
-        if condition is None:
-            condition = conditions.Key(name).eq(value)
-        else:
-            condition &= conditions.Key(name).eq(value)
-
-    builder = conditions.ConditionExpressionBuilder()
-    return builder.build_expression(condition, True)
-
-
 async def _iterator(config: 'BotoCoreIterator'):
     token = config.initial
     got = 0
@@ -65,19 +53,61 @@ class BotoCoreIterator:
         return _iterator(self)
 
 
+@attr.s
+class Meta:
+    model: Type[TModel] = attr.ib()
+    connection: 'Connection' = attr.ib()
+    table: str = attr.ib(init=False)
+    config: models.Config = attr.ib(init=False)
+
+    def __attrs_post_init__(self):
+        self.table = self.connection.router[self.model]
+        self.config = models.get_config(self.model)
+
+    def key(self, *key):
+        key = self.config.encode_key(*key)
+        return helpers.serialize(key)
+
+    def from_database(self, raw_item):
+        data = helpers.deserialize(raw_item)
+        return self.config.from_database(data)
+
+    def encode(self, instance):
+        data = self.config.encode(instance)
+        return helpers.serialize(data)
+
+    def get_key(self, instance):
+        key = self.config.get_key(instance)
+        return helpers.serialize(key)
+
+    def key_conditions(self, key) -> Tuple[str, Dict[str, str], Dict[str, DynamoValue]]:
+        key = self.config.encode_key(key)
+        condition = None
+        for name, value in key.items():
+            if condition is None:
+                condition = conditions.Key(name).eq(value)
+            else:
+                condition &= conditions.Key(name).eq(value)
+
+        builder = conditions.ConditionExpressionBuilder()
+        return builder.build_expression(condition, True)
+
+
 class Connection:
     def __init__(self, *, router: Dict[Type[TModel], str], client: Optional[AioBaseClient]=None):
         self.router = router
         self.client = client or get_session().create_client('dynamodb')
 
+    def meta(self, cls: Type[TModel]) -> Meta:
+        return Meta(cls, self)
+
     async def create_table(self, cls, *, read_cap: int, write_cap: int):
-        table = self.router[cls]
-        config = models.get_config(cls)
+        meta = self.meta(cls)
         try:
             await self.client.create_table(
-                TableName=table,
-                KeySchema=config.key_schema,
-                AttributeDefinitions=config.key_attributes,
+                TableName=meta.table,
+                KeySchema=meta.config.key_schema,
+                AttributeDefinitions=meta.config.key_attributes,
                 ProvisionedThroughput={
                     'ReadCapacityUnits': read_cap,
                     'WriteCapacityUnits': write_cap,
@@ -96,54 +126,42 @@ class Connection:
             pass
 
     async def get(self, cls: Type[TModel], *key: DynamoValue) -> TModel:
-        table = self.router[cls]
-        config = models.get_config(cls)
-        key = config.encode_key(*key)
-        encoded_key = helpers.serialize(key)
+        meta = self.meta(cls)
         response = await self.client.get_item(
-            TableName=table,
-            Key=encoded_key
+            TableName=meta.table,
+            Key=meta.key(*key)
         )
         try:
             raw_item = response['Item']
         except KeyError:
             raise exceptions.NotFound()
         else:
-            data = helpers.deserialize(raw_item)
-            return config.from_database(data)
+            return meta.from_database(raw_item)
 
     async def save(self, instance: TModel):
-        cls = instance.__class__
-        table = self.router[cls]
-        config = models.get_config(cls)
-        data = config.encode(instance)
-        encoded_data = helpers.serialize(data)
+        meta = self.meta(instance.__class__)
+        data = meta.encode(instance)
         await self.client.put_item(
-            TableName=table,
-            Item=encoded_data,
+            TableName=meta.table,
+            Item=data,
             ReturnValues='NONE',
         )
 
     async def delete(self, instance):
-        cls = instance.__class__
-        table = self.router[cls]
-        config = models.get_config(cls)
-        key = config.get_key(instance)
-        encoded_key = helpers.serialize(key)
+        meta = self.meta(instance.__class__)
+        encoded_key = meta.get_key(instance)
         response = await self.client.delete_item(
-            TableName=table,
+            TableName=meta.table,
             Key=encoded_key
         )
 
     async def query_attrs(self, cls: Type[TModel], key: DynamoValue, attrs: List[str]) -> AsyncIterator[Sequence[DynamoValue]]:
-        table = self.router[cls]
-        config = models.get_config(cls)
-        key = config.encode_key(key)
-        kce, ean, eav = key_to_condition(key)
+        meta = self.meta(cls)
+        kce, ean, eav = meta.key_conditions(key)
 
         pe_ean = {}
         for index, attr in enumerate(attrs):
-            if attr not in config.fields:
+            if attr not in meta.config.fields:
                 raise ValueError(f'Invalid attr {attr} not found in field definition')
             pe_ean[f'#a{index}'] = attr
         pe = ','.join(pe_ean.keys())
@@ -151,7 +169,7 @@ class Connection:
 
         kwargs = {
             'KeyConditionExpression': kce,
-            'TableName': table,
+            'TableName': meta.table,
             'ProjectionExpression': pe,
         }
         if ean:
@@ -168,17 +186,15 @@ class Connection:
 
         async for raw_item in iterator:
             item = helpers.deserialize(raw_item)
-            yield tuple(item.get(attr, config.fields[attr].default) for attr in attrs)
+            yield tuple(item.get(attr, meta.config.fields[attr].default) for attr in attrs)
 
     async def query(self, cls: Type[TModel], key: DynamoValue, start=None, limit=None) -> AsyncIterator[TModel]:
-        table = self.router[cls]
-        config = models.get_config(cls)
-        key = config.encode_key(key)
-        kce, ean, eav = key_to_condition(key)
+        meta = self.meta(cls)
+        kce, ean, eav = meta.key_conditions(key)
 
         kwargs = {
             'KeyConditionExpression': kce,
-            'TableName': table,
+            'TableName': meta.table,
         }
         if ean:
             kwargs['ExpressionAttributeNames'] = ean
@@ -195,19 +211,16 @@ class Connection:
         )
 
         async for raw_item in iterator:
-            data = helpers.deserialize(raw_item)
-            yield config.from_database(data)
+            yield meta.from_database(raw_item)
 
     async def count(self, cls: Type[TModel], *key: DynamoValue) -> int:
-        table = self.router[cls]
-        config = models.get_config(cls)
-        key = config.encode_key(*key)
-        kce, ean, eav = key_to_condition(key)
+        meta = self.meta(cls)
+        kce, ean, eav = meta.key_condition(key)
 
         kwargs = {
             'KeyConditionExpression': kce,
             'Select': 'COUNT',
-            'TableName': table,
+            'TableName': meta.table,
         }
         if ean:
             kwargs['ExpressionAttributeNames'] = ean
