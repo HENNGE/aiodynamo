@@ -1,6 +1,5 @@
-from typing import TypeVar, Type, Tuple, Dict, Union, Iterator
+from typing import TypeVar, Union
 
-import attr
 from botocore.exceptions import ClientError
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 
@@ -24,63 +23,6 @@ def deserialize(data: EncodedObject) -> DynamoObject:
     return {
         key: Deserializer.deserialize(value) for key, value in data.items()
     }
-
-
-def get_diff(cls: Type[TModel], new: DynamoObject, old: DynamoObject) -> TDiff:
-    diff: TDiff = {}
-    for field in attr.fields(cls):
-        new_value = new[field.name]
-        old_value = old[field.name]
-        if new_value != old_value:
-            diff[field.name] = new_value
-    return diff
-
-
-class DynamoEncoder:
-    prefix = None
-
-    def __init__(self):
-        self.values = {}
-        self.index = 0
-
-    def encode(self, value):
-        if value not in self.values:
-            self.values[value] = f'{self.prefix}{self.index}'
-            self.index += 1
-        return self.values[value]
-
-    def gather(self):
-        return {value: key for key, value in self.values.items()}
-
-
-class NameEncoder(DynamoEncoder):
-    prefix = '#n'
-
-
-class ValueEncoder(DynamoEncoder):
-    prefix = ':v'
-
-    def gather(self):
-        return serialize(super().gather())
-
-
-def encode_update_expression(data: TDiff) -> Tuple[str, Dict[str, str], EncodedObject]:
-    """
-    Encode a diff into an UpdateExpression, ExpressionAttributeNames and 
-    ExpressionAttributeValues.
-    
-    Currently only does SET but could be expanded with a smarter diff to do
-    cool things.
-    """
-    ue_bits = []
-    ean = NameEncoder()
-    eav = ValueEncoder()
-    for key, value in data.items():
-        key = ean.encode(key)
-        value = eav.encode(value)
-        ue_bits.append(f'{key} = {value}')
-    joined = ', '.join(ue_bits)
-    return f'SET {joined}', ean.gather(), eav.gather()
 
 
 def boto_err(exc: ClientError, code: str) -> bool:
@@ -127,37 +69,3 @@ def remove_empty_strings(value: DynamoValue) -> DynamoValue:
         return ''
     else:
         return clean
-
-
-@attr.s
-class Tracker:
-    prefix = attr.ib()
-    data = attr.ib(default=attr.Factory(dict))
-    index = attr.ib(default=0)
-
-    def track(self, thing):
-        if thing not in self.data:
-            self.data[thing] = f'{self.prefix}{self.index}'
-            self.index += 1
-        return self.data[thing]
-
-    def collect(self):
-        return {value: key for key, value in self.data.items()}
-
-
-class Substitutes:
-    def __init__(self):
-        self.values = Tracker(':v')
-        self.names = Tracker('#n')
-
-    def name(self, name):
-        return self.names.track(name)
-
-    def value(self, value):
-        return self.values.track(value)
-
-    def get_names(self):
-        return self.names.collect()
-
-    def get_values(self):
-        return self.values.collect()

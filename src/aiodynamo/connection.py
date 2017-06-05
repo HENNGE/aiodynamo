@@ -1,7 +1,10 @@
+from enum import auto, Enum
 from typing import (
     Dict, Type, Optional, List, Iterator, Tuple, TypeVar,
     Sequence,
     AsyncIterator,
+    Union,
+    Any,
 )
 
 from aiobotocore import get_session
@@ -10,6 +13,7 @@ from aiobotocore.client import AioBaseClient
 from boto3.dynamodb import conditions
 from botocore.exceptions import ClientError
 
+from aiodynamo.constants import NOTHING
 from aiodynamo.types import DynamoValue
 from . import helpers, exceptions, models
 from .models import TModel
@@ -80,17 +84,32 @@ class Meta:
         key = self.config.get_key(instance)
         return helpers.serialize(key)
 
-    def key_conditions(self, key) -> Tuple[str, Dict[str, str], Dict[str, DynamoValue]]:
-        key = self.config.encode_key(key)
-        condition = None
-        for name, value in key.items():
-            if condition is None:
-                condition = conditions.Key(name).eq(value)
-            else:
-                condition &= conditions.Key(name).eq(value)
+    def key_conditions(self, key=NOTHING) -> Dict[str, Any]:
+        if key is NOTHING:
+            if self.config.range_key:
+                raise ValueError('Must provide a key for non hash key only tables')
+            return {}
+        else:
+            key = self.config.encode_key(key)
+            name, value = list(key.items())[0]
+            condition = conditions.Key(name).eq(value)
 
-        builder = conditions.ConditionExpressionBuilder()
-        return builder.build_expression(condition, True)
+            builder = conditions.ConditionExpressionBuilder()
+            kce, ean, eav = builder.build_expression(condition, True)
+            kwargs = {
+                'KeyConditionExpression': kce,
+            }
+            if ean:
+                kwargs['ExpressionAttributeNames'] = ean
+            if eav:
+                kwargs['ExpressionAttributeValues'] = helpers.serialize(eav)
+            return kwargs
+
+
+class Guards(Enum):
+    none = auto()
+    exists = auto()
+    not_exists = auto()
 
 
 class Connection:
@@ -138,7 +157,8 @@ class Connection:
         else:
             return meta.from_database(raw_item)
 
-    async def save(self, instance: TModel):
+    async def save(self, instance: TModel, guard=Guards.none):
+        # TODO: Implement guards
         meta = self.meta(instance.__class__)
         data = meta.encode(instance)
         await self.client.put_item(
@@ -155,9 +175,9 @@ class Connection:
             Key=encoded_key
         )
 
-    async def query_attrs(self, cls: Type[TModel], key: DynamoValue, attrs: List[str]) -> AsyncIterator[Sequence[DynamoValue]]:
+    async def query_attrs(self, cls: Type[TModel], attrs: List[str], key: DynamoValue=NOTHING) -> AsyncIterator[Sequence[DynamoValue]]:
         meta = self.meta(cls)
-        kce, ean, eav = meta.key_conditions(key)
+        kwargs = meta.key_conditions(key)
 
         pe_ean = {}
         for index, attr in enumerate(attrs):
@@ -165,19 +185,18 @@ class Connection:
                 raise ValueError(f'Invalid attr {attr} not found in field definition')
             pe_ean[f'#a{index}'] = attr
         pe = ','.join(pe_ean.keys())
-        ean.update(pe_ean)
+        kwargs.setdefault('ExpressionAttributeNames', {})
+        kwargs['ExpressionAttributeNames'].update(pe_ean)
+        kwargs['TableName'] = meta.table
+        kwargs['ProjectionExpression'] = pe
 
-        kwargs = {
-            'KeyConditionExpression': kce,
-            'TableName': meta.table,
-            'ProjectionExpression': pe,
-        }
-        if ean:
-            kwargs['ExpressionAttributeNames'] = ean
-        if eav:
-            kwargs['ExpressionAttributeValues'] = helpers.serialize(eav)
+        if key is NOTHING:
+            func = self.client.scan
+        else:
+            func = self.client.query
+
         iterator = BotoCoreIterator(
-            func=self.client.query,
+            func=func,
             kwargs=kwargs,
             request_key='ExclusiveStartKey',
             response_key='LastEvaluatedKey',
@@ -188,20 +207,18 @@ class Connection:
             item = helpers.deserialize(raw_item)
             yield tuple(item.get(attr, meta.config.fields[attr].default) for attr in attrs)
 
-    async def query(self, cls: Type[TModel], key: DynamoValue, start=None, limit=None) -> AsyncIterator[TModel]:
+    async def query(self, cls: Type[TModel], key: DynamoValue=NOTHING, start=None, limit=None) -> AsyncIterator[TModel]:
         meta = self.meta(cls)
-        kce, ean, eav = meta.key_conditions(key)
+        kwargs = meta.key_conditions(key)
+        kwargs['TableName'] = meta.table
 
-        kwargs = {
-            'KeyConditionExpression': kce,
-            'TableName': meta.table,
-        }
-        if ean:
-            kwargs['ExpressionAttributeNames'] = ean
-        if eav:
-            kwargs['ExpressionAttributeValues'] = helpers.serialize(eav)
+        if key is NOTHING:
+            func = self.client.scan
+        else:
+            func = self.client.query
+
         iterator = BotoCoreIterator(
-            func=self.client.query,
+            func=func,
             kwargs=kwargs,
             request_key='ExclusiveStartKey',
             response_key='LastEvaluatedKey',
@@ -213,21 +230,19 @@ class Connection:
         async for raw_item in iterator:
             yield meta.from_database(raw_item)
 
-    async def count(self, cls: Type[TModel], *key: DynamoValue) -> int:
+    async def count(self, cls: Type[TModel], key: DynamoValue=NOTHING) -> int:
         meta = self.meta(cls)
-        kce, ean, eav = meta.key_condition(key)
+        kwargs = meta.key_conditions(key)
+        kwargs['Select'] = 'COUNT'
+        kwargs['TableName'] = meta.table
 
-        kwargs = {
-            'KeyConditionExpression': kce,
-            'Select': 'COUNT',
-            'TableName': meta.table,
-        }
-        if ean:
-            kwargs['ExpressionAttributeNames'] = ean
-        if eav:
-            kwargs['ExpressionAttributeValues'] = helpers.serialize(eav)
+        if key is NOTHING:
+            func = self.client.scan
+        else:
+            func = self.client.query
+
         iterator = BotoCoreIterator(
-            func=self.client.query,
+            func=func,
             kwargs=kwargs,
             request_key='ExclusiveStartKey',
             response_key='LastEvaluatedKey',

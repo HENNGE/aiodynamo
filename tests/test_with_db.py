@@ -8,7 +8,8 @@ import pytest
 from aiobotocore import get_session
 
 from aiodynamo.connection import Connection
-from aiodynamo.exceptions import NotFound
+from aiodynamo.converters import Integer
+from aiodynamo.exceptions import NotFound, TableAlreadyExists
 from aiodynamo.helpers import remove_empty_strings
 from aiodynamo.models import register, Key, Model, field, ConstKey
 
@@ -115,7 +116,7 @@ async def test_query():
     class MyModel(Model):
         h = field('')
         r = field('')
-        x = field(0)
+        x = field(0, Integer)
 
     async with connection(MyModel) as db:
         instances = [
@@ -124,6 +125,36 @@ async def test_query():
         await asyncio.wait(map(db.save, instances))
         db_instances = [instance async for instance in db.query(MyModel, 'h')]
         assert instances == db_instances
+
+
+@runner
+async def test_scan():
+    @register(hash_key=Key('h', str))
+    class MyModel(Model):
+        h = field('')
+        x = field(0, Integer)
+
+    async with connection(MyModel) as db:
+        instances = [
+            MyModel(h=f'h{index}', x=index) for index in range(10)
+        ]
+        await asyncio.wait(map(db.save, instances))
+        scanned = [instance async for instance in db.query(MyModel)]
+        db_instances = list(sorted(scanned, key=lambda x: x.h))
+        assert instances == db_instances
+
+
+@runner
+async def test_query_without_key():
+    @register(hash_key=Key('h', str), range_key=Key('r', str))
+    class MyModel(Model):
+        h = field('')
+        r = field('')
+        x = field(0, Integer)
+
+    async with connection(MyModel) as db:
+        with pytest.raises(ValueError):
+            [instance async for instance in db.query(MyModel)]
 
 
 @runner
@@ -199,13 +230,28 @@ async def test_query_attrs():
         await db.save(MyModel(h='h', r='a', v='1'))
         await db.save(MyModel(h='h', r='b', v='2'))
         values = ['1', '2']
-        async for v, in db.query_attrs(MyModel, 'h', ['v']):
+        async for v, in db.query_attrs(MyModel, ['v'], 'h'):
             expected = values.pop(0)
             assert v == expected
 
 
 @runner
-async def test_start_key():
+async def test_scan_attrs():
+    @register(hash_key=Key('h', str))
+    class MyModel(Model):
+        h = field('')
+        v = field('')
+
+    async with connection(MyModel) as db:
+        await db.save(MyModel(h='h1', v='1'))
+        await db.save(MyModel(h='h2', v='2'))
+        values = ['1', '2']
+        actual = [v[0] async for v in db.query_attrs(MyModel, ['v'])]
+        assert values == actual
+
+
+@runner
+async def test_query_start_key():
     @register(hash_key=Key('h', str), range_key=Key('r', str))
     class MyModel(Model):
         h = field('')
@@ -240,3 +286,67 @@ async def test_limit():
             assert db_instance == instance
             count += 1
         assert count == 1
+
+
+@runner
+async def test_count_scan():
+    @register(hash_key=Key('num', int))
+    class MyModel(Model):
+        num = field(0)
+
+    async with connection(MyModel) as db:
+        assert await db.count(MyModel) == 0
+        instance = MyModel(1)
+        await db.save(instance)
+        assert await db.count(MyModel) == 1
+
+
+@runner
+async def test_count_query():
+    @register(hash_key=Key('h', str), range_key=Key('r', str))
+    class MyModel(Model):
+        h = field('')
+        r = field('')
+
+    async with connection(MyModel) as db:
+        assert await db.count(MyModel, 'hash') == 0
+        await db.save(MyModel(h='nothash', r='something'))
+        assert await db.count(MyModel, 'hash') == 0
+        await db.save(MyModel(h='hash', r='otherthing'))
+        assert await db.count(MyModel, 'hash') == 1
+
+
+@runner
+async def test_create_existing_table():
+    @register(hash_key=Key('h', str), range_key=Key('r', str))
+    class MyModel(Model):
+        h = field('')
+        r = field('')
+
+    async with connection(MyModel) as db:
+        with pytest.raises(TableAlreadyExists):
+            await db.create_table(MyModel, read_cap=5, write_cap=5)
+
+
+@runner
+async def test_create_existing_table_if_not_exists():
+    @register(hash_key=Key('h', str), range_key=Key('r', str))
+    class MyModel(Model):
+        h = field('')
+        r = field('')
+
+    async with connection(MyModel) as db:
+        await db.create_table_if_not_exists(MyModel, read_cap=5, write_cap=5)
+
+
+@runner
+async def test_query_invalid_attr():
+    @register(hash_key=Key('h', str), range_key=Key('r', str))
+    class MyModel(Model):
+        h = field('')
+        r = field('')
+        v = field('')
+
+    async with connection(MyModel) as db:
+        with pytest.raises(ValueError):
+            [x async for x in db.query_attrs(MyModel, ['foo'], 'h')]
