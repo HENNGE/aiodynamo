@@ -19,4 +19,4 @@ jobs:
           path: reports/coverage/
           destination: reports
       - store_test_results:
-          path: reports/results/junit.xml
+          path: reports/results/
