@@ -1,15 +1,16 @@
 import pytest
 
 from aiodynamo import client
+from aiodynamo.client import F
 
 
-@pytest.mark.parametrize('args,expression,names', [
-    (('foo', 'bar'), '#N0,#N1', {'#N0': 'foo', '#N1': 'bar'}),
-    ((client.attribute('foo')[0].bar, 'bar'), '#N0[0].#N1,#N1', {'#N0': 'foo', '#N1': 'bar'}),
-    ((client.attribute('foo')['12'].bar, 'bar'), '#N0.#N1.#N2,#N2', {'#N0': 'foo', '#N1': '12', '#N2': 'bar'}),
+@pytest.mark.parametrize('pe,expression,names', [
+    (F('foo') & F('bar'), '#N0,#N1', {'#N0': 'foo', '#N1': 'bar'}),
+    (F('foo', 0, 'bar') & F('bar'), '#N0[0].#N1,#N1', {'#N0': 'foo', '#N1': 'bar'}),
+    (F('foo', '12', 'bar') & F('bar'), '#N0.#N1.#N2,#N2', {'#N0': 'foo', '#N1': '12', '#N2': 'bar'}),
 ])
-def test_project(args, expression, names):
-    assert client.project(*args).encode() == (expression, names)
+def test_project(pe, expression, names):
+    assert pe.encode() == (expression, names)
 
 
 def test_clean():

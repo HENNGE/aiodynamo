@@ -1,7 +1,13 @@
+import abc
+from collections import defaultdict
 from enum import Enum
 from functools import partial
 from itertools import chain
-from typing import List, Dict, Any, TypeVar, Union, AsyncIterator
+from typing import (
+    List, Dict, Any, TypeVar, Union, AsyncIterator, Tuple,
+    Callable,
+    Set,
+)
 
 import attr
 from boto3.dynamodb.conditions import ConditionBase, ConditionExpressionBuilder
@@ -12,9 +18,12 @@ from aiodynamo.utils import unroll
 NOTHING = object()
 
 
-Item = TypeVar('Item', Dict[str, Any])
-DynamoItem = TypeVar('DynamoItem', Dict[str, Dict[str, Any]])
-TableName = TypeVar('TableName', str)
+Item = TypeVar('Item', bound=Dict[str, Any])
+DynamoItem = TypeVar('DynamoItem', bound=Dict[str, Dict[str, Any]])
+TableName = TypeVar('TableName', bound=str)
+Path = List[Union[str, int]]
+PathEncoder = Callable[[Path], str]
+EncoderFunc = Callable[[Any], str]
 
 
 @attr.s
@@ -36,15 +45,15 @@ class KeyType(Enum):
 
 
 @attr.s
-class Key:
+class KeySpec:
     name: str = attr.ib()
     type: KeyType = attr.ib()
 
 
 @attr.s
 class KeySchema:
-    hash_key: Key = attr.ib()
-    range_key: Key = attr.ib(default=None)
+    hash_key: KeySpec = attr.ib()
+    range_key: KeySpec = attr.ib(default=None)
 
     def __iter__(self):
         yield self.hash_key
@@ -139,7 +148,9 @@ Serializer = TypeSerializer()
 Deserializer = TypeDeserializer()
 
 
-def py2dy(data: Item) -> DynamoItem:
+def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:
+    if data is None:
+        return data
     return {
         key: Serializer.serialize(value)
         for key, value in data.items()
@@ -153,97 +164,205 @@ def dy2py(data: DynamoItem) -> Item:
     }
 
 
+class ActionTypes(Enum):
+    set = 'SET'
+    remove = 'REMOVE'
+    add = 'ADD'
+    delete = 'DELETE'
+
+
+class BaseAction(metaclass=abc.ABCMeta):
+    type = abc.abstractproperty()
+
+    def __and__(self, other: 'BaseAction') -> 'UpdateExpression':
+        return UpdateExpression(self, other)
+
+    def encode(self, name_encoder: 'Encoder', value_encoder: 'Encoder') -> str:
+        return self._encode(name_encoder.encode_path, value_encoder.encode)
+
+    @abc.abstractmethod
+    def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
+        ...
+
+
+@attr.s
+class SetAction(BaseAction):
+    path: Path = attr.ib()
+    value: Any = attr.ib()
+    ine: 'F' = attr.ib(default=NOTHING)
+
+    type = ActionTypes.set
+
+    def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
+        if self.ine is not NOTHING:
+            return f'{N(self.path)} = if_not_exists({N(self.ine.path)}, {V(self.value)}'
+        else:
+            return f'{N(self.path)} = {V(self.value)}'
+
+    def if_not_exists(self, key: 'F') -> 'SetAction':
+        return attr.evolve(self, ine=key)
+
+
+@attr.s
+class ChangeAction(BaseAction):
+    path: Path = attr.ib()
+    value: Any = attr.ib()
+
+    type = ActionTypes.set
+
+    def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
+        if self.value > 0:
+            op = '+'
+            value = self.value
+        else:
+            value = self.value * -1
+            op = '-'
+        return f'{N(self.path)} = {N(self.path)} {op} {V(value)}'
+
+
+@attr.s
+class AppendAction(BaseAction):
+    path: Path = attr.ib()
+    value: Any = attr.ib()
+
+    type = ActionTypes.set
+
+    def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
+        return f'{N(self.path)} = list_append({N(self.path)}, {V(self.value)})'
+
+
+@attr.s
+class RemoveAction(BaseAction):
+    path: Path = attr.ib()
+
+    type = ActionTypes.remove
+
+    def _encode(self, N, V) -> str:
+        return N(self.path)
+
+
+@attr.s
+class DeleteAction(BaseAction):
+    path: Path = attr.ib()
+    value: Any = attr.ib()
+
+    type = ActionTypes.delete
+
+    def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
+        return f'{N(self.path)} {V(self.value)}'
+
+
+@attr.s
+class AddAction(BaseAction):
+    path: Path = attr.ib()
+    value: Any = attr.ib()
+
+    type = ActionTypes.add
+
+    def _encode(self, N: PathEncoder, V: EncoderFunc):
+        return f'{N(self.path)} {V(self.value)}'
+
+
+class F:
+    def __init__(self, *path):
+        self.path: Path = path
+
+    def __and__(self, other: 'F') -> 'ProjectionExpression':
+        pe = ProjectionExpression()
+        return pe & self & other
+
+    def encode(self, encoder: 'Encoder') -> str:
+        return encoder.encode_path(self.path)
+
+    def set(self, value: any):
+        return SetAction(self.path, value)
+
+    def change(self, diff: int):
+        return ChangeAction(self.path, diff)
+
+    def append(self, value: List[Any]):
+        return AppendAction(self.path, list(value))
+
+    def remove(self):
+        return RemoveAction(self.path)
+
+    def add(self, value: Set[Any]):
+        return AddAction(self.path, value)
+
+    def delete(self, value: Set[Any]):
+        return DeleteAction(self.path, value)
+
+
+class UpdateExpression:
+    def __init__(self, *updates: BaseAction):
+        self.updates = updates
+
+    def __and__(self, other: BaseAction) -> 'UpdateExpression':
+        return UpdateExpression(*self.updates, other)
+
+    def encode(self) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
+        name_encoder = Encoder('#N')
+        value_encoder = Encoder(':V')
+        parts = defaultdict(list)
+        for action in self.updates:
+            parts[action.type].append(action.encode(name_encoder, value_encoder))
+        part_list = [
+            f'{action.value} {", ".join(values)}' for action, values in parts.items()
+        ]
+        return ' '.join(part_list), name_encoder.finalize(), value_encoder.finalize()
+
+
 @attr.s
 class ProjectionExpression:
-    expression: str = attr.ib()
-    attribute_names: Dict[str, str] = attr.ib()
+    fields: List[F] = attr.ib(default=attr.Factory(list))
 
+    def __and__(self, field: F) -> 'ProjectionExpression':
+        return ProjectionExpression(self.fields + [field])
 
-class Dot:
-    pass
-
-
-@attr.s
-class Index:
-    value = attr.ib()
-
-
-@attr.s
-class Attr:
-    _chain = attr.ib()
-
-    def __getattr__(self, item):
-        return Attr(self._chain + [Dot, item])
-
-    def __getitem__(self, item):
-        if isinstance(item, str):
-            return Attr(self._chain + [Dot, item])
-        if not isinstance(item, int) or item < 0:
-            raise TypeError('Attribute index must be positive integer')
-        return Attr(self._chain + [Index(item)])
-
-    def encode(self, encoder):
-        clean = []
-        for bit in self._chain:
-            if isinstance(bit, str):
-                clean.append(encoder.encode(bit))
-            elif bit is Dot:
-                clean.append('.')
-            elif isinstance(bit, Index):
-                clean.append(f'[{bit.value}]')
-            else:
-                raise TypeError('Unexpected Attr chain bit')
-        return ''.join(clean)
+    def encode(self) -> Tuple[str, Dict[str, Any]]:
+        name_encoder = Encoder('#N')
+        return ','.join(field.encode(name_encoder) for field in self.fields), name_encoder.finalize()
 
 
 _Key = TypeVar('_Key')
 _Val = TypeVar('_Val')
+
+
 def flip(data: Dict[_Key, _Val]) -> Dict[_Val, _Key]:
     return {value: key for key, value in data.items()}
 
 
-def _insert(target: Dict[str, str], key: str, prefix: str) -> str:
-    if key not in target:
-        target[key] = f'{prefix}{len(target)}'
-    return target[key]
+def immutable(thing: Any):
+    if isinstance(thing, list):
+        return tuple(thing)
+    elif isinstance(thing, set):
+        return frozenset(thing)
+    else:
+        return thing
 
 
 @attr.s
 class Encoder:
     prefix: str = attr.ib()
-    values = attr.ib(default=attr.Factory(dict))
+    data = attr.ib(default=attr.Factory(dict))
 
     def finalize(self) -> Dict[str, str]:
-        return flip(self.values)
+        return dict(self.data.values())
 
-    def encode(self, name: str) -> str:
-        return _insert(self.values, name, self.prefix)
+    def encode(self, name: Any) -> str:
+        key = immutable(name)
+        if key not in self.data:
+            self.data[key] = (f'{self.prefix}{len(self.data)}', name)
+        return self.data[key][0]
 
-
-@attr.s
-class Expression:
-    value = attr.ib(default=None)
-    substitutes = attr.ib(default=attr.Factory(dict))
-
-    def encode(self):
-        return attr.astuple(self)
-
-
-def project(*args) -> Expression:
-    encoder = Encoder('#N')
-    bits = []
-    for attribute in args:
-        if isinstance(attribute, str):
-            bits.append(encoder.encode(attribute))
-        elif isinstance(attribute, Attr):
-            bits.append(attribute.encode(encoder))
-        else:
-            raise TypeError('Projection must be Attr or str')
-    return Expression(','.join(bits), encoder.finalize())
-
-
-def attribute(name):
-    return Attr([name])
+    def encode_path(self, path: Path) -> str:
+        bits = [self.encode(path[0])]
+        for part in path[1:]:
+            if isinstance(part, int):
+                bits.append(f'[{part}]')
+            else:
+                bits.append(f'.{self.encode(part)}')
+        return ''.join(bits)
 
 
 def clean(**kwargs):
@@ -337,8 +456,8 @@ class Client:
                        table: TableName,
                        key: Dict[str, Any],
                        *,
-                       projection: Expression=None) -> Item:
-        projection = projection or Expression()
+                       projection: ProjectionExpression=None) -> Item:
+        projection = projection or ProjectionExpression()
         projection_expression, expression_attribute_names = projection.encode()
         resp = await self.core.get_item(**clean(
             TableName=table,
@@ -367,7 +486,7 @@ class Client:
             ReturnValues=return_values.value,
             ConditionExpression=condition_expression,
             ExpressionAttributeNames=expression_attribute_names,
-            ExpressionAttributeValues=expression_attribute_values,
+            ExpressionAttributeValues=py2dy(expression_attribute_values),
         ))
         if 'Attributes' in resp:
             return dy2py(resp['Attributes'])
@@ -376,20 +495,20 @@ class Client:
 
     def query(self,
               table: TableName,
+              key_condition: ConditionBase,
               *,
               start_key: Dict[str, Any]=None,
               filter_expression: ConditionBase=None,
               scan_forward: bool=True,
-              key_condition: ConditionBase=None,
               index: str=None,
               limit: int=None,
-              projection: Expression=None,
+              projection: ProjectionExpression=None,
               select: Select=Select.all_attributes) -> AsyncIterator[Item]:
         if projection:
             select = Select.specific_attributes
         if select is Select.count:
             raise TypeError('Cannot use Select.count with query, use count instead')
-        projection = projection or Expression()
+        projection = projection or ProjectionExpression()
         expression_attribute_names = {}
         expression_attribute_values = {}
 
@@ -418,7 +537,7 @@ class Client:
             FilterExpression=filter_expression,
             KeyConditionExpression=key_condition_expression,
             ExpressionAttributeNames=expression_attribute_names,
-            ExpressionAttributeValues=expression_attribute_values,
+            ExpressionAttributeValues=py2dy(expression_attribute_values),
             Select=select.value,
         ))
         return unroll(
@@ -437,9 +556,9 @@ class Client:
              index: str=None,
              limit: int=None,
              start_key: Dict[str, Any]=None,
-             projection: Expression=None,
+             projection: ProjectionExpression=None,
              filter_expression: ConditionBase=None) -> AsyncIterator[Item]:
-        projection = projection or Expression()
+        projection = projection or ProjectionExpression()
         expression_attribute_names = {}
         expression_attribute_values = {}
 
@@ -459,7 +578,7 @@ class Client:
             ProjectionExpression=projection_expression,
             FilterExpression=filter_expression,
             ExpressionAttributeNames=expression_attribute_names,
-            ExpressionAttributeValues=expression_attribute_values,
+            ExpressionAttributeValues=py2dy(expression_attribute_values),
         ))
         return unroll(
             coro_func,
@@ -473,10 +592,10 @@ class Client:
 
     async def count(self,
                     table: TableName,
+                    key_condition: ConditionBase,
                     *,
                     start_key: Dict[str, Any]=None,
                     filter_expression: ConditionBase=None,
-                    key_condition: ConditionBase=None,
                     index: str=None) -> int:
         expression_attribute_names = {}
         expression_attribute_values = {}
@@ -501,22 +620,47 @@ class Client:
             FilterExpression=filter_expression,
             KeyConditionExpression=key_condition_expression,
             ExpressionAttributeNames=expression_attribute_names,
-            ExpressionAttributeValues=expression_attribute_values,
+            ExpressionAttributeValues=py2dy(expression_attribute_values),
             Select=Select.count.value,
         ))
-        return sum(count async for count in unroll(
+        count_sum = 0
+        async for count in unroll(
             coro_func,
             'ExclusiveStartKey',
             'LastEvaluatedKey',
             'Count',
             py2dy(start_key) if start_key else None,
             process=lambda x: [x]
+        ): count_sum += count
+        return count_sum
+
+    async def update_item(self,
+                          table: TableName,
+                          key: Item,
+                          update_expression: UpdateExpression,
+                          *,
+                          return_values: ReturnValues=ReturnValues.none,
+                          condition: ConditionBase=None) -> Union[Item, None]:
+
+        update_expression, expression_attribute_names, expression_attribute_values = update_expression.encode()
+
+        builder = ConditionExpressionBuilder()
+        if condition:
+            condition_expression, ean, eav = builder.build_expression(condition)
+            expression_attribute_names.update(ean)
+            expression_attribute_values.update(eav)
+        else:
+            condition_expression = None
+        resp = await self.core.update_item(**clean(
+            TableName=table,
+            Key=py2dy(key),
+            UpdateExpression=update_expression,
+            ExpressionAttributeNames=expression_attribute_names,
+            ExpressionAttributeValues=py2dy(expression_attribute_values),
+            ConditionExpression=condition_expression,
+            ReturnValues=return_values.value
         ))
-
-    async def update_item(self, *args, **kwargs):
-        # TODO: how to build UpdateExpression!?
-        # https://botocore.readthedocs.io/en/latest/reference/services/dynamodb.html#DynamoDB.Client.update_item
-        raise NotImplementedError()
-
-    async def update_table(self, *args, **kwargs):
-        raise NotImplementedError()
+        if 'Attributes' in resp:
+            return dy2py(resp['Attributes'])
+        else:
+            return None
