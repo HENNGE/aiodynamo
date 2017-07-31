@@ -4,11 +4,13 @@ import uuid
 import pytest
 from aiobotocore import get_session
 from boto3.dynamodb import conditions
+from boto3.dynamodb.conditions import Key
 
 from aiodynamo.client import (
     Client, Throughput, KeySchema, KeySpec, KeyType,
     TableName, F,
     ReturnValues,
+    ItemNotFound,
 )
 from aiodynamo.utils import unroll
 
@@ -156,3 +158,59 @@ async def test_update_item(client: Client, table: TableName):
         'set-key-one': {'hello', 'world', 'hoge'},
         'set-key-two': {'world'},
     }
+
+
+async def test_delete_item(client: Client, table: TableName):
+    item = {'h': 'h', 'r': 'r'}
+    await client.put_item(table, item)
+    assert await client.get_item(table, item) == item
+    assert await client.delete_item(table, item, return_values=ReturnValues.all_old) == item
+    with pytest.raises(ItemNotFound):
+        await client.get_item(table, item)
+
+
+async def test_delete_table(client: Client, table: TableName):
+    await client.delete_table(table)
+    with pytest.raises(Exception):
+        await client.put_item(table, {'h': 'h', 'r': 'r'})
+
+
+async def test_query(client: Client, table: TableName):
+    item1 = {
+        'h': 'h',
+        'r': '1',
+        'd': 'x',
+    }
+    item2 = {
+        'h': 'h',
+        'r': '2',
+        'd': 'y',
+    }
+    items = [item1, item2]
+    await client.put_item(table, item1)
+    await client.put_item(table, item2)
+    index = 0
+    async for item in client.query(table, Key('h').eq('h')):
+        assert item == items[index]
+        index += 1
+
+
+async def test_scan(client: Client, table: TableName):
+    item1 = {
+        'h': 'h',
+        'r': '1',
+        'd': 'x',
+    }
+    item2 = {
+        'h': 'h',
+        'r': '2',
+        'd': 'y',
+    }
+    items = [item1, item2]
+    await client.put_item(table, item1)
+    await client.put_item(table, item2)
+    index = 0
+    async for item in client.scan(table):
+        assert item == items[index]
+        index += 1
+

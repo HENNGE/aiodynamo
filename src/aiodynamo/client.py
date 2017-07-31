@@ -328,10 +328,6 @@ _Key = TypeVar('_Key')
 _Val = TypeVar('_Val')
 
 
-def flip(data: Dict[_Key, _Val]) -> Dict[_Val, _Key]:
-    return {value: key for key, value in data.items()}
-
-
 def immutable(thing: Any):
     if isinstance(thing, list):
         return tuple(thing)
@@ -434,7 +430,10 @@ class Client:
                           return_values: ReturnValues=ReturnValues.none,
                           condition: ConditionBase=None) -> Union[None, Item]:
         key = py2dy(key)
-        condition_expression, expression_attribute_names, expression_attribute_values = ConditionExpressionBuilder().build_expression(condition)
+        if condition:
+            condition_expression, expression_attribute_names, expression_attribute_values = ConditionExpressionBuilder().build_expression(condition)
+        else:
+            condition_expression = expression_attribute_names = expression_attribute_values = None
         resp = await self.core.delete_item(**clean(
             TableName=table,
             Key=key,
@@ -493,17 +492,17 @@ class Client:
         else:
             return None
 
-    def query(self,
-              table: TableName,
-              key_condition: ConditionBase,
-              *,
-              start_key: Dict[str, Any]=None,
-              filter_expression: ConditionBase=None,
-              scan_forward: bool=True,
-              index: str=None,
-              limit: int=None,
-              projection: ProjectionExpression=None,
-              select: Select=Select.all_attributes) -> AsyncIterator[Item]:
+    async def query(self,
+                    table: TableName,
+                    key_condition: ConditionBase,
+                    *,
+                    start_key: Dict[str, Any]=None,
+                    filter_expression: ConditionBase=None,
+                    scan_forward: bool=True,
+                    index: str=None,
+                    limit: int=None,
+                    projection: ProjectionExpression=None,
+                    select: Select=Select.all_attributes) -> AsyncIterator[Item]:
         if projection:
             select = Select.specific_attributes
         if select is Select.count:
@@ -540,7 +539,7 @@ class Client:
             ExpressionAttributeValues=py2dy(expression_attribute_values),
             Select=select.value,
         ))
-        return unroll(
+        async for raw in unroll(
             coro_func,
             'ExclusiveStartKey',
             'LastEvaluatedKey',
@@ -548,16 +547,16 @@ class Client:
             py2dy(start_key) if start_key else None,
             limit,
             'Limit'
-        )
+        ): yield dy2py(raw)
 
-    def scan(self,
-             table: TableName,
-             *,
-             index: str=None,
-             limit: int=None,
-             start_key: Dict[str, Any]=None,
-             projection: ProjectionExpression=None,
-             filter_expression: ConditionBase=None) -> AsyncIterator[Item]:
+    async def scan(self,
+                   table: TableName,
+                   *,
+                   index: str=None,
+                   limit: int=None,
+                   start_key: Dict[str, Any]=None,
+                   projection: ProjectionExpression=None,
+                   filter_expression: ConditionBase=None) -> AsyncIterator[Item]:
         projection = projection or ProjectionExpression()
         expression_attribute_names = {}
         expression_attribute_values = {}
@@ -572,7 +571,7 @@ class Client:
             expression_attribute_names.update(ean)
             expression_attribute_values.update(eav)
 
-        coro_func = partial(self.core.query, **clean(
+        coro_func = partial(self.core.scan, **clean(
             TableName=table,
             IndexName=index,
             ProjectionExpression=projection_expression,
@@ -580,7 +579,7 @@ class Client:
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=py2dy(expression_attribute_values),
         ))
-        return unroll(
+        async for raw in unroll(
             coro_func,
             'ExclusiveStartKey',
             'LastEvaluatedKey',
@@ -588,7 +587,7 @@ class Client:
             py2dy(start_key) if start_key else None,
             limit,
             'Limit'
-        )
+        ): yield dy2py(raw)
 
     async def count(self,
                     table: TableName,
