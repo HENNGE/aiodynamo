@@ -100,6 +100,10 @@ async def test_get_item_with_projection(client: Client, table: TableName):
         'string-key': 'this is a string',
         'list-key': ['world'],
     }
+    db_item = await client.get_item(table, {'h': 'hkv', 'r': 'rkv'}, projection=F('string-key'))
+    assert db_item == {
+        'string-key': 'this is a string',
+    }
 
 
 async def test_count(client: Client, table: TableName):

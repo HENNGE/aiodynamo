@@ -378,6 +378,16 @@ class Select(Enum):
     specific_attributes = 'SPECIFIC_ATTRIBUTES'
 
 
+def get_projection(projection: Union[ProjectionExpression, F, None]) -> Tuple[Union[str, None], Dict[str, Any]]:
+    if projection is None:
+        return None, {}
+    if isinstance(projection, ProjectionExpression):
+        return projection.encode()
+    else:
+        encoder = Encoder('#N')
+        return projection.encode(encoder), encoder.finalize()
+
+
 @attr.s
 class Client:
     core = attr.ib()
@@ -456,8 +466,7 @@ class Client:
                        key: Dict[str, Any],
                        *,
                        projection: ProjectionExpression=None) -> Item:
-        projection = projection or ProjectionExpression()
-        projection_expression, expression_attribute_names = projection.encode()
+        projection_expression, expression_attribute_names = get_projection(projection)
         resp = await self.core.get_item(**clean(
             TableName=table,
             Key=py2dy(key),
@@ -507,11 +516,10 @@ class Client:
             select = Select.specific_attributes
         if select is Select.count:
             raise TypeError('Cannot use Select.count with query, use count instead')
-        projection = projection or ProjectionExpression()
         expression_attribute_names = {}
         expression_attribute_values = {}
 
-        projection_expression, ean = projection.encode()
+        projection_expression, ean = get_projection(projection)
         expression_attribute_names.update(ean)
 
         builder = ConditionExpressionBuilder()
@@ -557,11 +565,10 @@ class Client:
                    start_key: Dict[str, Any]=None,
                    projection: ProjectionExpression=None,
                    filter_expression: ConditionBase=None) -> AsyncIterator[Item]:
-        projection = projection or ProjectionExpression()
         expression_attribute_names = {}
         expression_attribute_values = {}
 
-        projection_expression, ean = projection.encode()
+        projection_expression, ean = get_projection(projection)
         expression_attribute_names.update(ean)
 
         builder = ConditionExpressionBuilder()

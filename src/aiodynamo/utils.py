@@ -1,4 +1,6 @@
-from typing import AsyncIterator, Any, Dict, Awaitable, Callable, Iterable
+from typing import (
+    AsyncIterator, Any, Dict, Awaitable, Callable, Iterable, TypeVar,
+)
 
 
 async def unroll(coro_func: Callable[[], Awaitable[Dict[str, Any]]],
