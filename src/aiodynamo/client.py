@@ -1,4 +1,5 @@
 import abc
+import asyncio
 from collections import defaultdict
 from enum import Enum
 from functools import partial
@@ -389,11 +390,142 @@ def get_projection(projection: Union[ProjectionExpression, F, None]) -> Tuple[Un
 
 
 @attr.s
+class Table:
+    client: 'Client' = attr.ib()
+    name: TableName = attr.ib()
+
+    async def create(self,
+                     throughput: Throughput,
+                     keys: KeySchema,
+                     *,
+                     lsis: List[LocalSecondaryIndex]=None,
+                     gsis: List[GlobalSecondaryIndex]=None,
+                     stream: StreamSpecification=None):
+        return await self.client.create(
+            self.name,
+            throughput,
+            keys,
+            lsis=lsis,
+            gsis=gsis,
+            stream=stream,
+        )
+
+    async def delete(self):
+        return await self.client.delete_table(self.name)
+
+    async def delete_item(self,
+                          key: Dict[str, Any],
+                          *,
+                          return_values: ReturnValues=ReturnValues.none,
+                          condition: ConditionBase=None) -> Union[None, Item]:
+        return await self.client.delete_item(
+            self.name,
+            key,
+            return_values=return_values,
+            condition=condition
+        )
+
+    async def get_item(self,
+                       key: Dict[str, Any],
+                       *,
+                       projection: ProjectionExpression=None) -> Item:
+        return await self.client.get_item(
+            self.name,
+            key,
+            projection=projection
+        )
+
+    async def put_item(self,
+                       item: Dict[str, Any],
+                       *,
+                       return_values: ReturnValues=ReturnValues.none,
+                       condition: ConditionBase=None) -> Union[None, Item]:
+        return await self.client.put_item(
+            self.name,
+            item,
+            return_values=return_values,
+            condition=condition
+        )
+
+    def query(self,
+              key_condition: ConditionBase,
+              *,
+              start_key: Dict[str, Any]=None,
+              filter_expression: ConditionBase=None,
+              scan_forward: bool=True,
+              index: str=None,
+              limit: int=None,
+              projection: ProjectionExpression=None,
+              select: Select=Select.all_attributes) -> AsyncIterator[Item]:
+        return self.client.query(
+            self.name,
+            key_condition,
+            start_key=start_key,
+            filter_expression=filter_expression,
+            scan_forward=scan_forward,
+            index=index,
+            limit=limit,
+            projection=projection,
+            select=select
+        )
+
+    def scan(self,
+             *,
+             index: str=None,
+             limit: int=None,
+             start_key: Dict[str, Any]=None,
+             projection: ProjectionExpression=None,
+             filter_expression: ConditionBase=None) -> AsyncIterator[Item]:
+        return self.client.scan(
+            self.name,
+            index=index,
+            limit=limit,
+            start_key=start_key,
+            projection=projection,
+            filter_expression=filter_expression,
+        )
+
+    async def count(self,
+                    key_condition: ConditionBase,
+                    *,
+                    start_key: Dict[str, Any]=None,
+                    filter_expression: ConditionBase=None,
+                    index: str=None) -> int:
+        return await self.client.count(
+            self.name,
+            key_condition,
+            start_key=start_key,
+            filter_expression=filter_expression,
+            index=index,
+        )
+
+    async def update_item(self,
+                          key: Item,
+                          update_expression: UpdateExpression,
+                          *,
+                          return_values: ReturnValues=ReturnValues.none,
+                          condition: ConditionBase=None) -> Union[Item, None]:
+        return await self.client.update_item(
+            self.name,
+            key,
+            update_expression,
+            return_values=return_values,
+            condition=condition
+        )
+
+
+@attr.s
 class Client:
     core = attr.ib()
 
+    async def _call(self, func, **kwargs):
+        return await asyncio.get_event_loop().create_task(func(**clean(**kwargs)))
+
+    def table(self, name: TableName) -> Table:
+        return Table(self, name)
+
     async def create_table(self,
-                           name: str,
+                           name: TableName,
                            throughput: Throughput,
                            keys: KeySchema,
                            *,
@@ -422,7 +554,8 @@ class Client:
         ]
         provisioned_throughput = throughput.encode()
         stream_specification = stream.encode()
-        await self.core.create_table(**clean(
+        await self._call(
+            self.core.create_table,
             AttributeDefinitions=attribute_definitions,
             TableName=name,
             KeySchema=key_schema,
@@ -430,7 +563,7 @@ class Client:
             GlobalSecondaryIndexex=global_secondary_indexes,
             ProvisionedThroughput=provisioned_throughput,
             StreamSpecification=stream_specification,
-        ))
+        )
         return None
 
     async def delete_item(self,
@@ -444,14 +577,15 @@ class Client:
             condition_expression, expression_attribute_names, expression_attribute_values = ConditionExpressionBuilder().build_expression(condition)
         else:
             condition_expression = expression_attribute_names = expression_attribute_values = None
-        resp = await self.core.delete_item(**clean(
+        resp = await self._call(
+            self.core.delete_item,
             TableName=table,
             Key=key,
             ReturnValues=return_values.value,
             ConditionExpression=condition_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttribuetValues=expression_attribute_values,
-        ))
+        )
         if 'Attributes' in resp:
             return dy2py(resp['Attributes'])
         else:
@@ -459,7 +593,7 @@ class Client:
 
     async def delete_table(self,
                            table: TableName):
-        await self.core.delete_table(TableName=table)
+        await self._call(self.core.delete_table, TableName=table)
 
     async def get_item(self,
                        table: TableName,
@@ -467,12 +601,13 @@ class Client:
                        *,
                        projection: ProjectionExpression=None) -> Item:
         projection_expression, expression_attribute_names = get_projection(projection)
-        resp = await self.core.get_item(**clean(
+        resp = await self._call(
+            self.core.get_item,
             TableName=table,
             Key=py2dy(key),
             ProjectionExpression=projection_expression,
             ExpressionAttributeNames=expression_attribute_names,
-        ))
+        )
         if 'Item' in resp:
             return dy2py(resp['Item'])
         else:
@@ -488,14 +623,15 @@ class Client:
             condition_expression, expression_attribute_names, expression_attribute_values = ConditionExpressionBuilder().build_expression(condition)
         else:
             condition_expression = expression_attribute_names = expression_attribute_values = None
-        resp = await self.core.put_item(**clean(
+        resp = await self._call(
+            self.core.put_item,
             TableName=table,
             Item=py2dy(item),
             ReturnValues=return_values.value,
             ConditionExpression=condition_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=py2dy(expression_attribute_values),
-        ))
+        )
         if 'Attributes' in resp:
             return dy2py(resp['Attributes'])
         else:
@@ -536,7 +672,9 @@ class Client:
         else:
             key_condition_expression = None
 
-        coro_func = partial(self.core.query, **clean(
+        coro_func = partial(
+            self._call,
+            self.core.query,
             TableName=table,
             IndexName=index,
             ScanIndexForward=scan_forward,
@@ -546,7 +684,7 @@ class Client:
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=py2dy(expression_attribute_values),
             Select=select.value,
-        ))
+        )
         async for raw in unroll(
             coro_func,
             'ExclusiveStartKey',
@@ -578,14 +716,16 @@ class Client:
             expression_attribute_names.update(ean)
             expression_attribute_values.update(eav)
 
-        coro_func = partial(self.core.scan, **clean(
+        coro_func = partial(
+            self._call,
+            self.core.scan,
             TableName=table,
             IndexName=index,
             ProjectionExpression=projection_expression,
             FilterExpression=filter_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=py2dy(expression_attribute_values),
-        ))
+        )
         async for raw in unroll(
             coro_func,
             'ExclusiveStartKey',
@@ -620,7 +760,9 @@ class Client:
         else:
             key_condition_expression = None
 
-        coro_func = partial(self.core.query, **clean(
+        coro_func = partial(
+            self._call,
+            self.core.query,
             TableName=table,
             IndexName=index,
             FilterExpression=filter_expression,
@@ -628,7 +770,7 @@ class Client:
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=py2dy(expression_attribute_values),
             Select=Select.count.value,
-        ))
+        )
         count_sum = 0
         async for count in unroll(
             coro_func,
@@ -657,7 +799,8 @@ class Client:
             expression_attribute_values.update(eav)
         else:
             condition_expression = None
-        resp = await self.core.update_item(**clean(
+        resp = await self._call(
+            self.core.update_item,
             TableName=table,
             Key=py2dy(key),
             UpdateExpression=update_expression,
@@ -665,7 +808,7 @@ class Client:
             ExpressionAttributeValues=py2dy(expression_attribute_values),
             ConditionExpression=condition_expression,
             ReturnValues=return_values.value
-        ))
+        )
         if 'Attributes' in resp:
             return dy2py(resp['Attributes'])
         else:
