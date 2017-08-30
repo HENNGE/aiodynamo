@@ -401,7 +401,7 @@ class Table:
                      lsis: List[LocalSecondaryIndex]=None,
                      gsis: List[GlobalSecondaryIndex]=None,
                      stream: StreamSpecification=None):
-        return await self.client.create(
+        return await self.client.create_table(
             self.name,
             throughput,
             keys,
