@@ -145,8 +145,13 @@ class ReturnValues(Enum):
     updated_new = 'UPDATED_NEW'
 
 
+class BinaryTypeDeserializer(TypeDeserializer):
+    def _deserialize_b(self, value):
+        return value
+
+
 Serializer = TypeSerializer()
-Deserializer = TypeDeserializer()
+Deserializer = BinaryTypeDeserializer()
 
 
 def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:

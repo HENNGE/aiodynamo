@@ -22,3 +22,13 @@ def test_clean():
         dict={},
         int=0,
     ) == {'foo': 'bar'}
+
+
+def test_binary_decode():
+    assert client.dy2py({
+        'test': {
+            'B': b'hello'
+        }
+    }) == {
+        'test': b'hello'
+    }
