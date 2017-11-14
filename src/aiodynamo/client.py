@@ -87,10 +87,12 @@ class Projection:
     attrs: List[str] = attr.ib(default=None)
 
     def encode(self):
-        return {
+        encoded = {
             'ProjectionType': self.type.value,
-            'NonKeyAttributes': self.attrs or []
         }
+        if self.attrs:
+            encoded['NonKeyAttributes'] = self.attrs
+        return encoded
 
 
 @attr.s
@@ -179,9 +181,6 @@ class ActionTypes(Enum):
 
 class BaseAction(metaclass=abc.ABCMeta):
     type = abc.abstractproperty()
-
-    def __and__(self, other: 'BaseAction') -> 'UpdateExpression':
-        return UpdateExpression(self, other)
 
     def encode(self, name_encoder: 'Encoder', value_encoder: 'Encoder') -> str:
         return self._encode(name_encoder.encode_path, value_encoder.encode)
@@ -280,31 +279,34 @@ class F:
     def encode(self, encoder: 'Encoder') -> str:
         return encoder.encode_path(self.path)
 
-    def set(self, value: any):
-        return SetAction(self.path, value)
+    def set(self, value: Any) -> 'UpdateExpression':
+        return UpdateExpression(SetAction(self.path, value))
 
-    def change(self, diff: int):
-        return ChangeAction(self.path, diff)
+    def change(self, diff: int) -> 'UpdateExpression':
+        return UpdateExpression(ChangeAction(self.path, diff))
 
-    def append(self, value: List[Any]):
-        return AppendAction(self.path, list(value))
+    def append(self, value: List[Any]) -> 'UpdateExpression':
+        return UpdateExpression(AppendAction(self.path, list(value)))
 
-    def remove(self):
-        return RemoveAction(self.path)
+    def remove(self) -> 'UpdateExpression':
+        return UpdateExpression(RemoveAction(self.path))
 
-    def add(self, value: Set[Any]):
-        return AddAction(self.path, value)
+    def add(self, value: Set[Any]) -> 'UpdateExpression':
+        return UpdateExpression(AddAction(self.path, value))
 
-    def delete(self, value: Set[Any]):
-        return DeleteAction(self.path, value)
+    def delete(self, value: Set[Any]) -> 'UpdateExpression':
+        return UpdateExpression(DeleteAction(self.path, value))
 
 
 class UpdateExpression:
     def __init__(self, *updates: BaseAction):
         self.updates = updates
 
-    def __and__(self, other: BaseAction) -> 'UpdateExpression':
-        return UpdateExpression(*self.updates, other)
+    def __and__(self, other: 'UpdateExpression') -> 'UpdateExpression':
+        return UpdateExpression(*self.updates, *other.updates)
+
+    def __bool__(self):
+        return bool(self.updates)
 
     def encode(self) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
         name_encoder = Encoder('#N')
@@ -543,7 +545,7 @@ class Client:
         attributes = {}
         attributes.update(keys.to_attributes())
         for index in chain(lsis, gsis):
-            attributes.update(index.to_attributes())
+            attributes.update(index.schema.to_attributes())
         attribute_definitions = [
             {
                 'AttributeName': key,
