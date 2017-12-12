@@ -1,5 +1,6 @@
 import abc
 import asyncio
+import datetime
 from collections import defaultdict
 from enum import Enum
 from functools import partial
@@ -13,6 +14,7 @@ from typing import (
 import attr
 from boto3.dynamodb.conditions import ConditionBase, ConditionExpressionBuilder
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
+from botocore.exceptions import ClientError
 
 from aiodynamo.utils import unroll
 
@@ -332,6 +334,23 @@ class ProjectionExpression:
         return ','.join(field.encode(name_encoder) for field in self.fields), name_encoder.finalize()
 
 
+class TableStatus(Enum):
+    creating = 'CREATING'
+    updating = 'UPDATING'
+    deleting = 'DELETING'
+    active = 'ACTIVE'
+
+
+@attr.s
+class TableDescription:
+    attributes: Dict[str, KeyType] = attr.ib()
+    created: datetime.datetime = attr.ib()
+    item_count: int = attr.ib()
+    key_schema: KeySchema = attr.ib()
+    throughput: Throughput = attr.ib()
+    status: TableStatus = attr.ib()
+
+
 _Key = TypeVar('_Key')
 _Val = TypeVar('_Val')
 
@@ -379,6 +398,10 @@ class ItemNotFound(Exception):
     pass
 
 
+class TableNotFound(Exception):
+    pass
+
+
 class Select(Enum):
     all_attributes = 'ALL_ATTRIBUTES'
     all_projected_attributes = 'ALL_PROJECTED_ATTRIBUTES'
@@ -401,6 +424,9 @@ class Table:
     client: 'Client' = attr.ib()
     name: TableName = attr.ib()
 
+    async def exists(self) -> bool:
+        return await self.client.table_exists(self.name)
+
     async def create(self,
                      throughput: Throughput,
                      keys: KeySchema,
@@ -416,6 +442,9 @@ class Table:
             gsis=gsis,
             stream=stream,
         )
+
+    async def describe(self) -> TableDescription:
+        return await self.client.describe_table(self.name)
 
     async def delete(self):
         return await self.client.delete_table(self.name)
@@ -531,6 +560,13 @@ class Client:
     def table(self, name: TableName) -> Table:
         return Table(self, name)
 
+    async def table_exists(self, name: TableName) -> bool:
+        try:
+            description = await self.describe_table(name)
+        except TableNotFound:
+            return False
+        return description.status is TableStatus.active
+
     async def create_table(self,
                            name: TableName,
                            throughput: Throughput,
@@ -572,6 +608,41 @@ class Client:
             StreamSpecification=stream_specification,
         )
         return None
+
+    async def describe_table(self, name: TableName):
+        try:
+            response = await self._call(
+                self.core.describe_table,
+                TableName=name,
+            )
+        except ClientError as exc:
+            try:
+                if exc.response['Error']['Code'] == 'ResourceNotFoundException':
+                    raise TableNotFound(name)
+            except KeyError:
+                pass
+            raise exc
+        description = response['Table']
+        attributes: Dict[str, KeyType] = {
+            attribute['AttributeName']: KeyType(attribute['AttributeType'])
+            for attribute in description['AttributeDefinitions']
+        }
+        return TableDescription(
+            attributes=attributes,
+            created=description['CreationDateTime'],
+            item_count=description['ItemCount'],
+            key_schema=KeySchema(*[
+                KeySpec(
+                    name=key['AttributeName'],
+                    type=attributes[key['AttributeName']]
+                ) for key in description['KeySchema']
+            ]),
+            throughput=Throughput(
+                read=description['ProvisionedThroughput']['ReadCapacityUnits'],
+                write=description['ProvisionedThroughput']['WriteCapacityUnits'],
+            ),
+            status=TableStatus(description['TableStatus'])
+        )
 
     async def delete_item(self,
                           table: str,

@@ -11,6 +11,8 @@ from aiodynamo.client import (
     TableName, F,
     ReturnValues,
     ItemNotFound,
+    TableNotFound,
+    TableStatus,
 )
 from aiodynamo.utils import unroll
 
@@ -218,3 +220,23 @@ async def test_scan(client: Client, table: TableName):
         assert item == items[index]
         index += 1
 
+
+async def test_exists(client: Client):
+    name = str(uuid.uuid4())
+    assert await client.table_exists(name) == False
+    with pytest.raises(TableNotFound):
+        await client.describe_table(name)
+    throughput = Throughput(5, 5)
+    key_schema = KeySchema(KeySpec('h', KeyType.string), KeySpec('r', KeyType.string))
+    attrs = {
+        'h': KeyType.string,
+        'r': KeyType.string,
+    }
+    await client.create_table(name, throughput, key_schema)
+    assert await client.table_exists(name)
+    desc = await client.describe_table(name)
+    assert desc.throughput == throughput
+    assert desc.status is TableStatus.active
+    assert desc.attributes == attrs
+    assert desc.key_schema == key_schema
+    assert desc.item_count == 0
