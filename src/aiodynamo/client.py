@@ -603,7 +603,7 @@ class Client:
             TableName=name,
             KeySchema=key_schema,
             LocalSecondaryIndexes=local_secondary_indexes,
-            GlobalSecondaryIndexex=global_secondary_indexes,
+            GlobalSecondaryIndexes=global_secondary_indexes,
             ProvisionedThroughput=provisioned_throughput,
             StreamSpecification=stream_specification,
         )
