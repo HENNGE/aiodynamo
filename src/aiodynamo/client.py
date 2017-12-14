@@ -1,14 +1,16 @@
 import abc
 import asyncio
+import collections
 import datetime
 from collections import defaultdict
 from enum import Enum
-from functools import partial
+from functools import partial, wraps
 from itertools import chain
 from typing import (
     List, Dict, Any, TypeVar, Union, AsyncIterator, Tuple,
     Callable,
     Set,
+    Iterable,
 )
 
 import attr
@@ -158,12 +160,38 @@ Serializer = TypeSerializer()
 Deserializer = BinaryTypeDeserializer()
 
 
+EMPTY = object()
+
+
+def ensure_not_empty(value):
+    if value is None:
+        return value
+    elif isinstance(value, (bytes, str)):
+        pass
+    elif isinstance(value, collections.Mapping):
+        value = dict(remove_empty_strings(value))
+    elif isinstance(value, collections.Iterable):
+        value = value.__class__(
+            item for item in map(ensure_not_empty, value) if item is not EMPTY
+        )
+    if not value:
+        return EMPTY
+    return value
+
+
+def remove_empty_strings(data: Item) -> Iterable[Tuple[str, Any]]:
+    for key, value in data.items():
+        value = ensure_not_empty(value)
+        if value is not EMPTY:
+            yield key, value
+
+
 def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:
     if data is None:
         return data
     return {
         key: Serializer.serialize(value)
-        for key, value in data.items()
+        for key, value in remove_empty_strings(data)
     }
 
 
@@ -172,6 +200,15 @@ def dy2py(data: DynamoItem) -> Item:
         key: Deserializer.deserialize(value)
         for key, value in data.items()
     }
+
+
+def check_empty_value(meth):
+    @wraps(meth)
+    def wrapper(self, *args, **kwargs):
+        if self.value is EMPTY:
+            return self.value
+        return meth(self, *args, **kwargs)
+    return wrapper
 
 
 class ActionTypes(Enum):
@@ -195,11 +232,12 @@ class BaseAction(metaclass=abc.ABCMeta):
 @attr.s
 class SetAction(BaseAction):
     path: Path = attr.ib()
-    value: Any = attr.ib()
+    value: Any = attr.ib(convert=ensure_not_empty)
     ine: 'F' = attr.ib(default=NOTHING)
 
     type = ActionTypes.set
 
+    @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
         if self.ine is not NOTHING:
             return f'{N(self.path)} = if_not_exists({N(self.ine.path)}, {V(self.value)}'
@@ -213,10 +251,11 @@ class SetAction(BaseAction):
 @attr.s
 class ChangeAction(BaseAction):
     path: Path = attr.ib()
-    value: Any = attr.ib()
+    value: Any = attr.ib(convert=ensure_not_empty)
 
     type = ActionTypes.set
 
+    @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
         if self.value > 0:
             op = '+'
@@ -230,10 +269,11 @@ class ChangeAction(BaseAction):
 @attr.s
 class AppendAction(BaseAction):
     path: Path = attr.ib()
-    value: Any = attr.ib()
+    value: Any = attr.ib(convert=ensure_not_empty)
 
     type = ActionTypes.set
 
+    @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
         return f'{N(self.path)} = list_append({N(self.path)}, {V(self.value)})'
 
@@ -251,10 +291,11 @@ class RemoveAction(BaseAction):
 @attr.s
 class DeleteAction(BaseAction):
     path: Path = attr.ib()
-    value: Any = attr.ib()
+    value: Any = attr.ib(convert=ensure_not_empty)
 
     type = ActionTypes.delete
 
+    @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
         return f'{N(self.path)} {V(self.value)}'
 
@@ -262,10 +303,11 @@ class DeleteAction(BaseAction):
 @attr.s
 class AddAction(BaseAction):
     path: Path = attr.ib()
-    value: Any = attr.ib()
+    value: Any = attr.ib(convert=ensure_not_empty)
 
     type = ActionTypes.add
 
+    @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc):
         return f'{N(self.path)} {V(self.value)}'
 
@@ -315,7 +357,9 @@ class UpdateExpression:
         value_encoder = Encoder(':V')
         parts = defaultdict(list)
         for action in self.updates:
-            parts[action.type].append(action.encode(name_encoder, value_encoder))
+            value = action.encode(name_encoder, value_encoder)
+            if value is not EMPTY:
+                parts[action.type].append(value)
         part_list = [
             f'{action.value} {", ".join(values)}' for action, values in parts.items()
         ]
@@ -550,6 +594,10 @@ class Table:
         )
 
 
+class EmptyItem(Exception):
+    pass
+
+
 @attr.s
 class Client:
     core = attr.ib()
@@ -651,6 +699,8 @@ class Client:
                           return_values: ReturnValues=ReturnValues.none,
                           condition: ConditionBase=None) -> Union[None, Item]:
         key = py2dy(key)
+        if not key:
+            raise EmptyItem()
         if condition:
             condition_expression, expression_attribute_names, expression_attribute_values = ConditionExpressionBuilder().build_expression(condition)
         else:
@@ -679,10 +729,13 @@ class Client:
                        *,
                        projection: ProjectionExpression=None) -> Item:
         projection_expression, expression_attribute_names = get_projection(projection)
+        key = py2dy(key)
+        if not key:
+            raise EmptyItem()
         resp = await self._call(
             self.core.get_item,
             TableName=table,
-            Key=py2dy(key),
+            Key=key,
             ProjectionExpression=projection_expression,
             ExpressionAttributeNames=expression_attribute_names,
         )
@@ -701,10 +754,13 @@ class Client:
             condition_expression, expression_attribute_names, expression_attribute_values = ConditionExpressionBuilder().build_expression(condition)
         else:
             condition_expression = expression_attribute_names = expression_attribute_values = None
+        item = py2dy(item)
+        if not item:
+            raise EmptyItem()
         resp = await self._call(
             self.core.put_item,
             TableName=table,
-            Item=py2dy(item),
+            Item=item,
             ReturnValues=return_values.value,
             ConditionExpression=condition_expression,
             ExpressionAttributeNames=expression_attribute_names,
@@ -869,6 +925,9 @@ class Client:
                           condition: ConditionBase=None) -> Union[Item, None]:
 
         update_expression, expression_attribute_names, expression_attribute_values = update_expression.encode()
+
+        if not update_expression:
+            raise EmptyItem()
 
         builder = ConditionExpressionBuilder()
         if condition:

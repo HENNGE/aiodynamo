@@ -13,6 +13,7 @@ from aiodynamo.client import (
     ItemNotFound,
     TableNotFound,
     TableStatus,
+    EmptyItem,
 )
 from aiodynamo.utils import unroll
 
@@ -240,3 +241,15 @@ async def test_exists(client: Client):
     assert desc.attributes == attrs
     assert desc.key_schema == key_schema
     assert desc.item_count == 0
+
+
+async def test_empty_string(client: Client, table: TableName):
+    key = {'h': 'h', 'r': 'r'}
+    await client.put_item(table, {**key, 's': ''})
+    assert await client.get_item(table, key) == {'h': 'h', 'r': 'r'}
+    assert await client.update_item(table, key, F('foo').set(''), return_values=ReturnValues.all_new) == {'h': 'h', 'r': 'r'}
+
+
+async def test_empty_item(client: Client, table: TableName):
+    with pytest.raises(EmptyItem):
+        await client.put_item(table, {'h': '', 'r': ''})
