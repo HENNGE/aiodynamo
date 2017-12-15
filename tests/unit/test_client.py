@@ -1,7 +1,7 @@
 import pytest
 
 from aiodynamo import client
-from aiodynamo.client import F
+from aiodynamo.client import F, remove_empty_strings
 
 
 @pytest.mark.parametrize('pe,expression,names', [
@@ -32,3 +32,11 @@ def test_binary_decode():
     }) == {
         'test': b'hello'
     }
+
+
+@pytest.mark.parametrize('item,result', [
+    ({'foo': ''}, {}),
+    ({'foo': {'bar': '', 'baz': 1}}, {'foo': {'baz': 1}})
+])
+def test_remove_empty_strings(item, result):
+    assert dict(remove_empty_strings(item)) == result
