@@ -7,14 +7,16 @@ from boto3.dynamodb import conditions
 from boto3.dynamodb.conditions import Key
 
 from aiodynamo.client import (
-    Client, Throughput, KeySchema, KeySpec, KeyType,
-    TableName, F,
-    ReturnValues,
-    ItemNotFound,
-    TableNotFound,
-    TableStatus,
-    EmptyItem,
+    Client,
 )
+from aiodynamo.types import TableName
+from aiodynamo.models import (
+    Throughput, KeyType, KeySpec, KeySchema,
+    ReturnValues,
+    F,
+    TableStatus,
+)
+from aiodynamo.errors import ItemNotFound, TableNotFound, EmptyItem
 from aiodynamo.utils import unroll
 
 
@@ -247,7 +249,7 @@ async def test_empty_string(client: Client, table: TableName):
     key = {'h': 'h', 'r': 'r'}
     await client.put_item(table, {**key, 's': ''})
     assert await client.get_item(table, key) == {'h': 'h', 'r': 'r'}
-    assert await client.update_item(table, key, F('foo').set(''), return_values=ReturnValues.all_new) == {'h': 'h', 'r': 'r'}
+    assert await client.update_item(table, key, F('foo').set('') & F('bar').set('baz'), return_values=ReturnValues.all_new) == {'h': 'h', 'r': 'r', 'bar': 'baz'}
 
 
 async def test_empty_item(client: Client, table: TableName):
