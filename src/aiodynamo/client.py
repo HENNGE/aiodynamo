@@ -17,11 +17,11 @@ from aiodynamo.models import (
     StreamSpecification,
     ReturnValues,
     UpdateExpression,
-    ProjectionExpression,
     TableStatus,
     TableDescription,
     Select,
     get_projection,
+    ProjectionExpr,
 )
 from aiodynamo.types import Item, TableName
 from aiodynamo.utils import (
@@ -78,7 +78,7 @@ class Table:
     async def get_item(self,
                        key: Dict[str, Any],
                        *,
-                       projection: ProjectionExpression =None) -> Item:
+                       projection: ProjectionExpr=None) -> Item:
         return await self.client.get_item(
             self.name,
             key,
@@ -105,7 +105,7 @@ class Table:
               scan_forward: bool=True,
               index: str=None,
               limit: int=None,
-              projection: ProjectionExpression =None,
+              projection: ProjectionExpr=None,
               select: Select = Select.all_attributes) -> AsyncIterator[Item]:
         return self.client.query(
             self.name,
@@ -124,7 +124,7 @@ class Table:
              index: str=None,
              limit: int=None,
              start_key: Dict[str, Any]=None,
-             projection: ProjectionExpression =None,
+             projection: ProjectionExpr=None,
              filter_expression: ConditionBase=None) -> AsyncIterator[Item]:
         return self.client.scan(
             self.name,
@@ -293,7 +293,7 @@ class Client:
                        table: TableName,
                        key: Dict[str, Any],
                        *,
-                       projection: ProjectionExpression =None) -> Item:
+                       projection: ProjectionExpr=None) -> Item:
         projection_expression, expression_attribute_names = get_projection(projection)
         key = py2dy(key)
         if not key:
@@ -346,7 +346,7 @@ class Client:
                     scan_forward: bool=True,
                     index: str=None,
                     limit: int=None,
-                    projection: ProjectionExpression =None,
+                    projection: ProjectionExpr=None,
                     select: Select = Select.all_attributes) -> AsyncIterator[
         Item]:
         if projection:
@@ -402,7 +402,7 @@ class Client:
                    index: str=None,
                    limit: int=None,
                    start_key: Dict[str, Any]=None,
-                   projection: ProjectionExpression =None,
+                   projection: ProjectionExpr=None,
                    filter_expression: ConditionBase=None) -> AsyncIterator[Item]:
         expression_attribute_names = {}
         expression_attribute_values = {}

@@ -255,3 +255,10 @@ async def test_empty_string(client: Client, table: TableName):
 async def test_empty_item(client: Client, table: TableName):
     with pytest.raises(EmptyItem):
         await client.put_item(table, {'h': '', 'r': ''})
+
+
+async def test_empty_list(client: Client, table: TableName):
+    key = {'h': 'h', 'r': 'r'}
+    await client.put_item(table, {**key, 'l': [1]})
+    await client.update_item(table, key, F('l').set([]))
+    assert await client.get_item(table, key) == {'h': 'h', 'r': 'r', 'l': []}

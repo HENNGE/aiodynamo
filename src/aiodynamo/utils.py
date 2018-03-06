@@ -40,15 +40,14 @@ def ensure_not_empty(value):
     if value is None:
         return value
     elif isinstance(value, (bytes, str)):
-        pass
+        if not value:
+            return EMPTY
     elif isinstance(value, collections.Mapping):
         value = dict(remove_empty_strings(value))
     elif isinstance(value, collections.Iterable):
         value = value.__class__(
             item for item in map(ensure_not_empty, value) if item is not EMPTY
         )
-    if not value:
-        return EMPTY
     return value
 
 
@@ -90,12 +89,10 @@ def clean(**kwargs):
     }
 
 
-def immutable(thing: Any):
+def maybe_immutable(thing: Any):
     if isinstance(thing, list):
         return tuple(thing)
     elif isinstance(thing, set):
         return frozenset(thing)
     else:
         return thing
-
-

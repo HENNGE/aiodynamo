@@ -10,3 +10,11 @@ from aiodynamo.models import F
 ])
 def test_project(pe, expression, names):
     assert pe.encode() == (expression, names)
+
+
+
+@pytest.mark.parametrize('exp,ue,ean,eav', [
+    (F('d').set({'k': 'v'}), 'SET #N0 = :V0', {'#N0': 'd'}, {':V0': {'k': 'v'}})
+])
+def test_update_expression(exp, ue, ean, eav):
+    assert exp.encode() == (ue, ean, eav)

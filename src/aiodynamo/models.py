@@ -9,8 +9,11 @@ import attr
 from aiodynamo.types import Path, PathEncoder, EncoderFunc, NOTHING, EMPTY
 from aiodynamo.utils import (
     clean, ensure_not_empty, check_empty_value,
-    immutable,
+    maybe_immutable,
 )
+
+
+ProjectionExpr = Union['ProjectionExpression', 'F']
 
 
 @attr.s
@@ -320,16 +323,27 @@ class TableDescription:
 @attr.s
 class Encoder:
     prefix: str = attr.ib()
-    data = attr.ib(default=attr.Factory(dict))
+    data: List[Any] = attr.ib(default=attr.Factory(list))
+    cache: Dict[Any, Any] = attr.ib(default=attr.Factory(dict))
 
     def finalize(self) -> Dict[str, str]:
-        return dict(self.data.values())
+        return {
+            f'{self.prefix}{index}': value for index, value in enumerate(self.data)
+        }
 
     def encode(self, name: Any) -> str:
-        key = immutable(name)
-        if key not in self.data:
-            self.data[key] = (f'{self.prefix}{len(self.data)}', name)
-        return self.data[key][0]
+        key = maybe_immutable(name)
+        try:
+            return self.cache[key]
+        except KeyError:
+            can_cache = True
+        except TypeError:
+            can_cache = False
+        encoded = f'{self.prefix}{len(self.data)}'
+        self.data.append(name)
+        if can_cache:
+            self.cache[key] = encoded
+        return encoded
 
     def encode_path(self, path: Path) -> str:
         bits = [self.encode(path[0])]
