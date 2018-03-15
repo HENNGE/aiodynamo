@@ -28,6 +28,7 @@ async def test_unroll_with_limit():
     async def func(**kwargs):
         if 'InKey' in kwargs:
             return {
+                'OutKey': 'Bar',
                 'Items': [1, 2, 3],
             }
         else:

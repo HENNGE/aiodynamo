@@ -31,7 +31,7 @@ async def unroll(coro_func: Callable[[], Awaitable[Dict[str, Any]]],
             yield item
             got += 1
             if limit and got >= limit:
-                break
+                return
         if value is None:
             break
 
