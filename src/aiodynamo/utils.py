@@ -85,7 +85,7 @@ def check_empty_value(meth):
 
 def clean(**kwargs):
     return {
-        key: value for key, value in kwargs.items() if value
+        key: value for key, value in kwargs.items() if value or isinstance(value, bool)
     }
 
 

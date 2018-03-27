@@ -51,7 +51,8 @@ def test_clean():
         tuple=(),
         dict={},
         int=0,
-    ) == {'foo': 'bar'}
+        bool=False,
+    ) == {'foo': 'bar', 'bool': False}
 
 
 def test_binary_decode():
