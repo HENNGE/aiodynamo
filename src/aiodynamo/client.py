@@ -168,9 +168,6 @@ class Table:
 class Client:
     core = attr.ib()
 
-    async def _call(self, func, **kwargs):
-        return await asyncio.get_event_loop().create_task(func(**clean(**kwargs)))
-
     def table(self, name: TableName) -> Table:
         return Table(self, name)
 
@@ -211,8 +208,7 @@ class Client:
         ]
         provisioned_throughput = throughput.encode()
         stream_specification = stream.encode()
-        await self._call(
-            self.core.create_table,
+        await self.core.create_table(**clean(
             AttributeDefinitions=attribute_definitions,
             TableName=name,
             KeySchema=key_schema,
@@ -220,13 +216,12 @@ class Client:
             GlobalSecondaryIndexes=global_secondary_indexes,
             ProvisionedThroughput=provisioned_throughput,
             StreamSpecification=stream_specification,
-        )
+        ))
         return None
 
     async def describe_table(self, name: TableName):
         try:
-            response = await self._call(
-                self.core.describe_table,
+            response = await self.core.describe_table(
                 TableName=name,
             )
         except ClientError as exc:
@@ -271,15 +266,14 @@ class Client:
             condition_expression, expression_attribute_names, expression_attribute_values = ConditionExpressionBuilder().build_expression(condition)
         else:
             condition_expression = expression_attribute_names = expression_attribute_values = None
-        resp = await self._call(
-            self.core.delete_item,
+        resp = await self.core.delete_item(**clean(
             TableName=table,
             Key=key,
             ReturnValues=return_values.value,
             ConditionExpression=condition_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttribuetValues=expression_attribute_values,
-        )
+        ))
         if 'Attributes' in resp:
             return dy2py(resp['Attributes'])
         else:
@@ -287,7 +281,7 @@ class Client:
 
     async def delete_table(self,
                            table: TableName):
-        await self._call(self.core.delete_table, TableName=table)
+        await self.core.delete_table(TableName=table)
 
     async def get_item(self,
                        table: TableName,
@@ -298,13 +292,12 @@ class Client:
         key = py2dy(key)
         if not key:
             raise EmptyItem()
-        resp = await self._call(
-            self.core.get_item,
+        resp = await self.core.get_item(**clean(
             TableName=table,
             Key=key,
             ProjectionExpression=projection_expression,
             ExpressionAttributeNames=expression_attribute_names,
-        )
+        ))
         if 'Item' in resp:
             return dy2py(resp['Item'])
         else:
@@ -323,15 +316,14 @@ class Client:
         item = py2dy(item)
         if not item:
             raise EmptyItem()
-        resp = await self._call(
-            self.core.put_item,
+        resp = await self.core.put_item(**clean(
             TableName=table,
             Item=item,
             ReturnValues=return_values.value,
             ConditionExpression=condition_expression,
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=py2dy(expression_attribute_values),
-        )
+        ))
         if 'Attributes' in resp:
             return dy2py(resp['Attributes'])
         else:
@@ -374,17 +366,18 @@ class Client:
             key_condition_expression = None
 
         coro_func = partial(
-            self._call,
             self.core.query,
-            TableName=table,
-            IndexName=index,
-            ScanIndexForward=scan_forward,
-            ProjectionExpression=projection_expression,
-            FilterExpression=filter_expression,
-            KeyConditionExpression=key_condition_expression,
-            ExpressionAttributeNames=expression_attribute_names,
-            ExpressionAttributeValues=py2dy(expression_attribute_values),
-            Select=select.value,
+            **clean(
+                TableName=table,
+                IndexName=index,
+                ScanIndexForward=scan_forward,
+                ProjectionExpression=projection_expression,
+                FilterExpression=filter_expression,
+                KeyConditionExpression=key_condition_expression,
+                ExpressionAttributeNames=expression_attribute_names,
+                ExpressionAttributeValues=py2dy(expression_attribute_values),
+                Select=select.value,
+            )
         )
         async for raw in unroll(
             coro_func,
@@ -418,14 +411,15 @@ class Client:
             expression_attribute_values.update(eav)
 
         coro_func = partial(
-            self._call,
             self.core.scan,
-            TableName=table,
-            IndexName=index,
-            ProjectionExpression=projection_expression,
-            FilterExpression=filter_expression,
-            ExpressionAttributeNames=expression_attribute_names,
-            ExpressionAttributeValues=py2dy(expression_attribute_values),
+            **clean(
+                TableName=table,
+                IndexName=index,
+                ProjectionExpression=projection_expression,
+                FilterExpression=filter_expression,
+                ExpressionAttributeNames=expression_attribute_names,
+                ExpressionAttributeValues=py2dy(expression_attribute_values),
+            )
         )
         async for raw in unroll(
             coro_func,
@@ -462,15 +456,16 @@ class Client:
             key_condition_expression = None
 
         coro_func = partial(
-            self._call,
             self.core.query,
-            TableName=table,
-            IndexName=index,
-            FilterExpression=filter_expression,
-            KeyConditionExpression=key_condition_expression,
-            ExpressionAttributeNames=expression_attribute_names,
-            ExpressionAttributeValues=py2dy(expression_attribute_values),
-            Select=Select.count.value,
+            **clean(
+                TableName=table,
+                IndexName=index,
+                FilterExpression=filter_expression,
+                KeyConditionExpression=key_condition_expression,
+                ExpressionAttributeNames=expression_attribute_names,
+                ExpressionAttributeValues=py2dy(expression_attribute_values),
+                Select=Select.count.value,
+            )
         )
         count_sum = 0
         async for count in unroll(
@@ -503,8 +498,7 @@ class Client:
             expression_attribute_values.update(eav)
         else:
             condition_expression = None
-        resp = await self._call(
-            self.core.update_item,
+        resp = await self.core.update_item(**clean(
             TableName=table,
             Key=py2dy(key),
             UpdateExpression=update_expression,
@@ -512,7 +506,7 @@ class Client:
             ExpressionAttributeValues=py2dy(expression_attribute_values),
             ConditionExpression=condition_expression,
             ReturnValues=return_values.value
-        )
+        ))
         if 'Attributes' in resp:
             return dy2py(resp['Attributes'])
         else:
