@@ -15,6 +15,7 @@ jobs:
       - run: pip install -r tests/requirements.txt
       - run: find . -regex '.*__pycache__.*' -delete
       - run: pytest --verbose --cov=aiodynamo --cov-report html:reports/coverage/ --junitxml=reports/results/junit.xml
+      - run: black --check src/ tests/ setup.py
       - store_artifacts:
           path: reports/coverage/
           destination: reports

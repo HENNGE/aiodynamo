@@ -7,13 +7,10 @@ from typing import Dict, List, Any, Set, Tuple, Union
 import attr
 
 from aiodynamo.types import Path, PathEncoder, EncoderFunc, NOTHING, EMPTY
-from aiodynamo.utils import (
-    clean, ensure_not_empty, check_empty_value,
-    maybe_immutable,
-)
+from aiodynamo.utils import clean, ensure_not_empty, check_empty_value, maybe_immutable
 
 
-ProjectionExpr = Union['ProjectionExpression', 'F']
+ProjectionExpr = Union["ProjectionExpression", "F"]
 
 
 @attr.s
@@ -22,16 +19,13 @@ class Throughput:
     write: int = attr.ib()
 
     def encode(self):
-        return {
-            'ReadCapacityUnits': self.read,
-            'WriteCapacityUnits': self.write,
-        }
+        return {"ReadCapacityUnits": self.read, "WriteCapacityUnits": self.write}
 
 
 class KeyType(Enum):
-    string = 'S'
-    number = 'N'
-    binary = 'B'
+    string = "S"
+    number = "N"
+    binary = "B"
 
 
 @attr.s
@@ -47,27 +41,24 @@ class KeySchema:
 
     def __iter__(self):
         yield self.hash_key
+
         if self.range_key:
             yield self.range_key
 
     def to_attributes(self) -> Dict[str, str]:
-        return {
-            key.name: key.type.value for key in self
-        }
+        return {key.name: key.type.value for key in self}
 
     def encode(self) -> List[Dict[str, str]]:
         return [
-            {
-                'AttributeName': key.name,
-                'KeyType': key_type
-            } for key, key_type in zip(self, ['HASH', 'RANGE'])
+            {"AttributeName": key.name, "KeyType": key_type}
+            for key, key_type in zip(self, ["HASH", "RANGE"])
         ]
 
 
 class ProjectionType(Enum):
-    all = 'ALL'
-    keys_only = 'KEYS_ONLY'
-    include = 'INCLUDE'
+    all = "ALL"
+    keys_only = "KEYS_ONLY"
+    include = "INCLUDE"
 
 
 @attr.s
@@ -76,11 +67,9 @@ class Projection:
     attrs: List[str] = attr.ib(default=None)
 
     def encode(self):
-        encoded = {
-            'ProjectionType': self.type.value,
-        }
+        encoded = {"ProjectionType": self.type.value}
         if self.attrs:
-            encoded['NonKeyAttributes'] = self.attrs
+            encoded["NonKeyAttributes"] = self.attrs
         return encoded
 
 
@@ -92,9 +81,9 @@ class LocalSecondaryIndex:
 
     def encode(self):
         return {
-            'IndexName': self.name,
-            'KeySchema': self.schema.encode(),
-            'Projection': self.projection.encode(),
+            "IndexName": self.name,
+            "KeySchema": self.schema.encode(),
+            "Projection": self.projection.encode(),
         }
 
 
@@ -103,17 +92,14 @@ class GlobalSecondaryIndex(LocalSecondaryIndex):
     throughput: Throughput = attr.ib()
 
     def encode(self):
-        return {
-            **super().encode(),
-            'ProvisionedThroughput': self.throughput.encode()
-        }
+        return {**super().encode(), "ProvisionedThroughput": self.throughput.encode()}
 
 
 class StreamViewType(Enum):
-    keys_only = 'KEYS_ONLY'
-    new_image = 'NEW_IMAGE'
-    old_image = 'OLD_IMAGE'
-    new_and_old_images = 'NEW_AND_OLD_IMAGES'
+    keys_only = "KEYS_ONLY"
+    new_image = "NEW_IMAGE"
+    old_image = "OLD_IMAGE"
+    new_and_old_images = "NEW_AND_OLD_IMAGES"
 
 
 @attr.s
@@ -129,24 +115,24 @@ class StreamSpecification:
 
 
 class ReturnValues(Enum):
-    none = 'NONE'
-    all_old = 'ALL_OLD'
-    updated_old = 'UPDATED_OLD'
-    all_new = 'ALL_NEW'
-    updated_new = 'UPDATED_NEW'
+    none = "NONE"
+    all_old = "ALL_OLD"
+    updated_old = "UPDATED_OLD"
+    all_new = "ALL_NEW"
+    updated_new = "UPDATED_NEW"
 
 
 class ActionTypes(Enum):
-    set = 'SET'
-    remove = 'REMOVE'
-    add = 'ADD'
-    delete = 'DELETE'
+    set = "SET"
+    remove = "REMOVE"
+    add = "ADD"
+    delete = "DELETE"
 
 
 class BaseAction(metaclass=abc.ABCMeta):
     type = abc.abstractproperty()
 
-    def encode(self, name_encoder: 'Encoder', value_encoder: 'Encoder') -> str:
+    def encode(self, name_encoder: "Encoder", value_encoder: "Encoder") -> str:
         return self._encode(name_encoder.encode_path, value_encoder.encode)
 
     @abc.abstractmethod
@@ -158,18 +144,19 @@ class BaseAction(metaclass=abc.ABCMeta):
 class SetAction(BaseAction):
     path: Path = attr.ib()
     value: Any = attr.ib(convert=ensure_not_empty)
-    ine: 'F' = attr.ib(default=NOTHING)
+    ine: "F" = attr.ib(default=NOTHING)
 
     type = ActionTypes.set
 
     @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
         if self.ine is not NOTHING:
-            return f'{N(self.path)} = if_not_exists({N(self.ine.path)}, {V(self.value)}'
-        else:
-            return f'{N(self.path)} = {V(self.value)}'
+            return f"{N(self.path)} = if_not_exists({N(self.ine.path)}, {V(self.value)}"
 
-    def if_not_exists(self, key: 'F') -> 'SetAction':
+        else:
+            return f"{N(self.path)} = {V(self.value)}"
+
+    def if_not_exists(self, key: "F") -> "SetAction":
         return attr.evolve(self, ine=key)
 
 
@@ -183,12 +170,12 @@ class ChangeAction(BaseAction):
     @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
         if self.value > 0:
-            op = '+'
+            op = "+"
             value = self.value
         else:
             value = self.value * -1
-            op = '-'
-        return f'{N(self.path)} = {N(self.path)} {op} {V(value)}'
+            op = "-"
+        return f"{N(self.path)} = {N(self.path)} {op} {V(value)}"
 
 
 @attr.s
@@ -200,7 +187,7 @@ class AppendAction(BaseAction):
 
     @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
-        return f'{N(self.path)} = list_append({N(self.path)}, {V(self.value)})'
+        return f"{N(self.path)} = list_append({N(self.path)}, {V(self.value)})"
 
 
 @attr.s
@@ -222,7 +209,7 @@ class DeleteAction(BaseAction):
 
     @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
-        return f'{N(self.path)} {V(self.value)}'
+        return f"{N(self.path)} {V(self.value)}"
 
 
 @attr.s
@@ -234,52 +221,54 @@ class AddAction(BaseAction):
 
     @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc):
-        return f'{N(self.path)} {V(self.value)}'
+        return f"{N(self.path)} {V(self.value)}"
 
 
 class F:
+
     def __init__(self, *path):
         self.path: Path = path
 
-    def __and__(self, other: 'F') -> 'ProjectionExpression':
+    def __and__(self, other: "F") -> "ProjectionExpression":
         pe = ProjectionExpression()
         return pe & self & other
 
-    def encode(self, encoder: 'Encoder') -> str:
+    def encode(self, encoder: "Encoder") -> str:
         return encoder.encode_path(self.path)
 
-    def set(self, value: Any) -> 'UpdateExpression':
+    def set(self, value: Any) -> "UpdateExpression":
         return UpdateExpression(SetAction(self.path, value))
 
-    def change(self, diff: int) -> 'UpdateExpression':
+    def change(self, diff: int) -> "UpdateExpression":
         return UpdateExpression(ChangeAction(self.path, diff))
 
-    def append(self, value: List[Any]) -> 'UpdateExpression':
+    def append(self, value: List[Any]) -> "UpdateExpression":
         return UpdateExpression(AppendAction(self.path, list(value)))
 
-    def remove(self) -> 'UpdateExpression':
+    def remove(self) -> "UpdateExpression":
         return UpdateExpression(RemoveAction(self.path))
 
-    def add(self, value: Set[Any]) -> 'UpdateExpression':
+    def add(self, value: Set[Any]) -> "UpdateExpression":
         return UpdateExpression(AddAction(self.path, value))
 
-    def delete(self, value: Set[Any]) -> 'UpdateExpression':
+    def delete(self, value: Set[Any]) -> "UpdateExpression":
         return UpdateExpression(DeleteAction(self.path, value))
 
 
 class UpdateExpression:
+
     def __init__(self, *updates: BaseAction):
         self.updates = updates
 
-    def __and__(self, other: 'UpdateExpression') -> 'UpdateExpression':
+    def __and__(self, other: "UpdateExpression") -> "UpdateExpression":
         return UpdateExpression(*self.updates, *other.updates)
 
     def __bool__(self):
         return bool(self.updates)
 
     def encode(self) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
-        name_encoder = Encoder('#N')
-        value_encoder = Encoder(':V')
+        name_encoder = Encoder("#N")
+        value_encoder = Encoder(":V")
         parts = defaultdict(list)
         for action in self.updates:
             value = action.encode(name_encoder, value_encoder)
@@ -288,26 +277,28 @@ class UpdateExpression:
         part_list = [
             f'{action.value} {", ".join(values)}' for action, values in parts.items()
         ]
-        return ' '.join(part_list), name_encoder.finalize(), value_encoder.finalize()
+        return " ".join(part_list), name_encoder.finalize(), value_encoder.finalize()
 
 
 @attr.s
 class ProjectionExpression:
     fields: List[F] = attr.ib(default=attr.Factory(list))
 
-    def __and__(self, field: F) -> 'ProjectionExpression':
+    def __and__(self, field: F) -> "ProjectionExpression":
         return ProjectionExpression(self.fields + [field])
 
     def encode(self) -> Tuple[str, Dict[str, Any]]:
-        name_encoder = Encoder('#N')
-        return ','.join(field.encode(name_encoder) for field in self.fields), name_encoder.finalize()
+        name_encoder = Encoder("#N")
+        return ",".join(
+            field.encode(name_encoder) for field in self.fields
+        ), name_encoder.finalize()
 
 
 class TableStatus(Enum):
-    creating = 'CREATING'
-    updating = 'UPDATING'
-    deleting = 'DELETING'
-    active = 'ACTIVE'
+    creating = "CREATING"
+    updating = "UPDATING"
+    deleting = "DELETING"
+    active = "ACTIVE"
 
 
 @attr.s
@@ -327,19 +318,18 @@ class Encoder:
     cache: Dict[Any, Any] = attr.ib(default=attr.Factory(dict))
 
     def finalize(self) -> Dict[str, str]:
-        return {
-            f'{self.prefix}{index}': value for index, value in enumerate(self.data)
-        }
+        return {f"{self.prefix}{index}": value for index, value in enumerate(self.data)}
 
     def encode(self, name: Any) -> str:
         key = maybe_immutable(name)
         try:
             return self.cache[key]
+
         except KeyError:
             can_cache = True
         except TypeError:
             can_cache = False
-        encoded = f'{self.prefix}{len(self.data)}'
+        encoded = f"{self.prefix}{len(self.data)}"
         self.data.append(name)
         if can_cache:
             self.cache[key] = encoded
@@ -349,24 +339,28 @@ class Encoder:
         bits = [self.encode(path[0])]
         for part in path[1:]:
             if isinstance(part, int):
-                bits.append(f'[{part}]')
+                bits.append(f"[{part}]")
             else:
-                bits.append(f'.{self.encode(part)}')
-        return ''.join(bits)
+                bits.append(f".{self.encode(part)}")
+        return "".join(bits)
 
 
 class Select(Enum):
-    all_attributes = 'ALL_ATTRIBUTES'
-    all_projected_attributes = 'ALL_PROJECTED_ATTRIBUTES'
-    count = 'COUNT'
-    specific_attributes = 'SPECIFIC_ATTRIBUTES'
+    all_attributes = "ALL_ATTRIBUTES"
+    all_projected_attributes = "ALL_PROJECTED_ATTRIBUTES"
+    count = "COUNT"
+    specific_attributes = "SPECIFIC_ATTRIBUTES"
 
 
-def get_projection(projection: Union[ProjectionExpression, F, None]) -> Tuple[Union[str, None], Dict[str, Any]]:
+def get_projection(
+    projection: Union[ProjectionExpression, F, None]
+) -> Tuple[Union[str, None], Dict[str, Any]]:
     if projection is None:
         return None, {}
+
     if isinstance(projection, ProjectionExpression):
         return projection.encode()
+
     else:
-        encoder = Encoder('#N')
+        encoder = Encoder("#N")
         return projection.encode(encoder), encoder.finalize()

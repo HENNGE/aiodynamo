@@ -1,20 +1,20 @@
 import collections
 from functools import wraps
-from typing import (
-    Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, Tuple, Union,
-)
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, Tuple, Union
 
 from aiodynamo.types import Deserializer, DynamoItem, EMPTY, Item, Serializer
 
 
-async def unroll(coro_func: Callable[[], Awaitable[Dict[str, Any]]],
-                 inkey: str,
-                 outkey: str,
-                 itemkey: str,
-                 start: Any=None,
-                 limit: int=None,
-                 limitkey: str=None,
-                 process: Callable[[Any], Iterable[Any]]=lambda x: x) -> AsyncIterator[Any]:
+async def unroll(
+    coro_func: Callable[[], Awaitable[Dict[str, Any]]],
+    inkey: str,
+    outkey: str,
+    itemkey: str,
+    start: Any = None,
+    limit: int = None,
+    limitkey: str = None,
+    process: Callable[[Any], Iterable[Any]] = lambda x: x,
+) -> AsyncIterator[Any]:
     value = start
     got = 0
     while True:
@@ -29,9 +29,11 @@ async def unroll(coro_func: Callable[[], Awaitable[Dict[str, Any]]],
         items = resp.get(itemkey, [])
         for item in process(items):
             yield item
+
             got += 1
             if limit and got >= limit:
                 return
+
         if value is None:
             break
 
@@ -39,9 +41,11 @@ async def unroll(coro_func: Callable[[], Awaitable[Dict[str, Any]]],
 def ensure_not_empty(value):
     if value is None:
         return value
+
     elif isinstance(value, (bytes, str)):
         if not value:
             return EMPTY
+
     elif isinstance(value, collections.Mapping):
         value = dict(remove_empty_strings(value))
     elif isinstance(value, collections.Iterable):
@@ -61,25 +65,25 @@ def remove_empty_strings(data: Item) -> Iterable[Tuple[str, Any]]:
 def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:
     if data is None:
         return data
+
     return {
-        key: Serializer.serialize(value)
-        for key, value in remove_empty_strings(data)
+        key: Serializer.serialize(value) for key, value in remove_empty_strings(data)
     }
 
 
 def dy2py(data: DynamoItem) -> Item:
-    return {
-        key: Deserializer.deserialize(value)
-        for key, value in data.items()
-    }
+    return {key: Deserializer.deserialize(value) for key, value in data.items()}
 
 
 def check_empty_value(meth):
+
     @wraps(meth)
     def wrapper(self, *args, **kwargs):
         if self.value is EMPTY:
             return self.value
+
         return meth(self, *args, **kwargs)
+
     return wrapper
 
 
@@ -92,7 +96,9 @@ def clean(**kwargs):
 def maybe_immutable(thing: Any):
     if isinstance(thing, list):
         return tuple(thing)
+
     elif isinstance(thing, set):
         return frozenset(thing)
+
     else:
         return thing

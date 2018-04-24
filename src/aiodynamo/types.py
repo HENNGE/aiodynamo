@@ -2,9 +2,9 @@ from typing import TypeVar, Dict, Any, List, Union, Callable
 
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 
-Item = TypeVar('Item', bound=Dict[str, Any])
-DynamoItem = TypeVar('DynamoItem', bound=Dict[str, Dict[str, Any]])
-TableName = TypeVar('TableName', bound=str)
+Item = TypeVar("Item", bound=Dict[str, Any])
+DynamoItem = TypeVar("DynamoItem", bound=Dict[str, Dict[str, Any]])
+TableName = TypeVar("TableName", bound=str)
 Path = List[Union[str, int]]
 PathEncoder = Callable[[Path], str]
 EncoderFunc = Callable[[Any], str]
@@ -13,6 +13,7 @@ EMPTY = object()
 
 
 class BinaryTypeDeserializer(TypeDeserializer):
+
     def _deserialize_b(self, value):
         return value
 
