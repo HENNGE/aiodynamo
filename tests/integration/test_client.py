@@ -54,7 +54,7 @@ async def core():
 
     finally:
         await _cleanup(core, tables)
-        core.close()
+        await core.close()
 
 
 @pytest.fixture
