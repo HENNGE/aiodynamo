@@ -6,7 +6,6 @@ from aiodynamo.utils import clean, dy2py, remove_empty_strings
 
 @pytest.mark.asyncio
 async def test_unroll():
-
     async def func(**kwargs):
         if "InKey" in kwargs:
             return {"Items": [1, 2, 3]}
@@ -20,7 +19,6 @@ async def test_unroll():
 
 @pytest.mark.asyncio
 async def test_unroll_with_limit():
-
     async def func(**kwargs):
         if "InKey" in kwargs:
             return {"OutKey": "Bar", "Items": [1, 2, 3]}
@@ -29,8 +27,8 @@ async def test_unroll_with_limit():
             return {"OutKey": "Foo", "Items": ["a", "b", "c"]}
 
     result = [
-        item async
-        for item in utils.unroll(
+        item
+        async for item in utils.unroll(
             func, "InKey", "OutKey", "Items", limit=4, limitkey="Limit"
         )
     ]
@@ -38,10 +36,9 @@ async def test_unroll_with_limit():
 
 
 def test_clean():
-    assert (
-        clean(foo="bar", none=None, list=[], tuple=(), dict={}, int=0, bool=False)
-        == {"foo": "bar", "bool": False}
-    )
+    assert clean(
+        foo="bar", none=None, list=[], tuple=(), dict={}, int=0, bool=False
+    ) == {"foo": "bar", "bool": False}
 
 
 def test_binary_decode():

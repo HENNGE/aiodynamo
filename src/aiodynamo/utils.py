@@ -76,7 +76,6 @@ def dy2py(data: DynamoItem) -> Item:
 
 
 def check_empty_value(meth):
-
     @wraps(meth)
     def wrapper(self, *args, **kwargs):
         if self.value is EMPTY:

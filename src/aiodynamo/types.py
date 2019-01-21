@@ -13,7 +13,6 @@ EMPTY = object()
 
 
 class BinaryTypeDeserializer(TypeDeserializer):
-
     def _deserialize_b(self, value):
         return value
 
