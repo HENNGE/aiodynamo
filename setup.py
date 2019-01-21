@@ -8,8 +8,8 @@ setup(
     packages=find_packages(where="src"),
     install_requires=[
         "attrs>=17.4.0",
-        "aiobotocore==0.6.0",  # Temporary, because of old aiohttp
-        "boto3<=1.5",
-        "aiohttp>3,<=3.0.9",
+        "aiobotocore>=0.10.0",
+        "boto3>=1.9.49",
+        "aiohttp>=3.5.4",
     ],
 )
