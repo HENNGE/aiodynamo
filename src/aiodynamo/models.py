@@ -143,7 +143,7 @@ class BaseAction(metaclass=abc.ABCMeta):
 @attr.s
 class SetAction(BaseAction):
     path: Path = attr.ib()
-    value: Any = attr.ib(convert=ensure_not_empty)
+    value: Any = attr.ib(converter=ensure_not_empty)
     ine: "F" = attr.ib(default=NOTHING)
 
     type = ActionTypes.set
@@ -163,7 +163,7 @@ class SetAction(BaseAction):
 @attr.s
 class ChangeAction(BaseAction):
     path: Path = attr.ib()
-    value: Any = attr.ib(convert=ensure_not_empty)
+    value: Any = attr.ib(converter=ensure_not_empty)
 
     type = ActionTypes.set
 
@@ -181,7 +181,7 @@ class ChangeAction(BaseAction):
 @attr.s
 class AppendAction(BaseAction):
     path: Path = attr.ib()
-    value: Any = attr.ib(convert=ensure_not_empty)
+    value: Any = attr.ib(converter=ensure_not_empty)
 
     type = ActionTypes.set
 
@@ -203,7 +203,7 @@ class RemoveAction(BaseAction):
 @attr.s
 class DeleteAction(BaseAction):
     path: Path = attr.ib()
-    value: Any = attr.ib(convert=ensure_not_empty)
+    value: Any = attr.ib(converter=ensure_not_empty)
 
     type = ActionTypes.delete
 
@@ -215,7 +215,7 @@ class DeleteAction(BaseAction):
 @attr.s
 class AddAction(BaseAction):
     path: Path = attr.ib()
-    value: Any = attr.ib(convert=ensure_not_empty)
+    value: Any = attr.ib(converter=ensure_not_empty)
 
     type = ActionTypes.add
 

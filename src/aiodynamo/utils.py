@@ -46,9 +46,9 @@ def ensure_not_empty(value):
         if not value:
             return EMPTY
 
-    elif isinstance(value, collections.Mapping):
+    elif isinstance(value, collections.abc.Mapping):
         value = dict(remove_empty_strings(value))
-    elif isinstance(value, collections.Iterable):
+    elif isinstance(value, collections.abc.Iterable):
         value = value.__class__(
             item for item in map(ensure_not_empty, value) if item is not EMPTY
         )

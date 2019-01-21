@@ -6,5 +6,10 @@ setup(
     name="aiodynamo",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    install_requires=["attrs", "aiobotocore", "boto3<=1.5", "aiohttp>3,<=3.0.9"],
+    install_requires=[
+        "attrs>=17.4.0",
+        "aiobotocore",
+        "boto3<=1.5",
+        "aiohttp>3,<=3.0.9",
+    ],
 )
