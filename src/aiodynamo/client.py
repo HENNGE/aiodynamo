@@ -267,7 +267,9 @@ class Client:
                 condition
             )
         else:
-            condition_expression = expression_attribute_names = expression_attribute_values = None
+            condition_expression = (
+                expression_attribute_names
+            ) = expression_attribute_values = None
         resp = await self.core.delete_item(
             **clean(
                 TableName=table,
@@ -326,7 +328,9 @@ class Client:
                 condition
             )
         else:
-            condition_expression = expression_attribute_names = expression_attribute_values = None
+            condition_expression = (
+                expression_attribute_names
+            ) = expression_attribute_values = None
         item = py2dy(item)
         if not item:
             raise EmptyItem()
@@ -519,7 +523,9 @@ class Client:
         condition: ConditionBase = None
     ) -> Union[Item, None]:
 
-        update_expression, expression_attribute_names, expression_attribute_values = update_expression.encode()
+        update_expression, expression_attribute_names, expression_attribute_values = (
+            update_expression.encode()
+        )
 
         if not update_expression:
             raise EmptyItem()

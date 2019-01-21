@@ -9,7 +9,13 @@ from boto3.dynamodb.conditions import Key
 from aiodynamo.client import Client
 from aiodynamo.types import TableName
 from aiodynamo.models import (
-    Throughput, KeyType, KeySpec, KeySchema, ReturnValues, F, TableStatus
+    Throughput,
+    KeyType,
+    KeySpec,
+    KeySchema,
+    ReturnValues,
+    F,
+    TableStatus,
 )
 from aiodynamo.errors import ItemNotFound, TableNotFound, EmptyItem
 from aiodynamo.utils import unroll
@@ -146,18 +152,15 @@ async def test_update_item(client: Client, table: TableName):
     resp = await client.update_item(
         table, {"h": "hkv", "r": "rkv"}, ue, return_values=ReturnValues.all_new
     )
-    assert (
-        resp
-        == {
-            "h": "hkv",
-            "r": "rkv",
-            "string-key": "new value",
-            "number-key": 111,
-            "list-key": ["hello", "world", "!"],
-            "set-key-one": {"hello", "world", "hoge"},
-            "set-key-two": {"world"},
-        }
-    )
+    assert resp == {
+        "h": "hkv",
+        "r": "rkv",
+        "string-key": "new value",
+        "number-key": 111,
+        "list-key": ["hello", "world", "!"],
+        "set-key-one": {"hello", "world", "hoge"},
+        "set-key-two": {"world"},
+    }
 
 
 async def test_delete_item(client: Client, table: TableName):
@@ -224,15 +227,12 @@ async def test_empty_string(client: Client, table: TableName):
     key = {"h": "h", "r": "r"}
     await client.put_item(table, {**key, "s": ""})
     assert await client.get_item(table, key) == {"h": "h", "r": "r"}
-    assert (
-        await client.update_item(
-            table,
-            key,
-            F("foo").set("") & F("bar").set("baz"),
-            return_values=ReturnValues.all_new,
-        )
-        == {"h": "h", "r": "r", "bar": "baz"}
-    )
+    assert await client.update_item(
+        table,
+        key,
+        F("foo").set("") & F("bar").set("baz"),
+        return_values=ReturnValues.all_new,
+    ) == {"h": "h", "r": "r", "bar": "baz"}
 
 
 async def test_empty_item(client: Client, table: TableName):

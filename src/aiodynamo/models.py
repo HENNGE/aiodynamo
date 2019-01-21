@@ -225,7 +225,6 @@ class AddAction(BaseAction):
 
 
 class F:
-
     def __init__(self, *path):
         self.path: Path = path
 
@@ -256,7 +255,6 @@ class F:
 
 
 class UpdateExpression:
-
     def __init__(self, *updates: BaseAction):
         self.updates = updates
 
@@ -289,9 +287,10 @@ class ProjectionExpression:
 
     def encode(self) -> Tuple[str, Dict[str, Any]]:
         name_encoder = Encoder("#N")
-        return ",".join(
-            field.encode(name_encoder) for field in self.fields
-        ), name_encoder.finalize()
+        return (
+            ",".join(field.encode(name_encoder) for field in self.fields),
+            name_encoder.finalize(),
+        )
 
 
 class TableStatus(Enum):
