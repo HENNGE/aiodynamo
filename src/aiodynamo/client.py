@@ -1,4 +1,3 @@
-import asyncio
 from functools import partial
 from itertools import chain
 from typing import List, Dict, Any, TypeVar, Union, AsyncIterator
@@ -7,8 +6,8 @@ import attr
 from boto3.dynamodb.conditions import ConditionBase, ConditionExpressionBuilder
 from botocore.exceptions import ClientError
 
-from aiodynamo.errors import ItemNotFound, TableNotFound, EmptyItem
-from aiodynamo.models import (
+from .errors import ItemNotFound, TableNotFound, EmptyItem
+from .models import (
     Throughput,
     KeyType,
     KeySpec,
@@ -24,8 +23,8 @@ from aiodynamo.models import (
     get_projection,
     ProjectionExpr,
 )
-from aiodynamo.types import Item, TableName
-from aiodynamo.utils import unroll, py2dy, dy2py, clean
+from .types import Item, TableName
+from .utils import unroll, py2dy, dy2py, clean
 
 _Key = TypeVar("_Key")
 _Val = TypeVar("_Val")
@@ -162,6 +161,7 @@ class Table:
 
 @attr.s
 class Client:
+    # core is an aiobotocore DynamoDB client, use aiobotocore.get_session().create_client("dynamodb") to create one.
     core = attr.ib()
 
     def table(self, name: TableName) -> Table:

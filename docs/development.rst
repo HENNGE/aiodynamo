@@ -1,0 +1,15 @@
+Development
+===========
+
+aiodynamo uses `poetry`_ to manage dependencies, make sure you have it installed.
+
+After a git clone, run ``poetry install`` to install the dependencies, including the development dependencies.
+
+To run the tests run ``poetry run pytests``. To also run the integration tests, set ``DYNAMODB_URL`` to the endpoint
+of your DynamoDB instance. We recommend you use `dynalite`_ for local testing. You also need to set ``AWS_ACCESS_KEY_ID``
+and ``AWS_SECRET_ACCESS_KEY``.
+
+To build the documentation, enter the ``docs/`` directory and run ``poetry run make html``.
+
+.. _poetry: https://poetry.eustace.io/
+.. _dynalite: https://github.com/mhart/dynalite

@@ -6,8 +6,8 @@ from typing import Dict, List, Any, Set, Tuple, Union
 
 import attr
 
-from aiodynamo.types import Path, PathEncoder, EncoderFunc, NOTHING, EMPTY
-from aiodynamo.utils import clean, ensure_not_empty, check_empty_value, maybe_immutable
+from .types import Path, PathEncoder, EncoderFunc, NOTHING, EMPTY
+from .utils import clean, ensure_not_empty, check_empty_value, maybe_immutable
 
 
 ProjectionExpr = Union["ProjectionExpression", "F"]
