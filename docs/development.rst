@@ -11,5 +11,11 @@ and ``AWS_SECRET_ACCESS_KEY``.
 
 To build the documentation, enter the ``docs/`` directory and run ``poetry run make html``.
 
+
+Releasing
+---------
+
+Run `poetry build -fwheel` to create a wheel, then `twine upload dist/aiodynamo-<version>-py3-none-any.whl`.
+
 .. _poetry: https://poetry.eustace.io/
 .. _dynalite: https://github.com/mhart/dynalite
