@@ -7,15 +7,15 @@ jobs:
           DYNAMODB_URL: http://localhost:8000
           AWS_ACCESS_KEY_ID: dummy
           AWS_SECRET_ACCESS_KEY: dummy
-      - image: ojii/dynamodb-local:latest
+      - image: dimaqq/dynalite:latest
     working_directory: /home/ubuntu/aiodynamo
     steps:
       - checkout
-      - run: pip install -e .
-      - run: pip install -r tests/requirements.txt
+      - run: pip install poetry
+      - run: poetry install
       - run: find . -regex '.*__pycache__.*' -delete
-      - run: pytest --verbose --cov=aiodynamo --cov-report html:reports/coverage/ --junitxml=reports/results/junit.xml
-      - run: black --check src/ tests/ setup.py
+      - run: poetry run pytest --verbose --cov=aiodynamo --cov-report html:reports/coverage/ --junitxml=reports/results/junit.xml
+      - run: poetry run black --check src/ tests/
       - store_artifacts:
           path: reports/coverage/
           destination: reports
