@@ -1,9 +1,9 @@
 Changelog
 =========
 
-19.2
+19.3
 ----
 
-Release Date: Not Released Yet
+Release Date: March 4th, 2019
 
 * Initial public release
