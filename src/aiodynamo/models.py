@@ -314,15 +314,16 @@ class TableDescription:
 class Encoder:
     prefix: str = attr.ib()
     data: List[Any] = attr.ib(default=attr.Factory(list))
-    cache: Dict[Any, Any] = attr.ib(default=attr.Factory(dict))
+    cache: Dict[Tuple[Any, Any], Any] = attr.ib(default=attr.Factory(dict))
 
     def finalize(self) -> Dict[str, str]:
         return {f"{self.prefix}{index}": value for index, value in enumerate(self.data)}
 
     def encode(self, name: Any) -> str:
         key = maybe_immutable(name)
+        cache_key = (type(key), key)
         try:
-            return self.cache[key]
+            return self.cache[cache_key]
 
         except KeyError:
             can_cache = True
@@ -331,7 +332,7 @@ class Encoder:
         encoded = f"{self.prefix}{len(self.data)}"
         self.data.append(name)
         if can_cache:
-            self.cache[key] = encoded
+            self.cache[cache_key] = encoded
         return encoded
 
     def encode_path(self, path: Path) -> str:
