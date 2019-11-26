@@ -277,7 +277,7 @@ class Client:
                 ReturnValues=return_values.value,
                 ConditionExpression=condition_expression,
                 ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttribuetValues=expression_attribute_values,
+                ExpressionAttributeValues=expression_attribute_values,
             )
         )
         if "Attributes" in resp:
