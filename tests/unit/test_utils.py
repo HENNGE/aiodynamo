@@ -1,5 +1,4 @@
 import pytest
-
 from aiodynamo import utils
 from aiodynamo.utils import clean, dy2py, remove_empty_strings
 

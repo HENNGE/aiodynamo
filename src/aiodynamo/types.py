@@ -1,4 +1,4 @@
-from typing import TypeVar, Dict, Any, List, Union, Callable
+from typing import Any, Callable, Dict, List, TypeVar, Union
 
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 

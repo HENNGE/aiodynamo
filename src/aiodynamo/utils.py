@@ -2,7 +2,7 @@ import collections
 from functools import wraps
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, Tuple, Union
 
-from .types import Deserializer, DynamoItem, EMPTY, Item, Serializer
+from .types import EMPTY, Deserializer, DynamoItem, Item, Serializer
 
 
 async def unroll(

@@ -1,30 +1,31 @@
 from functools import partial
 from itertools import chain
-from typing import List, Dict, Any, TypeVar, Union, AsyncIterator
+from typing import Any, AsyncIterator, Dict, List, TypeVar, Union
 
 import attr
+from aiobotocore.client import AioBaseClient
 from boto3.dynamodb.conditions import ConditionBase, ConditionExpressionBuilder
 from botocore.exceptions import ClientError
 
-from .errors import ItemNotFound, TableNotFound, EmptyItem
+from .errors import EmptyItem, ItemNotFound, TableNotFound
 from .models import (
-    Throughput,
-    KeyType,
-    KeySpec,
-    KeySchema,
-    LocalSecondaryIndex,
     GlobalSecondaryIndex,
-    StreamSpecification,
-    ReturnValues,
-    UpdateExpression,
-    TableStatus,
-    TableDescription,
-    Select,
-    get_projection,
+    KeySchema,
+    KeySpec,
+    KeyType,
+    LocalSecondaryIndex,
     ProjectionExpr,
+    ReturnValues,
+    Select,
+    StreamSpecification,
+    TableDescription,
+    TableStatus,
+    Throughput,
+    UpdateExpression,
+    get_projection,
 )
 from .types import Item, TableName
-from .utils import unroll, py2dy, dy2py, clean
+from .utils import clean, dy2py, py2dy, unroll
 
 _Key = TypeVar("_Key")
 _Val = TypeVar("_Val")
@@ -162,7 +163,7 @@ class Table:
 @attr.s
 class Client:
     # core is an aiobotocore DynamoDB client, use aiobotocore.get_session().create_client("dynamodb") to create one.
-    core = attr.ib()
+    core: AioBaseClient = attr.ib()
 
     def table(self, name: TableName) -> Table:
         return Table(self, name)
@@ -277,7 +278,7 @@ class Client:
                 ReturnValues=return_values.value,
                 ConditionExpression=condition_expression,
                 ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttribuetValues=expression_attribute_values,
+                ExpressionAttributeValues=py2dy(expression_attribute_values),
             )
         )
         if "Attributes" in resp:

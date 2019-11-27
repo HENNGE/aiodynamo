@@ -1,10 +1,14 @@
-class ItemNotFound(Exception):
+class AioDynamoException(Exception):
     pass
 
 
-class TableNotFound(Exception):
+class ItemNotFound(AioDynamoException):
     pass
 
 
-class EmptyItem(Exception):
+class TableNotFound(AioDynamoException):
+    pass
+
+
+class EmptyItem(AioDynamoException):
     pass

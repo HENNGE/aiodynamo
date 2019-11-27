@@ -1,5 +1,4 @@
 import pytest
-
 from aiodynamo.models import F
 
 

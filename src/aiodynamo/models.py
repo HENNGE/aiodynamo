@@ -2,13 +2,12 @@ import abc
 import datetime
 from collections import defaultdict
 from enum import Enum
-from typing import Dict, List, Any, Set, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple, Union
 
 import attr
 
-from .types import Path, PathEncoder, EncoderFunc, NOTHING, EMPTY
-from .utils import clean, ensure_not_empty, check_empty_value, maybe_immutable
-
+from .types import EMPTY, NOTHING, EncoderFunc, Path, PathEncoder
+from .utils import check_empty_value, clean, ensure_not_empty, maybe_immutable
 
 ProjectionExpr = Union["ProjectionExpression", "F"]
 

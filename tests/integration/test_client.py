@@ -3,23 +3,21 @@ import uuid
 
 import pytest
 from aiobotocore import get_session
-from boto3.dynamodb import conditions
-from boto3.dynamodb.conditions import Key
-
 from aiodynamo.client import Client
-from aiodynamo.types import TableName
+from aiodynamo.errors import EmptyItem, ItemNotFound, TableNotFound
 from aiodynamo.models import (
-    Throughput,
-    KeyType,
-    KeySpec,
-    KeySchema,
-    ReturnValues,
     F,
+    KeySchema,
+    KeySpec,
+    KeyType,
+    ReturnValues,
     TableStatus,
+    Throughput,
 )
-from aiodynamo.errors import ItemNotFound, TableNotFound, EmptyItem
+from aiodynamo.types import TableName
 from aiodynamo.utils import unroll
-
+from boto3.dynamodb import conditions
+from boto3.dynamodb.conditions import Attr, Key
 
 pytestmark = pytest.mark.asyncio
 
@@ -138,6 +136,7 @@ async def test_update_item(client: Client, table: TableName):
         "list-key": ["hello", "world"],
         "set-key-one": {"hello", "world"},
         "set-key-two": {"hello", "world"},
+        "map-key": {"subkey": "value"},
         "dead-key": "foo",
     }
     await client.put_item(table, item)
@@ -148,6 +147,7 @@ async def test_update_item(client: Client, table: TableName):
         & F("set-key-one").add({"hoge"})
         & F("dead-key").remove()
         & F("set-key-two").delete({"hello"})
+        & F("map-key", "subkey").set("othervalue")
     )
     resp = await client.update_item(
         table, {"h": "hkv", "r": "rkv"}, ue, return_values=ReturnValues.all_new
@@ -160,6 +160,7 @@ async def test_update_item(client: Client, table: TableName):
         "list-key": ["hello", "world", "!"],
         "set-key-one": {"hello", "world", "hoge"},
         "set-key-two": {"world"},
+        "map-key": {"subkey": "othervalue"},
     }
 
 
@@ -245,3 +246,17 @@ async def test_empty_list(client: Client, table: TableName):
     await client.put_item(table, {**key, "l": [1]})
     await client.update_item(table, key, F("l").set([]))
     assert await client.get_item(table, key) == {"h": "h", "r": "r", "l": []}
+
+
+async def test_conditional_delete(client: Client, table: TableName):
+    key = {"h": "h", "r": "r"}
+    value = 1
+    value_key = "v"
+    values = {value_key: value}
+    await client.put_item(table, {**key, **values})
+    with pytest.raises(client.core.exceptions.ConditionalCheckFailedException):
+        await client.delete_item(table, key, condition=Attr(value_key).ne(value))
+    assert await client.get_item(table, key)
+    await client.delete_item(table, key)
+    with pytest.raises(ItemNotFound):
+        await client.get_item(table, key)
