@@ -1,6 +1,6 @@
-from typing import TypeVar, Dict, Any, List, Union, Callable
+from typing import Any, Callable, Dict, List, TypeVar, Union
 
-from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
+from boto3.dynamodb.types import TypeSerializer
 
 Item = TypeVar("Item", bound=Dict[str, Any])
 DynamoItem = TypeVar("DynamoItem", bound=Dict[str, Dict[str, Any]])
@@ -12,10 +12,9 @@ NOTHING = object()
 EMPTY = object()
 
 
-class BinaryTypeDeserializer(TypeDeserializer):
-    def _deserialize_b(self, value):
-        return value
-
-
 Serializer = TypeSerializer()
-Deserializer = BinaryTypeDeserializer()
+
+
+SIMPLE_TYPES = frozenset({"BOOL", "S", "B"})
+SIMPLE_SET_TYPES = frozenset({"SS", "BS"})
+NULL_TYPE = "NULL"

@@ -1,7 +1,9 @@
-import pytest
+from decimal import Decimal
 
+import pytest
 from aiodynamo import utils
-from aiodynamo.utils import clean, dy2py, remove_empty_strings
+from aiodynamo.utils import clean, deserialize, dy2py, remove_empty_strings
+from boto3.dynamodb.types import DYNAMODB_CONTEXT
 
 
 @pytest.mark.asyncio
@@ -42,7 +44,20 @@ def test_clean():
 
 
 def test_binary_decode():
-    assert dy2py({"test": {"B": b"hello"}}) == {"test": b"hello"}
+    assert dy2py({"test": {"B": b"hello"}}, float) == {"test": b"hello"}
+
+
+@pytest.mark.parametrize(
+    "value,numeric_type,result",
+    [
+        ({"N": "1.2",}, float, 1.2),
+        ({"NS": ["1.2"]}, float, {1.2}),
+        ({"N": "1.2"}, DYNAMODB_CONTEXT.create_decimal, Decimal("1.2")),
+        ({"NS": ["1.2"]}, DYNAMODB_CONTEXT.create_decimal, {Decimal("1.2")}),
+    ],
+)
+def test_numeric_decode(value, numeric_type, result):
+    assert deserialize(value, numeric_type) == result
 
 
 @pytest.mark.parametrize(

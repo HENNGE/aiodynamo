@@ -5,6 +5,7 @@ from typing import Any, AsyncIterator, Dict, List, TypeVar, Union
 
 import attr
 from boto3.dynamodb.conditions import ConditionBase, ConditionExpressionBuilder
+from boto3.dynamodb.types import DYNAMODB_CONTEXT
 from botocore.exceptions import ClientError
 
 from .errors import EmptyItem, ItemNotFound, TableNotFound
@@ -197,6 +198,8 @@ class Table:
 class Client:
     # core is an aiobotocore DynamoDB client, use aiobotocore.get_session().create_client("dynamodb") to create one.
     core = attr.ib()
+    # pass `float` if you want numeric types returned as floats
+    numeric_type = attr.ib(default=DYNAMODB_CONTEXT.create_decimal)
 
     def table(self, name: TableName) -> Table:
         return Table(self, name)
@@ -339,7 +342,7 @@ class Client:
             )
         )
         if "Attributes" in resp:
-            return dy2py(resp["Attributes"])
+            return dy2py(resp["Attributes"], self.numeric_type)
 
         else:
             return None
@@ -368,7 +371,7 @@ class Client:
             )
         )
         if "Item" in resp:
-            return dy2py(resp["Item"])
+            return dy2py(resp["Item"], self.numeric_type)
 
         else:
             raise ItemNotFound(key)
@@ -406,7 +409,7 @@ class Client:
             )
         )
         if "Attributes" in resp:
-            return dy2py(resp["Attributes"])
+            return dy2py(resp["Attributes"], self.numeric_type)
 
         else:
             return None
@@ -474,7 +477,7 @@ class Client:
             limit,
             "Limit",
         ):
-            yield dy2py(raw)
+            yield dy2py(raw, self.numeric_type)
 
     async def scan(
         self,
@@ -519,7 +522,7 @@ class Client:
             limit,
             "Limit",
         ):
-            yield dy2py(raw)
+            yield dy2py(raw, self.numeric_type)
 
     async def count(
         self,
@@ -611,7 +614,7 @@ class Client:
             )
         )
         if "Attributes" in resp:
-            return dy2py(resp["Attributes"])
+            return dy2py(resp["Attributes"], self.numeric_type)
 
         else:
             return None

@@ -24,8 +24,15 @@ aiohttp = ">=3.5.4"
 pytest = "^3.0"
 pytest-asyncio = "^0.10.0"
 pytest-cov = "^2.6"
-black = {version = "^18.3-alpha.0",allow-prereleases = true}
+black = {version = "^19.10b0",allow-prereleases = true}
 sphinx = "^1.8"
+pyperf = "^1.7.0"
+
+[tool.isort]
+line_length = "88"
+multi_line_output = "3"
+combine_as_imports = "1"
+include_trailing_comma = "True"
 
 [tool.isort]
 line_length = "88"
