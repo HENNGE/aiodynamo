@@ -39,7 +39,7 @@ class TimeToLiveStatus(Enum):
     disabled = "DISABLED"
 
 
-@attr.s(frozen=True)
+@attr.s(frozen=True, auto_attribs=True)
 class TimeToLiveDescription:
     table: str
     attribute: str
