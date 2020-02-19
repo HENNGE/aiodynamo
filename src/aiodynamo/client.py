@@ -258,7 +258,7 @@ class Client:
         response = await self.core.describe_time_to_live(TableName=table)
         return TimeToLiveDescription(
             table=table,
-            attribute=response["TimeToLiveDescription"]["AttributeName"],
+            attribute=response["TimeToLiveDescription"].get("AttributeName"),
             status=TimeToLiveStatus(
                 response["TimeToLiveDescription"]["TimeToLiveStatus"]
             ),

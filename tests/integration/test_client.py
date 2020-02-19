@@ -6,7 +6,7 @@ from aiobotocore import get_session
 from boto3.dynamodb import conditions
 from boto3.dynamodb.conditions import Key
 
-from aiodynamo.client import Client
+from aiodynamo.client import Client, TimeToLiveStatus
 from aiodynamo.types import TableName
 from aiodynamo.models import (
     Throughput,
@@ -245,3 +245,17 @@ async def test_empty_list(client: Client, table: TableName):
     await client.put_item(table, {**key, "l": [1]})
     await client.update_item(table, key, F("l").set([]))
     assert await client.get_item(table, key) == {"h": "h", "r": "r", "l": []}
+
+
+async def test_ttl(client: Client, table: TableName):
+    desc = await client.describe_time_to_live(table)
+    assert desc.status == TimeToLiveStatus.disabled
+    assert desc.attribute == None
+    await client.enable_time_to_live(table, "ttl")
+    enabled_desc = await client.describe_time_to_live(table)
+    assert enabled_desc.status == TimeToLiveStatus.enabled
+    assert enabled_desc.attribute == "ttl"
+    await client.disable_time_to_live(table, "ttl")
+    disabled_desc = await client.describe_time_to_live(table)
+    assert disabled_desc.status == TimeToLiveStatus.disabled
+    assert desc.attribute == None
