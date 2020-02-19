@@ -1,7 +1,10 @@
-import pytest
+from decimal import Decimal
+from functools import partial
 
+import pytest
 from aiodynamo import utils
-from aiodynamo.utils import clean, dy2py, remove_empty_strings
+from aiodynamo.utils import clean, deserialize, dy2py, remove_empty_strings
+from boto3.dynamodb.types import DYNAMODB_CONTEXT, TypeDeserializer
 
 
 @pytest.mark.asyncio
@@ -42,7 +45,20 @@ def test_clean():
 
 
 def test_binary_decode():
-    assert dy2py({"test": {"B": b"hello"}}) == {"test": b"hello"}
+    assert dy2py({"test": {"B": b"hello"}}, float) == {"test": b"hello"}
+
+
+@pytest.mark.parametrize(
+    "value,numeric_type,result",
+    [
+        ({"N": "1.2",}, float, 1.2),
+        ({"NS": ["1.2"]}, float, {1.2}),
+        ({"N": "1.2"}, DYNAMODB_CONTEXT.create_decimal, Decimal("1.2")),
+        ({"NS": ["1.2"]}, DYNAMODB_CONTEXT.create_decimal, {Decimal("1.2")}),
+    ],
+)
+def test_numeric_decode(value, numeric_type, result):
+    assert deserialize(value, numeric_type) == result
 
 
 @pytest.mark.parametrize(
@@ -51,3 +67,37 @@ def test_binary_decode():
 )
 def test_remove_empty_strings(item, result):
     assert dict(remove_empty_strings(item)) == result
+
+
+def test_fast_decode_compatibility():
+    def generate_item(nest):
+        item = {
+            "hash": {"S": "string",},
+            "range": {"B": b"bytes",},
+            "null": {"NULL": True},
+            "true": {"BOOL": True},
+            "false": {"BOOL": False},
+            "int": {"N": "42"},
+            "float": {"N": "4.2"},
+            "numeric_set": {"NS": ["42", "4.2"]},
+            "string_set": {"SS": ["hello", "world"]},
+            "binary_set": {"BS": [b"hello", b"world"]},
+        }
+        if nest:
+            item["list"] = {"L": [{"M": generate_item(False)}]}
+        return item
+
+    item = generate_item(True)
+
+    class BinaryDeserializer(TypeDeserializer):
+        def _deserialize_b(self, value):
+            return value
+
+    def deserialize_item(item, deserializer):
+        return {k: deserializer(v) for k, v in item.items()}
+
+    fast = deserialize_item(
+        item, partial(deserialize, numeric_type=DYNAMODB_CONTEXT.create_decimal)
+    )
+    boto = deserialize_item(item, BinaryDeserializer().deserialize)
+    assert fast == boto

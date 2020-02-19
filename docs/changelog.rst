@@ -7,7 +7,8 @@ Changelog
 Release Date: Unreleased
 
 * Added TTL support
-* Fixed a typo in `delete_item`
+* Fixed a typo in ``delete_item``
+* Improved item deserialization performance
 
 19.9
 ----

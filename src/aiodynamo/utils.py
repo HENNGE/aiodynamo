@@ -2,7 +2,15 @@ import collections
 from functools import wraps
 from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, Tuple, Union
 
-from .types import Deserializer, DynamoItem, EMPTY, Item, Serializer
+from .types import (
+    EMPTY,
+    NULL_TYPE,
+    SIMPLE_SET_TYPES,
+    SIMPLE_TYPES,
+    DynamoItem,
+    Item,
+    Serializer,
+)
 
 
 async def unroll(
@@ -71,8 +79,8 @@ def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:
     }
 
 
-def dy2py(data: DynamoItem) -> Item:
-    return {key: Deserializer.deserialize(value) for key, value in data.items()}
+def dy2py(data: DynamoItem, numeric_type: Callable[[str], Any]) -> Item:
+    return {key: deserialize(value, numeric_type) for key, value in data.items()}
 
 
 def check_empty_value(meth):
@@ -101,3 +109,26 @@ def maybe_immutable(thing: Any):
 
     else:
         return thing
+
+
+def deserialize(value: Dict[str, Any], numeric_type: Callable[[str], Any]) -> Any:
+    if not value:
+        raise TypeError(
+            "Value must be a nonempty dictionary whose key " "is a valid dynamodb type."
+        )
+    tag, val = next(iter(value.items()))
+    if tag in SIMPLE_TYPES:
+        return val
+    if tag == NULL_TYPE:
+        return None
+    if tag == "N":
+        return numeric_type(val)
+    if tag in SIMPLE_SET_TYPES:
+        return set(val)
+    if tag == "NS":
+        return {numeric_type(v) for v in val}
+    if tag == "L":
+        return [deserialize(v, numeric_type) for v in val]
+    if tag == "M":
+        return {k: deserialize(v, numeric_type) for k, v in val.items()}
+    raise TypeError(f"Dynamodb type {tag} is not supported")
