@@ -1,22 +1,22 @@
+from __future__ import annotations
+
 import abc
 import datetime
 from collections import defaultdict
+from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Dict, List, Any, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-import attr
-
-from .types import Path, PathEncoder, EncoderFunc, NOTHING, EMPTY
-from .utils import clean, ensure_not_empty, check_empty_value, maybe_immutable
-
+from .types import EMPTY, NOTHING, EncoderFunc, KeyPath, PathEncoder
+from .utils import check_empty_value, clean, ensure_not_empty, maybe_immutable
 
 ProjectionExpr = Union["ProjectionExpression", "F"]
 
 
-@attr.s
+@dataclass(frozen=True)
 class Throughput:
-    read: int = attr.ib()
-    write: int = attr.ib()
+    read: int
+    write: int
 
     def encode(self):
         return {"ReadCapacityUnits": self.read, "WriteCapacityUnits": self.write}
@@ -28,16 +28,16 @@ class KeyType(Enum):
     binary = "B"
 
 
-@attr.s
+@dataclass(frozen=True)
 class KeySpec:
-    name: str = attr.ib()
-    type: KeyType = attr.ib()
+    name: str
+    type: KeyType
 
 
-@attr.s
+@dataclass(frozen=True)
 class KeySchema:
-    hash_key: KeySpec = attr.ib()
-    range_key: KeySpec = attr.ib(default=None)
+    hash_key: KeySpec
+    range_key: Optional[KeySpec] = None
 
     def __iter__(self):
         yield self.hash_key
@@ -61,10 +61,10 @@ class ProjectionType(Enum):
     include = "INCLUDE"
 
 
-@attr.s
+@dataclass(frozen=True)
 class Projection:
-    type: ProjectionType = attr.ib()
-    attrs: List[str] = attr.ib(default=None)
+    type: ProjectionType
+    attrs: Optional[List[str]] = None
 
     def encode(self):
         encoded = {"ProjectionType": self.type.value}
@@ -73,11 +73,11 @@ class Projection:
         return encoded
 
 
-@attr.s
+@dataclass(frozen=True)
 class LocalSecondaryIndex:
-    name: str = attr.ib()
-    schema: KeySchema = attr.ib()
-    projection: Projection = attr.ib()
+    name: str
+    schema: KeySchema
+    projection: Projection
 
     def encode(self):
         return {
@@ -87,9 +87,9 @@ class LocalSecondaryIndex:
         }
 
 
-@attr.s
+@dataclass(frozen=True)
 class GlobalSecondaryIndex(LocalSecondaryIndex):
-    throughput: Throughput = attr.ib()
+    throughput: Throughput
 
     def encode(self):
         return {**super().encode(), "ProvisionedThroughput": self.throughput.encode()}
@@ -102,10 +102,10 @@ class StreamViewType(Enum):
     new_and_old_images = "NEW_AND_OLD_IMAGES"
 
 
-@attr.s
+@dataclass(frozen=True)
 class StreamSpecification:
-    enabled: bool = attr.ib(default=False)
-    view_type: StreamViewType = attr.ib(default=StreamViewType.new_and_old_images)
+    enabled: bool = False
+    view_type: StreamViewType = StreamViewType.new_and_old_images
 
     def encode(self):
         return clean(
@@ -140,13 +140,17 @@ class BaseAction(metaclass=abc.ABCMeta):
         ...
 
 
-@attr.s
+@dataclass(frozen=True)
 class SetAction(BaseAction):
-    path: Path = attr.ib()
-    value: Any = attr.ib(converter=ensure_not_empty)
-    ine: "F" = attr.ib(default=NOTHING)
+    path: KeyPath
+    _value: Any
+    ine: F = NOTHING
 
     type = ActionTypes.set
+
+    @property
+    def value(self) -> Any:
+        return ensure_not_empty(self._value)
 
     @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
@@ -157,15 +161,19 @@ class SetAction(BaseAction):
             return f"{N(self.path)} = {V(self.value)}"
 
     def if_not_exists(self, key: "F") -> "SetAction":
-        return attr.evolve(self, ine=key)
+        return replace(self, ine=key)
 
 
-@attr.s
+@dataclass(frozen=True)
 class ChangeAction(BaseAction):
-    path: Path = attr.ib()
-    value: Any = attr.ib(converter=ensure_not_empty)
+    path: KeyPath
+    _value: Any
 
     type = ActionTypes.set
+
+    @property
+    def value(self) -> Any:
+        return ensure_not_empty(self._value)
 
     @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
@@ -178,21 +186,25 @@ class ChangeAction(BaseAction):
         return f"{N(self.path)} = {N(self.path)} {op} {V(value)}"
 
 
-@attr.s
+@dataclass(frozen=True)
 class AppendAction(BaseAction):
-    path: Path = attr.ib()
-    value: Any = attr.ib(converter=ensure_not_empty)
+    path: KeyPath
+    _value: Any
 
     type = ActionTypes.set
+
+    @property
+    def value(self) -> Any:
+        return ensure_not_empty(self._value)
 
     @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
         return f"{N(self.path)} = list_append({N(self.path)}, {V(self.value)})"
 
 
-@attr.s
+@dataclass(frozen=True)
 class RemoveAction(BaseAction):
-    path: Path = attr.ib()
+    path: KeyPath
 
     type = ActionTypes.remove
 
@@ -200,24 +212,32 @@ class RemoveAction(BaseAction):
         return N(self.path)
 
 
-@attr.s
+@dataclass(frozen=True)
 class DeleteAction(BaseAction):
-    path: Path = attr.ib()
-    value: Any = attr.ib(converter=ensure_not_empty)
+    path: KeyPath
+    _value: Any
 
     type = ActionTypes.delete
+
+    @property
+    def value(self) -> Any:
+        return ensure_not_empty(self._value)
 
     @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
         return f"{N(self.path)} {V(self.value)}"
 
 
-@attr.s
+@dataclass(frozen=True)
 class AddAction(BaseAction):
-    path: Path = attr.ib()
-    value: Any = attr.ib(converter=ensure_not_empty)
+    path: KeyPath
+    _value: Any
 
     type = ActionTypes.add
+
+    @property
+    def value(self) -> Any:
+        return ensure_not_empty(self._value)
 
     @check_empty_value
     def _encode(self, N: PathEncoder, V: EncoderFunc):
@@ -226,7 +246,7 @@ class AddAction(BaseAction):
 
 class F:
     def __init__(self, *path):
-        self.path: Path = path
+        self.path: KeyPath = path
 
     def __and__(self, other: "F") -> "ProjectionExpression":
         pe = ProjectionExpression()
@@ -278,12 +298,12 @@ class UpdateExpression:
         return " ".join(part_list), name_encoder.finalize(), value_encoder.finalize()
 
 
-@attr.s
+@dataclass(frozen=True)
 class ProjectionExpression:
-    fields: List[F] = attr.ib(default=attr.Factory(list))
+    fields: List[F] = field(default_factory=list)
 
     def __and__(self, field: F) -> "ProjectionExpression":
-        return ProjectionExpression(self.fields + [field])
+        return replace(self, fields=self.fields + [field])
 
     def encode(self) -> Tuple[str, Dict[str, Any]]:
         name_encoder = Encoder("#N")
@@ -300,21 +320,21 @@ class TableStatus(Enum):
     active = "ACTIVE"
 
 
-@attr.s
+@dataclass(frozen=True)
 class TableDescription:
-    attributes: Dict[str, KeyType] = attr.ib()
-    created: datetime.datetime = attr.ib()
-    item_count: int = attr.ib()
-    key_schema: KeySchema = attr.ib()
-    throughput: Throughput = attr.ib()
-    status: TableStatus = attr.ib()
+    attributes: Dict[str, KeyType]
+    created: datetime.datetime
+    item_count: int
+    key_schema: KeySchema
+    throughput: Throughput
+    status: TableStatus
 
 
-@attr.s
+@dataclass(frozen=True)
 class Encoder:
-    prefix: str = attr.ib()
-    data: List[Any] = attr.ib(default=attr.Factory(list))
-    cache: Dict[Tuple[Any, Any], Any] = attr.ib(default=attr.Factory(dict))
+    prefix: str
+    data: List[Any] = field(default_factory=list)
+    cache: Dict[Tuple[Any, Any], Any] = field(default_factory=dict)
 
     def finalize(self) -> Dict[str, str]:
         return {f"{self.prefix}{index}": value for index, value in enumerate(self.data)}
@@ -335,7 +355,7 @@ class Encoder:
             self.cache[cache_key] = encoded
         return encoded
 
-    def encode_path(self, path: Path) -> str:
+    def encode_path(self, path: KeyPath) -> str:
         bits = [self.encode(path[0])]
         for part in path[1:]:
             if isinstance(part, int):

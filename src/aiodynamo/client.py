@@ -1,9 +1,12 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
 from enum import Enum, unique
 from functools import partial
 from itertools import chain
-from typing import Any, AsyncIterator, Dict, List, TypeVar, Union
+from typing import Any, AsyncIterator, Callable, Dict, List, TypeVar, Union
 
-import attr
+from aiobotocore.client import AioBaseClient
 from boto3.dynamodb.conditions import ConditionBase, ConditionExpressionBuilder
 from boto3.dynamodb.types import DYNAMODB_CONTEXT
 from botocore.exceptions import ClientError
@@ -40,16 +43,16 @@ class TimeToLiveStatus(Enum):
     disabled = "DISABLED"
 
 
-@attr.s(frozen=True, auto_attribs=True)
+@dataclass(frozen=True)
 class TimeToLiveDescription:
     table: str
     attribute: str
     status: TimeToLiveStatus
 
 
-@attr.s(frozen=True)
+@dataclass(frozen=True)
 class TimeToLive:
-    table: "Table" = attr.ib()
+    table: Table
 
     async def enable(self, attribute: str):
         await self.table.client.enable_time_to_live(self.table.name, attribute)
@@ -61,10 +64,10 @@ class TimeToLive:
         return await self.table.client.describe_time_to_live(self.table.name)
 
 
-@attr.s
+@dataclass(frozen=True)
 class Table:
-    client: "Client" = attr.ib()
-    name: TableName = attr.ib()
+    client: Client
+    name: TableName
 
     async def exists(self) -> bool:
         return await self.client.table_exists(self.name)
@@ -194,12 +197,12 @@ class Table:
         )
 
 
-@attr.s
+@dataclass(frozen=True)
 class Client:
     # core is an aiobotocore DynamoDB client, use aiobotocore.get_session().create_client("dynamodb") to create one.
-    core = attr.ib()
+    core: AioBaseClient
     # pass `float` if you want numeric types returned as floats
-    numeric_type = attr.ib(default=DYNAMODB_CONTEXT.create_decimal)
+    numeric_type: Callable[[str], Any] = DYNAMODB_CONTEXT.create_decimal
 
     def table(self, name: TableName) -> Table:
         return Table(self, name)

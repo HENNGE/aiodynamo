@@ -5,8 +5,8 @@ from boto3.dynamodb.types import TypeSerializer
 Item = TypeVar("Item", bound=Dict[str, Any])
 DynamoItem = TypeVar("DynamoItem", bound=Dict[str, Dict[str, Any]])
 TableName = TypeVar("TableName", bound=str)
-Path = List[Union[str, int]]
-PathEncoder = Callable[[Path], str]
+KeyPath = List[Union[str, int]]
+PathEncoder = Callable[[KeyPath], str]
 EncoderFunc = Callable[[Any], str]
 NOTHING = object()
 EMPTY = object()
