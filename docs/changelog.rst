@@ -1,6 +1,14 @@
 Changelog
 =========
 
+20.2
+----
+
+Release Date: Unreleased
+
+* Added TTL support
+* Fixed a typo in `delete_item`
+
 19.9
 ----
 
