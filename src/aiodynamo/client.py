@@ -1,33 +1,63 @@
+from enum import Enum, unique
 from functools import partial
 from itertools import chain
-from typing import List, Dict, Any, TypeVar, Union, AsyncIterator
+from typing import Any, AsyncIterator, Dict, List, TypeVar, Union
 
 import attr
 from boto3.dynamodb.conditions import ConditionBase, ConditionExpressionBuilder
 from botocore.exceptions import ClientError
 
-from .errors import ItemNotFound, TableNotFound, EmptyItem
+from .errors import EmptyItem, ItemNotFound, TableNotFound
 from .models import (
-    Throughput,
-    KeyType,
-    KeySpec,
-    KeySchema,
-    LocalSecondaryIndex,
     GlobalSecondaryIndex,
-    StreamSpecification,
-    ReturnValues,
-    UpdateExpression,
-    TableStatus,
-    TableDescription,
-    Select,
-    get_projection,
+    KeySchema,
+    KeySpec,
+    KeyType,
+    LocalSecondaryIndex,
     ProjectionExpr,
+    ReturnValues,
+    Select,
+    StreamSpecification,
+    TableDescription,
+    TableStatus,
+    Throughput,
+    UpdateExpression,
+    get_projection,
 )
 from .types import Item, TableName
-from .utils import unroll, py2dy, dy2py, clean
+from .utils import clean, dy2py, py2dy, unroll
 
 _Key = TypeVar("_Key")
 _Val = TypeVar("_Val")
+
+
+@unique
+class TimeToLiveStatus(Enum):
+    enabling = "ENABLING"
+    disabling = "DISABLING"
+    enabled = "ENABLED"
+    disabled = "DISABLED"
+
+
+@attr.s(frozen=True, auto_attribs=True)
+class TimeToLiveDescription:
+    table: str
+    attribute: str
+    status: TimeToLiveStatus
+
+
+@attr.s(frozen=True)
+class TimeToLive:
+    table: "Table" = attr.ib()
+
+    async def enable(self, attribute: str):
+        await self.table.client.enable_time_to_live(self.table.name, attribute)
+
+    async def disable(self, attribute: str):
+        await self.table.client.disable_time_to_live(self.table.name, attribute)
+
+    async def describe(self) -> TimeToLiveDescription:
+        return await self.table.client.describe_time_to_live(self.table.name)
 
 
 @attr.s
@@ -50,6 +80,10 @@ class Table:
         return await self.client.create_table(
             self.name, throughput, keys, lsis=lsis, gsis=gsis, stream=stream
         )
+
+    @property
+    def time_to_live(self):
+        return TimeToLive(self)
 
     async def describe(self) -> TableDescription:
         return await self.client.describe_table(self.name)
@@ -214,6 +248,28 @@ class Client:
         )
         return None
 
+    async def enable_time_to_live(self, table: TableName, attribute: str):
+        await self.core.update_time_to_live(
+            TableName=table,
+            TimeToLiveSpecification={"AttributeName": attribute, "Enabled": True},
+        )
+
+    async def describe_time_to_live(self, table: TableName) -> TimeToLiveDescription:
+        response = await self.core.describe_time_to_live(TableName=table)
+        return TimeToLiveDescription(
+            table=table,
+            attribute=response["TimeToLiveDescription"].get("AttributeName"),
+            status=TimeToLiveStatus(
+                response["TimeToLiveDescription"]["TimeToLiveStatus"]
+            ),
+        )
+
+    async def disable_time_to_live(self, table: TableName, attribute: str):
+        await self.core.update_time_to_live(
+            TableName=table,
+            TimeToLiveSpecification={"AttributeName": attribute, "Enabled": False},
+        )
+
     async def describe_table(self, name: TableName):
         try:
             response = await self.core.describe_table(TableName=name)
@@ -263,9 +319,11 @@ class Client:
             raise EmptyItem()
 
         if condition:
-            condition_expression, expression_attribute_names, expression_attribute_values = ConditionExpressionBuilder().build_expression(
-                condition
-            )
+            (
+                condition_expression,
+                expression_attribute_names,
+                expression_attribute_values,
+            ) = ConditionExpressionBuilder().build_expression(condition)
         else:
             condition_expression = (
                 expression_attribute_names
@@ -324,9 +382,11 @@ class Client:
         condition: ConditionBase = None
     ) -> Union[None, Item]:
         if condition:
-            condition_expression, expression_attribute_names, expression_attribute_values = ConditionExpressionBuilder().build_expression(
-                condition
-            )
+            (
+                condition_expression,
+                expression_attribute_names,
+                expression_attribute_values,
+            ) = ConditionExpressionBuilder().build_expression(condition)
         else:
             condition_expression = (
                 expression_attribute_names
@@ -523,9 +583,11 @@ class Client:
         condition: ConditionBase = None
     ) -> Union[Item, None]:
 
-        update_expression, expression_attribute_names, expression_attribute_values = (
-            update_expression.encode()
-        )
+        (
+            update_expression,
+            expression_attribute_names,
+            expression_attribute_values,
+        ) = update_expression.encode()
 
         if not update_expression:
             raise EmptyItem()

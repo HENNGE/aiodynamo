@@ -3,23 +3,22 @@ import uuid
 
 import pytest
 from aiobotocore import get_session
+from aiodynamo.client import Client, TimeToLiveStatus
+from aiodynamo.errors import EmptyItem, ItemNotFound, TableNotFound
+from aiodynamo.models import (
+    F,
+    KeySchema,
+    KeySpec,
+    KeyType,
+    ReturnValues,
+    TableStatus,
+    Throughput,
+)
+from aiodynamo.types import TableName
+from aiodynamo.utils import unroll
 from boto3.dynamodb import conditions
 from boto3.dynamodb.conditions import Key
-
-from aiodynamo.client import Client
-from aiodynamo.types import TableName
-from aiodynamo.models import (
-    Throughput,
-    KeyType,
-    KeySpec,
-    KeySchema,
-    ReturnValues,
-    F,
-    TableStatus,
-)
-from aiodynamo.errors import ItemNotFound, TableNotFound, EmptyItem
-from aiodynamo.utils import unroll
-
+from botocore.exceptions import ClientError
 
 pytestmark = pytest.mark.asyncio
 
@@ -245,3 +244,22 @@ async def test_empty_list(client: Client, table: TableName):
     await client.put_item(table, {**key, "l": [1]})
     await client.update_item(table, key, F("l").set([]))
     assert await client.get_item(table, key) == {"h": "h", "r": "r", "l": []}
+
+
+async def test_ttl(client: Client, table: TableName):
+    try:
+        desc = await client.describe_time_to_live(table)
+    except ClientError as err:
+        if err.response.get("Error", {}).get("Code") == "UnknownOperationException":
+            raise pytest.skip("TTL not supported by database")
+        raise
+    assert desc.status == TimeToLiveStatus.disabled
+    assert desc.attribute == None
+    await client.enable_time_to_live(table, "ttl")
+    enabled_desc = await client.describe_time_to_live(table)
+    assert enabled_desc.status == TimeToLiveStatus.enabled
+    assert enabled_desc.attribute == "ttl"
+    await client.disable_time_to_live(table, "ttl")
+    disabled_desc = await client.describe_time_to_live(table)
+    assert disabled_desc.status == TimeToLiveStatus.disabled
+    assert desc.attribute == None
