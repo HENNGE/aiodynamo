@@ -1,10 +1,16 @@
 import os
 import uuid
 
+import httpx
 import pytest
 from aiobotocore import get_session
 from aiodynamo.client import Client, TimeToLiveStatus
 from aiodynamo.errors import EmptyItem, ItemNotFound, TableNotFound
+from aiodynamo.fast.client import FastClient
+from aiodynamo.fast.credentials import Credentials
+from aiodynamo.fast.errors import UnknownOperation
+from aiodynamo.fast.http.aiohttp import AIOHTTP
+from aiodynamo.fast.http.httpx import HTTPX
 from aiodynamo.models import (
     F,
     KeySchema,
@@ -16,9 +22,11 @@ from aiodynamo.models import (
 )
 from aiodynamo.types import TableName
 from aiodynamo.utils import unroll
+from aiohttp import ClientSession
 from boto3.dynamodb import conditions
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
+from yarl import URL
 
 pytestmark = pytest.mark.asyncio
 
@@ -43,15 +51,22 @@ async def _cleanup(core, tables):
 
 
 @pytest.fixture
-async def core():
+def endpoint():
     if "DYNAMODB_URL" not in os.environ:
         raise pytest.skip("DYNAMODB_URL not defined in environment")
+    return os.environ["DYNAMODB_URL"]
+
+
+@pytest.fixture
+def region():
+    return os.environ.get("DYNAMODB_REGION", "us-east-1")
+
+
+@pytest.fixture
+async def core(endpoint, region):
 
     core = get_session().create_client(
-        "dynamodb",
-        endpoint_url=os.environ["DYNAMODB_URL"],
-        use_ssl=False,
-        region_name=os.environ.get("DYNAMODB_REGION", "us-east-1"),
+        "dynamodb", endpoint_url=endpoint, use_ssl=False, region_name=region,
     )
     tables = await _get_tables_list(core)
     try:
@@ -62,9 +77,18 @@ async def core():
         await core.close()
 
 
-@pytest.fixture
-async def client(core):
-    return Client(core)
+@pytest.fixture(params=["fast-aiohttp", "fast-httpx", "boto"])
+async def client(request, core, endpoint, region):
+    if request.param == "boto":
+        yield Client(core)
+    elif request.param == "fast-aiohttp":
+        async with ClientSession() as session:
+            http = AIOHTTP(session)
+            yield FastClient(http, Credentials.auto(), region, URL(endpoint))
+    elif request.param == "fast-httpx":
+        async with httpx.AsyncClient() as http_client:
+            http = HTTPX(http_client)
+            yield FastClient(http, Credentials.auto(), region, URL(endpoint))
 
 
 @pytest.fixture
@@ -249,6 +273,8 @@ async def test_empty_list(client: Client, table: TableName):
 async def test_ttl(client: Client, table: TableName):
     try:
         desc = await client.describe_time_to_live(table)
+    except UnknownOperation:
+        raise pytest.skip("TTL not supported by database")
     except ClientError as err:
         if err.response.get("Error", {}).get("Code") == "UnknownOperationException":
             raise pytest.skip("TTL not supported by database")

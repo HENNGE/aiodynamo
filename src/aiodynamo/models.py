@@ -4,13 +4,28 @@ import abc
 import datetime
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
-from enum import Enum
+from enum import Enum, unique
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from .types import EMPTY, NOTHING, EncoderFunc, KeyPath, PathEncoder
 from .utils import check_empty_value, clean, ensure_not_empty, maybe_immutable
 
 ProjectionExpr = Union["ProjectionExpression", "F"]
+
+
+@unique
+class TimeToLiveStatus(Enum):
+    enabling = "ENABLING"
+    disabling = "DISABLING"
+    enabled = "ENABLED"
+    disabled = "DISABLED"
+
+
+@dataclass(frozen=True)
+class TimeToLiveDescription:
+    table: str
+    attribute: str
+    status: TimeToLiveStatus
 
 
 @dataclass(frozen=True)
