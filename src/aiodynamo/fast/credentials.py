@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from functools import wraps
 from typing import *
 
@@ -105,6 +106,16 @@ def highlander(coro_func):
     return wrapper
 
 
+class Expiration(Enum):
+    not_expired = auto()
+    expires_soon = auto()
+    expired = auto()
+
+
+EXPIRES_SOON_THRESHOLD = datetime.timedelta(minutes=15)
+EXPIRED_THRESHOLD = datetime.timedelta(minutes=5)
+
+
 @dataclass(frozen=True)
 class Metadata:
     key: Key
@@ -113,11 +124,20 @@ class Metadata:
     def lives_longer_than(self, other: Metadata) -> bool:
         return self.expires > other.expires
 
-    def expires_soon(self) -> bool:
-        pass
+    def check_expiration(self) -> Expiration:
+        """
 
-    def expired(self) -> bool:
-        pass
+        :return:
+        """
+        now = datetime.datetime.utcnow()
+        if now >= self.expires:
+            return Expiration.expired
+        diff = self.expires - now
+        if diff < EXPIRED_THRESHOLD:
+            return Expiration.expired
+        if diff < EXPIRES_SOON_THRESHOLD:
+            return Expiration.expires_soon
+        return Expiration.not_expired
 
 
 class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
@@ -152,10 +172,14 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
 
     @highlander
     async def _check_metadata(self, http: HTTP):
-        if self._metadata is None or self._metadata.expired():
+        if self._metadata is None:
             await self._refresh(http)
             return
-        if self._metadata.expires_soon():
+        expiration = self._metadata.check_expiration()
+        if expiration is Expiration.expired:
+            await self._refresh(http)
+            return
+        elif expiration is Expiration.expires_soon:
             asyncio.create_task(self._maybe_refresh(http))
             return
         return self._metadata.key
