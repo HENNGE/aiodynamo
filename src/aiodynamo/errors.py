@@ -2,8 +2,7 @@ class ItemNotFound(Exception):
     pass
 
 
-class TableNotFound(Exception):
-    pass
+from .fast.errors import TableNotFound
 
 
 class EmptyItem(Exception):
