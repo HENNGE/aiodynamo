@@ -4,6 +4,7 @@ from typing import Any, Dict, Mapping, Optional
 from aiohttp import ClientSession
 from yarl import URL
 
+from ...types import Numeric
 from ..errors import exception_from_response
 from .base import HTTP, Headers, RequestFailed
 
@@ -12,9 +13,11 @@ from .base import HTTP, Headers, RequestFailed
 class AIOHTTP(HTTP):
     session: ClientSession
 
-    async def get(self, *, url: URL, headers: Optional[Headers] = None) -> bytes:
+    async def get(
+        self, *, url: URL, headers: Optional[Headers] = None, timeout: Numeric
+    ) -> bytes:
         async with self.session.request(
-            method="GET", url=url, headers=headers
+            method="GET", url=url, headers=headers, timeout=timeout
         ) as response:
             if response.status >= 400:
                 raise RequestFailed(

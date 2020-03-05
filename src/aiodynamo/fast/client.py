@@ -594,6 +594,10 @@ class FastClient:
         )
 
     async def _fast_depaginate(self, action, payload) -> AsyncIterator[Dict[str, Any]]:
+        """
+        This function consumes (mutates) the payload. Do not use the payload passed in
+        after calling this function.
+        """
         task = asyncio.create_task(self.send_request(action=action, payload=payload))
         try:
             while task:

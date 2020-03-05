@@ -2,6 +2,8 @@ from typing import Any, Callable, Dict, List, TypeVar, Union
 
 from boto3.dynamodb.types import TypeSerializer
 
+Numeric = Union[float, int]
+
 Item = TypeVar("Item", bound=Dict[str, Any])
 DynamoItem = TypeVar("DynamoItem", bound=Dict[str, Dict[str, Any]])
 TableName = TypeVar("TableName", bound=str)

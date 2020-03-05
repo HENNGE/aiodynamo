@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from httpx import AsyncClient
 from yarl import URL
 
+from ...types import Numeric
 from ..errors import exception_from_response
 from .base import HTTP, Headers, RequestFailed
 
@@ -13,8 +14,10 @@ from .base import HTTP, Headers, RequestFailed
 class HTTPX(HTTP):
     client: AsyncClient
 
-    async def get(self, *, url: URL, headers: Optional[Headers] = None) -> bytes:
-        response = await self.client.get(url, headers=headers)
+    async def get(
+        self, *, url: URL, headers: Optional[Headers] = None, timeout: Numeric
+    ) -> bytes:
+        response = await self.client.get(str(url), headers=headers, timeout=timeout)
         if response.status_code >= 400:
             raise RequestFailed(
                 url, response.status_code, await response.aread(), headers

@@ -14,6 +14,7 @@ from typing import *
 from aiohttp import ClientSession
 from yarl import URL
 
+from ..types import Numeric
 from .http.base import HTTP, Headers, TooManyRetries
 
 
@@ -125,11 +126,7 @@ class Metadata:
         return self.expires > other.expires
 
     def check_expiration(self) -> Expiration:
-        """
-
-        :return:
-        """
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         if now >= self.expires:
             return Expiration.expired
         diff = self.expires - now
@@ -140,6 +137,7 @@ class Metadata:
         return Expiration.not_expired
 
 
+@dataclass
 class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     async def _fetch_metadata(self, http: HTTP) -> Metadata:
@@ -151,11 +149,12 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
         http: HTTP,
         max_attempts: int,
         url: URL,
+        timeout: Numeric,
         headers: Optional[Headers] = None
     ) -> bytes:
         for attempt in range(max_attempts):
             try:
-                response = await http.get(url=url, headers=headers)
+                response = await http.get(url=url, headers=headers, timeout=timeout)
             except:
                 logging.exception("GET failed")
                 continue
@@ -163,12 +162,12 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
                 return response
         raise TooManyRetries()
 
-    def __init__(self):
+    def __post_init__(self):
         self._metadata: Optional[Metadata] = None
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
         await self._check_metadata(http)
-        return self._metadata.key
+        return self._metadata and self._metadata.key
 
     @highlander
     async def _check_metadata(self, http: HTTP):
@@ -218,9 +217,9 @@ def and_then(thing: Optional[T], mapper: Callable[[T], U]) -> Optional[U]:
 
 
 # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint.html
-@dataclass(frozen=True)
+@dataclass
 class ContainerMetadataCredentials(MetadataCredentials):
-    timeout: int = 2
+    timeout: Numeric = 2
     max_attempts: int = 3
     base_url: URL = URL("http://169.254.170.2")
     relative_uri: str = field(
@@ -248,7 +247,11 @@ class ContainerMetadataCredentials(MetadataCredentials):
             raise Disabled()
         headers = and_then(self.auth_token, lambda token: {"Authorization": token})
         response = await self.fetch_with_retry(
-            http=http, max_attempts=self.max_attempts, url=url, headers=headers
+            http=http,
+            max_attempts=self.max_attempts,
+            url=url,
+            headers=headers,
+            timeout=self.timeout,
         )
         data = json.loads(response)
         return Metadata(
@@ -262,9 +265,9 @@ class ContainerMetadataCredentials(MetadataCredentials):
 
 
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
-@dataclass(frozen=True)
+@dataclass
 class InstanceMetadataCredentials(MetadataCredentials):
-    timeout: int = 1
+    timeout: Numeric = 1
     max_attempts: int = 1
     base_url: URL = URL("http://169.254.169.254")
     disabled: bool = field(
@@ -282,12 +285,18 @@ class InstanceMetadataCredentials(MetadataCredentials):
         )
         role = (
             await self.fetch_with_retry(
-                http=http, max_attempts=self.max_attempts, url=role_url
+                http=http,
+                max_attempts=self.max_attempts,
+                url=role_url,
+                timeout=self.timeout,
             )
         ).decode("utf-8")
         credentials_url = role_url.join(URL(role))
         raw_credentials = await self.fetch_with_retry(
-            http=http, max_attempts=self.max_attempts, url=credentials_url
+            http=http,
+            max_attempts=self.max_attempts,
+            url=credentials_url,
+            timeout=self.timeout,
         )
         credentials = json.loads(raw_credentials)
         return Metadata(

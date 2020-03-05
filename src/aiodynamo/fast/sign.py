@@ -26,7 +26,7 @@ class Instant:
 
     @classmethod
     def now(cls):
-        return cls(datetime.datetime.utcnow())
+        return cls(datetime.datetime.now(datetime.timezone.utc))
 
     @property
     def timestamp(self) -> str:
