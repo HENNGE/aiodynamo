@@ -166,7 +166,10 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
         self._metadata: Optional[Metadata] = None
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
-        await self._check_metadata(http)
+        try:
+            await self._check_metadata(http)
+        except Disabled:
+            return None
         return self._metadata and self._metadata.key
 
     @highlander
