@@ -6,7 +6,7 @@ from pyperf import Runner
 from utils import TABLE_NAME, KEY_FIELD, KEY_VALUE, REGION_NAME
 
 
-def inner():
+async def inner():
     client = get_session().create_client("dynamodb", region_name=REGION_NAME)
     items = []
     lek = None
