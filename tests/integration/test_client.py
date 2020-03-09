@@ -221,7 +221,6 @@ async def test_ttl(client: Client, table: TableName):
     enabled_desc = await client.describe_time_to_live(table)
     assert enabled_desc.status == TimeToLiveStatus.enabled
     assert enabled_desc.attribute == "ttl"
-    await client.disable_time_to_live(table, "ttl")
-    disabled_desc = await client.describe_time_to_live(table)
-    assert disabled_desc.status == TimeToLiveStatus.disabled
-    assert desc.attribute == None
+    # cannot disable TTL and test that since TTL changes can take up to one
+    # hour to complete and other calls to UpdateTimeToLive are not allowed.
+    # See: https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTimeToLive.html
