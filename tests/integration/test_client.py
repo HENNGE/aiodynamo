@@ -21,7 +21,6 @@ from aiodynamo.models import (
     Throughput,
 )
 from aiodynamo.types import TableName
-from aiodynamo.utils import unroll
 from aiohttp import ClientSession
 from boto3.dynamodb import conditions
 from boto3.dynamodb.conditions import Key
@@ -31,27 +30,10 @@ from yarl import URL
 pytestmark = pytest.mark.asyncio
 
 
-def _get_tables(core):
-    return unroll(
-        core.list_tables,
-        "ExclusiveStartTableName",
-        "LastEvaluatedTableName",
-        "TableNames",
-    )
-
-
-async def _get_tables_list(core):
-    return [table async for table in _get_tables(core)]
-
-
-async def _cleanup(core, tables):
-    async for table in _get_tables(core):
-        if table not in tables:
-            await core.delete_table(TableName=table)
-
-
 @pytest.fixture
 def endpoint():
+    if os.environ.get("TEST_ON_AWS", "false") == "true":
+        return None
     if "DYNAMODB_URL" not in os.environ:
         raise pytest.skip("DYNAMODB_URL not defined in environment")
     return os.environ["DYNAMODB_URL"]
@@ -64,16 +46,16 @@ def region():
 
 @pytest.fixture
 async def core(endpoint, region):
-
-    core = get_session().create_client(
-        "dynamodb", endpoint_url=endpoint, use_ssl=False, region_name=region,
-    )
-    tables = await _get_tables_list(core)
+    if endpoint is None:
+        core = get_session().create_client("dynamodb", region_name=region)
+    else:
+        core = get_session().create_client(
+            "dynamodb", endpoint_url=endpoint, use_ssl=False, region_name=region,
+        )
     try:
         yield core
 
     finally:
-        await _cleanup(core, tables)
         await core.close()
 
 
@@ -99,7 +81,10 @@ async def table(client: Client):
         Throughput(5, 5),
         KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
     )
-    return name
+    try:
+        yield name
+    finally:
+        await client.delete_table(name)
 
 
 async def test_put_get_item(client: Client, table: TableName):
