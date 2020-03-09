@@ -21,6 +21,7 @@ from ..models import (
     StreamSpecification,
     TableDescription,
     TableStatus,
+    ThrottleConfig,
     Throughput,
     TimeToLiveDescription,
     TimeToLiveStatus,
@@ -31,7 +32,7 @@ from ..models import (
 from ..types import Item, TableName
 from ..utils import dy2py, py2dy
 from .credentials import Credentials
-from .errors import TableDidNotBecomeActive, TableDidNotBecomeDisabled
+from .errors import TableDidNotBecomeActive, TableDidNotBecomeDisabled, Throttled
 from .http.base import HTTP
 from .sign import signed_dynamo_request
 
@@ -199,6 +200,7 @@ class FastClient:
     region: str
     endpoint: Optional[URL] = None
     numeric_type: Callable[[Any], Any] = float
+    throttle_config: ThrottleConfig = ThrottleConfig.default()
 
     async def table_exists(self, name: TableName) -> bool:
         try:
@@ -303,9 +305,7 @@ class FastClient:
         else:
             attributes = None
         if "CreationDateTime" in description:
-            creation_time = datetime.datetime.fromtimestamp(
-                description["CreationDateTime"], datetime.timezone.utc
-            )
+            creation_time = description["CreationDateTime"]
         else:
             creation_time = None
         if attributes and "KeySchema" in description:
@@ -646,9 +646,16 @@ class FastClient:
             region=self.region,
             endpoint=self.endpoint,
         )
-        return await self.http.post(
-            url=request.url, headers=request.headers, body=request.body
-        )
+        attempt = 0
+        while attempt < self.throttle_config.max_attempts:
+            try:
+                return await self.http.post(
+                    url=request.url, headers=request.headers, body=request.body
+                )
+            except Throttled:
+                await asyncio.sleep(self.throttle_config.delay_func(attempt))
+                attempt += 1
+        raise Throttled()
 
     async def _fast_depaginate(self, action, payload) -> AsyncIterator[Dict[str, Any]]:
         """

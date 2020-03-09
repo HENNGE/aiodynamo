@@ -5,9 +5,9 @@ import datetime
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from enum import Enum, unique
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-from .types import EMPTY, NOTHING, EncoderFunc, KeyPath, PathEncoder
+from .types import EMPTY, NOTHING, EncoderFunc, KeyPath, Numeric, PathEncoder
 from .utils import check_empty_value, clean, ensure_not_empty, maybe_immutable
 
 ProjectionExpr = Union["ProjectionExpression", "F"]
@@ -409,3 +409,13 @@ class WaitConfig:
     @classmethod
     def default(cls):
         return WaitConfig(25, 20)
+
+
+@dataclass(frozen=True)
+class ThrottleConfig:
+    max_attempts: int
+    delay_func: Callable[[int], Numeric]
+
+    @classmethod
+    def default(cls):
+        return ThrottleConfig(5, lambda attempt: attempt + 1)

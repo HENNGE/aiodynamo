@@ -108,6 +108,10 @@ class TableDidNotBecomeDisabled(AIODynamoError):
     pass
 
 
+class Throttled(AIODynamoError):
+    pass
+
+
 ERRORS = {
     "ResourceNotFoundException": TableNotFound,
     "UnknownOperationException": UnknownOperation,
@@ -130,6 +134,7 @@ ERRORS = {
     "TransactionCanceledException": TransactionCanceled,
     "ReplicaAlreadyExistsException": ReplicaAlreadyExists,
     "ReplicaNotFoundException": ReplicaNotFound,
+    "ThrottlingException": Throttled,
 }
 
 
