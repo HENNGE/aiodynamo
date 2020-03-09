@@ -15,6 +15,11 @@ from yarl import URL
 
 
 @pytest.fixture
+def table_name_prefix() -> str:
+    return os.environ.get("DYNAMODB_TABLE_PREFIX", "")
+
+
+@pytest.fixture
 def endpoint():
     if os.environ.get("TEST_ON_AWS", "false") == "true":
         return None
@@ -58,8 +63,8 @@ async def client(request, core, endpoint, region):
 
 
 @pytest.fixture
-async def table(client: Client):
-    name = str(uuid.uuid4())
+async def table(client: Client, table_name_prefix: str):
+    name = table_name_prefix + str(uuid.uuid4())
     await client.create_table(
         name,
         Throughput(5, 5),

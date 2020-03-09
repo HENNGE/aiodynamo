@@ -117,8 +117,8 @@ async def test_delete_item(client: Client, table: TableName):
         await client.get_item(table, item)
 
 
-async def test_delete_table(client: Client):
-    name = str(uuid.uuid4())
+async def test_delete_table(client: Client, table_name_prefix: str):
+    name = table_name_prefix + str(uuid.uuid4())
     await client.create_table(
         name,
         Throughput(5, 5),
