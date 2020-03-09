@@ -100,6 +100,10 @@ class ReplicaNotFound(AIODynamoError):
     pass
 
 
+class TableDidNotBecomeActive(AIODynamoError):
+    pass
+
+
 ERRORS = {
     "ResourceNotFoundException": TableNotFound,
     "UnknownOperationException": UnknownOperation,

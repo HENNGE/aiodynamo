@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from functools import partial
 from itertools import chain
@@ -11,6 +12,7 @@ from boto3.dynamodb.types import DYNAMODB_CONTEXT
 from botocore.exceptions import ClientError
 
 from .errors import EmptyItem, ItemNotFound, TableNotFound
+from .fast.errors import TableDidNotBecomeActive
 from .models import (
     GlobalSecondaryIndex,
     KeySchema,
@@ -65,10 +67,17 @@ class Table:
         *,
         lsis: List[LocalSecondaryIndex] = None,
         gsis: List[GlobalSecondaryIndex] = None,
-        stream: StreamSpecification = None
+        stream: StreamSpecification = None,
+        wait_for_active: bool = False
     ):
         return await self.client.create_table(
-            self.name, throughput, keys, lsis=lsis, gsis=gsis, stream=stream
+            self.name,
+            throughput,
+            keys,
+            lsis=lsis,
+            gsis=gsis,
+            stream=stream,
+            wait_for_active=wait_for_active,
         )
 
     @property
@@ -209,7 +218,8 @@ class Client:
         *,
         lsis: List[LocalSecondaryIndex] = None,
         gsis: List[GlobalSecondaryIndex] = None,
-        stream: StreamSpecification = None
+        stream: StreamSpecification = None,
+        wait_for_active: bool = False
     ):
         lsis: List[LocalSecondaryIndex] = lsis or []
         gsis: List[GlobalSecondaryIndex] = gsis or []
@@ -238,6 +248,14 @@ class Client:
                 StreamSpecification=stream_specification,
             )
         )
+        if wait_for_active:
+            attempts = 0
+            while attempts < 25:
+                if await self.table_exists(name):
+                    return
+                attempts += 1
+                await asyncio.sleep(20)
+            raise TableDidNotBecomeActive()
         return None
 
     async def enable_time_to_live(self, table: TableName, attribute: str):

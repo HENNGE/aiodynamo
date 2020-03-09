@@ -64,6 +64,7 @@ async def table(client: Client):
         name,
         Throughput(5, 5),
         KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
+        wait_for_active=True,
     )
     try:
         yield name

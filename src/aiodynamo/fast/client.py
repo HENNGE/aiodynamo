@@ -29,6 +29,7 @@ from ..models import (
 from ..types import Item, TableName
 from ..utils import dy2py, py2dy
 from .credentials import Credentials
+from .errors import TableDidNotBecomeActive
 from .http.base import HTTP
 from .sign import signed_dynamo_request
 
@@ -63,9 +64,16 @@ class FastTable:
         lsis: List[LocalSecondaryIndex] = None,
         gsis: List[GlobalSecondaryIndex] = None,
         stream: StreamSpecification = None,
+        wait_for_active: bool = False,
     ):
         return await self.client.create_table(
-            self.name, throughput, keys, lsis=lsis, gsis=gsis, stream=stream
+            self.name,
+            throughput,
+            keys,
+            lsis=lsis,
+            gsis=gsis,
+            stream=stream,
+            wait_for_active=wait_for_active,
         )
 
     @property
@@ -205,6 +213,7 @@ class FastClient:
         lsis: List[LocalSecondaryIndex] = None,
         gsis: List[GlobalSecondaryIndex] = None,
         stream: StreamSpecification = None,
+        wait_for_active: bool = False,
     ):
         attributes = keys.to_attributes()
         if lsis is not None:
@@ -231,6 +240,14 @@ class FastClient:
             payload["StreamSpecification"] = stream.encode()
 
         await self.send_request(action="CreateTable", payload=payload)
+        if wait_for_active:
+            attempts = 0
+            while attempts < 25:
+                if await self.table_exists(name):
+                    return
+                attempts += 1
+                await asyncio.sleep(20)
+            raise TableDidNotBecomeActive()
 
     async def enable_time_to_live(self, table: TableName, attribute: str):
         await self.set_time_to_live(table, attribute, True)
