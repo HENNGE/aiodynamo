@@ -55,11 +55,21 @@ async def client(request, core, endpoint, region):
     elif request.param == "fast-aiohttp":
         async with ClientSession() as session:
             http = AIOHTTP(session)
-            yield FastClient(http, Credentials.auto(), region, URL(endpoint))
+            yield FastClient(
+                http,
+                Credentials.auto(),
+                region,
+                URL(endpoint) if endpoint is not None else endpoint,
+            )
     elif request.param == "fast-httpx":
         async with httpx.AsyncClient() as http_client:
             http = HTTPX(http_client)
-            yield FastClient(http, Credentials.auto(), region, URL(endpoint))
+            yield FastClient(
+                http,
+                Credentials.auto(),
+                region,
+                URL(endpoint) if endpoint is not None else endpoint,
+            )
 
 
 @pytest.fixture
