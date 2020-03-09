@@ -551,9 +551,15 @@ class FastClient:
         if select:
             payload["Select"] = select.value
 
+        got = 0
+
         async for result in self._fast_depaginate("Query", payload):
             for item in result["Items"]:
                 yield dy2py(item, self.numeric_type)
+                if limit:
+                    got += 1
+                    if got >= limit:
+                        return
 
     async def scan(
         self,
@@ -595,9 +601,14 @@ class FastClient:
             payload["ExpressionAttributeNames"] = expression_attribute_names
             payload["ExpressionAttributeValues"] = py2dy(expression_attribute_values)
 
+        got = 0
         async for result in self._fast_depaginate("Scan", payload):
             for item in result["Items"]:
                 yield dy2py(item, self.numeric_type)
+                if limit:
+                    got += 1
+                    if got >= limit:
+                        return
 
     async def count(
         self,
@@ -709,7 +720,9 @@ class FastClient:
                 attempt += 1
         raise Throttled()
 
-    async def _fast_depaginate(self, action, payload) -> AsyncIterator[Dict[str, Any]]:
+    async def _fast_depaginate(
+        self, action: str, payload: Dict[str, Any]
+    ) -> AsyncIterator[Dict[str, Any]]:
         """
         This function consumes (mutates) the payload. Do not use the payload passed in
         after calling this function.

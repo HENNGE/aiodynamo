@@ -224,3 +224,23 @@ async def test_ttl(client: Client, table: TableName):
     # cannot disable TTL and test that since TTL changes can take up to one
     # hour to complete and other calls to UpdateTimeToLive are not allowed.
     # See: https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTimeToLive.html
+
+
+async def test_query_with_limit(client: Client, table: TableName):
+    item1 = {"h": "h", "r": "1", "d": "x"}
+    item2 = {"h": "h", "r": "2", "d": "y"}
+    await client.put_item(table, item1)
+    await client.put_item(table, item2)
+    items = [item async for item in client.query(table, Key("h").eq("h"), limit=1)]
+    assert len(items) == 1
+    assert items[0] == item1
+
+
+async def test_scan_with_limit(client: Client, table: TableName):
+    item1 = {"h": "h", "r": "1", "d": "x"}
+    item2 = {"h": "h", "r": "2", "d": "y"}
+    await client.put_item(table, item1)
+    await client.put_item(table, item2)
+    items = [item async for item in client.scan(table, limit=1)]
+    assert len(items) == 1
+    assert items[0] == item1
