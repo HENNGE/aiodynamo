@@ -15,6 +15,7 @@ from aiohttp import ClientSession
 from yarl import URL
 
 from ..types import Numeric
+from ..utils import parse_amazon_timestamp
 from .http.base import HTTP, Headers, TooManyRetries
 
 
@@ -310,9 +311,3 @@ class InstanceMetadataCredentials(MetadataCredentials):
             ),
             expires=parse_amazon_timestamp(credentials["Expiration"]),
         )
-
-
-def parse_amazon_timestamp(timestamp: str) -> datetime.datetime:
-    return datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
-        tzinfo=datetime.timezone.utc
-    )

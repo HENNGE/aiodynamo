@@ -133,3 +133,9 @@ def deserialize(value: Dict[str, Any], numeric_type: Callable[[str], Any]) -> An
     if tag == "M":
         return {k: deserialize(v, numeric_type) for k, v in val.items()}
     raise TypeError(f"Dynamodb type {tag} is not supported")
+
+
+def parse_amazon_timestamp(timestamp: str) -> datetime.datetime:
+    return datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=datetime.timezone.utc
+    )

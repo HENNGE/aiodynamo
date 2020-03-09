@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 from dataclasses import dataclass
 from typing import *
 
@@ -294,26 +295,43 @@ class FastClient:
         )
 
         description = response["Table"]
-        attributes: Dict[str, KeyType] = {
-            attribute["AttributeName"]: KeyType(attribute["AttributeType"])
-            for attribute in description["AttributeDefinitions"]
-        }
-        return TableDescription(
-            attributes=attributes,
-            created=description["CreationDateTime"],
-            item_count=description["ItemCount"],
-            key_schema=KeySchema(
+        if "AttributeDefinitions" in description:
+            attributes = {
+                attribute["AttributeName"]: KeyType(attribute["AttributeType"])
+                for attribute in description["AttributeDefinitions"]
+            }
+        else:
+            attributes = None
+        if "CreationDateTime" in description:
+            creation_time = datetime.datetime.fromtimestamp(
+                description["CreationDateTime"], datetime.timezone.utc
+            )
+        else:
+            creation_time = None
+        if attributes and "KeySchema" in description:
+            key_schema = KeySchema(
                 *[
                     KeySpec(
                         name=key["AttributeName"], type=attributes[key["AttributeName"]]
                     )
                     for key in description["KeySchema"]
                 ]
-            ),
-            throughput=Throughput(
+            )
+        else:
+            key_schema = None
+        if "ProvisionedThroughput" in description:
+            throughput = Throughput(
                 read=description["ProvisionedThroughput"]["ReadCapacityUnits"],
                 write=description["ProvisionedThroughput"]["WriteCapacityUnits"],
-            ),
+            )
+        else:
+            throughput = None
+        return TableDescription(
+            attributes=attributes,
+            created=creation_time,
+            item_count=description.get("ItemCount", None),
+            key_schema=key_schema,
+            throughput=throughput,
             status=TableStatus(description["TableStatus"]),
         )
 

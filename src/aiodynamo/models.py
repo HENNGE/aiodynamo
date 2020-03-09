@@ -337,11 +337,11 @@ class TableStatus(Enum):
 
 @dataclass(frozen=True)
 class TableDescription:
-    attributes: Dict[str, KeyType]
-    created: datetime.datetime
-    item_count: int
-    key_schema: KeySchema
-    throughput: Throughput
+    attributes: Optional[Dict[str, KeyType]]
+    created: Optional[datetime.datetime]
+    item_count: Optional[int]
+    key_schema: Optional[KeySchema]
+    throughput: Optional[Throughput]
     status: TableStatus
 
 
