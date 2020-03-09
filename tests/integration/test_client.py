@@ -170,13 +170,16 @@ async def test_exists(client: Client, table_name_prefix: str):
     await client.create_table(
         name, throughput, key_schema, wait_for_active=WaitConfig(25, 5)
     )
-    assert await client.table_exists(name)
-    desc = await client.describe_table(name)
-    assert desc.throughput == throughput
-    assert desc.status is TableStatus.active
-    assert desc.attributes == attrs
-    assert desc.key_schema == key_schema
-    assert desc.item_count == 0
+    try:
+        assert await client.table_exists(name)
+        desc = await client.describe_table(name)
+        assert desc.throughput == throughput
+        assert desc.status is TableStatus.active
+        assert desc.attributes == attrs
+        assert desc.key_schema == key_schema
+        assert desc.item_count == 0
+    finally:
+        await client.delete_table(name)
 
 
 async def test_empty_string(client: Client, table: TableName):

@@ -32,7 +32,12 @@ from ..models import (
 from ..types import Item, TableName
 from ..utils import dy2py, py2dy
 from .credentials import Credentials
-from .errors import TableDidNotBecomeActive, TableDidNotBecomeDisabled, Throttled
+from .errors import (
+    TableDidNotBecomeActive,
+    TableDidNotBecomeDisabled,
+    Throttled,
+    TimeToLiveStatusNotChanged,
+)
 from .http.base import HTTP
 from .sign import signed_dynamo_request
 
@@ -41,11 +46,19 @@ from .sign import signed_dynamo_request
 class FastTimeToLive:
     table: FastTable
 
-    async def enable(self, attribute: str):
-        await self.table.client.enable_time_to_live(self.table.name, attribute)
+    async def enable(
+        self, attribute: str, *, wait_for_enabled: Union[bool, WaitConfig] = False
+    ):
+        await self.table.client.enable_time_to_live(
+            self.table.name, attribute, wait_for_enabled=wait_for_enabled
+        )
 
-    async def disable(self, attribute: str):
-        await self.table.client.disable_time_to_live(self.table.name, attribute)
+    async def disable(
+        self, attribute: str, *, wait_for_disabled: Union[bool, WaitConfig] = False
+    ):
+        await self.table.client.disable_time_to_live(
+            self.table.name, attribute, wait_for_disabled=wait_for_disabled
+        )
 
     async def describe(self) -> TimeToLiveDescription:
         return await self.table.client.describe_time_to_live(self.table.name)
@@ -261,8 +274,16 @@ class FastClient:
                 await asyncio.sleep(wait_for_active.retry_delay)
             raise TableDidNotBecomeActive()
 
-    async def enable_time_to_live(self, table: TableName, attribute: str):
-        await self.set_time_to_live(table, attribute, True)
+    async def enable_time_to_live(
+        self,
+        table: TableName,
+        attribute: str,
+        *,
+        wait_for_enabled: Union[bool, WaitConfig] = False,
+    ):
+        await self.set_time_to_live(
+            table, attribute, True, wait_for_change=wait_for_enabled
+        )
 
     async def describe_time_to_live(self, table: TableName) -> TimeToLiveDescription:
         response = await self.send_request(
@@ -276,10 +297,25 @@ class FastClient:
             ),
         )
 
-    async def disable_time_to_live(self, table: TableName, attribute: str):
-        await self.set_time_to_live(table, attribute, False)
+    async def disable_time_to_live(
+        self,
+        table: TableName,
+        attribute: str,
+        *,
+        wait_for_disabled: Union[bool, WaitConfig] = False,
+    ):
+        await self.set_time_to_live(
+            table, attribute, False, wait_for_change=wait_for_disabled
+        )
 
-    async def set_time_to_live(self, table: TableName, attribute: str, status: bool):
+    async def set_time_to_live(
+        self,
+        table: TableName,
+        attribute: str,
+        status: bool,
+        *,
+        wait_for_change: Union[bool, WaitConfig] = False,
+    ):
         await self.send_request(
             action="UpdateTimeToLive",
             payload={
@@ -290,6 +326,20 @@ class FastClient:
                 },
             },
         )
+        if wait_for_change:
+            result_state = (
+                TimeToLiveStatus.enabled if status else TimeToLiveStatus.disabled
+            )
+            if not isinstance(wait_for_change, WaitConfig):
+                wait_for_change = WaitConfig.default()
+            attempts = 0
+            while attempts < wait_for_change.max_attempts:
+                description = await self.describe_time_to_live(table)
+                if description.status == result_state:
+                    return
+                attempts += 1
+                await asyncio.sleep(wait_for_change.retry_delay)
+            raise TimeToLiveStatusNotChanged()
 
     async def describe_table(self, name: TableName):
         response = await self.send_request(
@@ -305,7 +355,9 @@ class FastClient:
         else:
             attributes = None
         if "CreationDateTime" in description:
-            creation_time = description["CreationDateTime"]
+            creation_time = datetime.datetime.fromtimestamp(
+                description["CreationDateTime"], datetime.timezone.utc
+            )
         else:
             creation_time = None
         if attributes and "KeySchema" in description:

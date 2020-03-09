@@ -112,6 +112,14 @@ class Throttled(AIODynamoError):
     pass
 
 
+class ValidationException(AIODynamoError):
+    pass
+
+
+class TimeToLiveStatusNotChanged(AIODynamoError):
+    pass
+
+
 ERRORS = {
     "ResourceNotFoundException": TableNotFound,
     "UnknownOperationException": UnknownOperation,
@@ -135,6 +143,7 @@ ERRORS = {
     "ReplicaAlreadyExistsException": ReplicaAlreadyExists,
     "ReplicaNotFoundException": ReplicaNotFound,
     "ThrottlingException": Throttled,
+    "ValidationException": ValidationException,
 }
 
 
@@ -142,6 +151,7 @@ def exception_from_response(status: int, body: bytes) -> Exception:
     if status == 500:
         return InternalDynamoError()
     try:
-        return ERRORS[json.loads(body)["__type"].split("#", 1)[1]]()
+        data = json.loads(body)
+        return ERRORS[data["__type"].split("#", 1)[1]](data)
     except:
         return UnknownError(status, body)

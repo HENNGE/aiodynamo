@@ -13,7 +13,11 @@ from boto3.dynamodb.types import DYNAMODB_CONTEXT
 from botocore.exceptions import ClientError
 
 from .errors import EmptyItem, ItemNotFound, TableNotFound
-from .fast.errors import TableDidNotBecomeActive, TableDidNotBecomeDisabled
+from .fast.errors import (
+    TableDidNotBecomeActive,
+    TableDidNotBecomeDisabled,
+    TimeToLiveStatusNotChanged,
+)
 from .models import (
     GlobalSecondaryIndex,
     KeySchema,
@@ -44,11 +48,19 @@ _Val = TypeVar("_Val")
 class TimeToLive:
     table: Table
 
-    async def enable(self, attribute: str):
-        await self.table.client.enable_time_to_live(self.table.name, attribute)
+    async def enable(
+        self, attribute: str, *, wait_for_enabled: Union[bool, WaitConfig] = False
+    ):
+        await self.table.client.enable_time_to_live(
+            self.table.name, attribute, wait_for_enabled=wait_for_enabled
+        )
 
-    async def disable(self, attribute: str):
-        await self.table.client.disable_time_to_live(self.table.name, attribute)
+    async def disable(
+        self, attribute: str, *, wait_for_disabled: Union[bool, WaitConfig] = False
+    ):
+        await self.table.client.disable_time_to_live(
+            self.table.name, attribute, wait_for_disabled=wait_for_disabled
+        )
 
     async def describe(self) -> TimeToLiveDescription:
         return await self.table.client.describe_time_to_live(self.table.name)
@@ -70,7 +82,7 @@ class Table:
         lsis: List[LocalSecondaryIndex] = None,
         gsis: List[GlobalSecondaryIndex] = None,
         stream: StreamSpecification = None,
-        wait_for_active: Union[bool, WaitConfig] = False
+        wait_for_active: Union[bool, WaitConfig] = False,
     ):
         return await self.client.create_table(
             self.name,
@@ -99,7 +111,7 @@ class Table:
         key: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None
+        condition: ConditionBase = None,
     ) -> Union[None, Item]:
         return await self.client.delete_item(
             self.name, key, return_values=return_values, condition=condition
@@ -115,7 +127,7 @@ class Table:
         item: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None
+        condition: ConditionBase = None,
     ) -> Union[None, Item]:
         return await self.client.put_item(
             self.name, item, return_values=return_values, condition=condition
@@ -131,7 +143,7 @@ class Table:
         index: str = None,
         limit: int = None,
         projection: ProjectionExpr = None,
-        select: Select = Select.all_attributes
+        select: Select = Select.all_attributes,
     ) -> AsyncIterator[Item]:
         return self.client.query(
             self.name,
@@ -152,7 +164,7 @@ class Table:
         limit: int = None,
         start_key: Dict[str, Any] = None,
         projection: ProjectionExpr = None,
-        filter_expression: ConditionBase = None
+        filter_expression: ConditionBase = None,
     ) -> AsyncIterator[Item]:
         return self.client.scan(
             self.name,
@@ -169,7 +181,7 @@ class Table:
         *,
         start_key: Dict[str, Any] = None,
         filter_expression: ConditionBase = None,
-        index: str = None
+        index: str = None,
     ) -> int:
         return await self.client.count(
             self.name,
@@ -185,7 +197,7 @@ class Table:
         update_expression: UpdateExpression,
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None
+        condition: ConditionBase = None,
     ) -> Union[Item, None]:
         return await self.client.update_item(
             self.name,
@@ -223,7 +235,7 @@ class Client:
         lsis: List[LocalSecondaryIndex] = None,
         gsis: List[GlobalSecondaryIndex] = None,
         stream: StreamSpecification = None,
-        wait_for_active: Union[bool, WaitConfig] = False
+        wait_for_active: Union[bool, WaitConfig] = False,
     ):
         lsis: List[LocalSecondaryIndex] = lsis or []
         gsis: List[GlobalSecondaryIndex] = gsis or []
@@ -264,11 +276,28 @@ class Client:
             raise TableDidNotBecomeActive()
         return None
 
-    async def enable_time_to_live(self, table: TableName, attribute: str):
+    async def enable_time_to_live(
+        self,
+        table: TableName,
+        attribute: str,
+        *,
+        wait_for_enabled: Union[bool, WaitConfig] = False,
+    ):
         await self.core.update_time_to_live(
             TableName=table,
             TimeToLiveSpecification={"AttributeName": attribute, "Enabled": True},
         )
+        if wait_for_enabled:
+            if not isinstance(wait_for_enabled, WaitConfig):
+                wait_for_enabled = WaitConfig.default()
+            attempts = 0
+            while attempts < wait_for_enabled.max_attempts:
+                description = await self.describe_time_to_live(table)
+                if description.status == TimeToLiveStatus.enabled:
+                    return
+                attempts += 1
+                await asyncio.sleep(wait_for_enabled.retry_delay)
+            raise TimeToLiveStatusNotChanged()
 
     async def describe_time_to_live(self, table: TableName) -> TimeToLiveDescription:
         response = await self.core.describe_time_to_live(TableName=table)
@@ -280,11 +309,28 @@ class Client:
             ),
         )
 
-    async def disable_time_to_live(self, table: TableName, attribute: str):
+    async def disable_time_to_live(
+        self,
+        table: TableName,
+        attribute: str,
+        *,
+        wait_for_disabled: Union[bool, WaitConfig] = False,
+    ):
         await self.core.update_time_to_live(
             TableName=table,
             TimeToLiveSpecification={"AttributeName": attribute, "Enabled": False},
         )
+        if wait_for_disabled:
+            if not isinstance(wait_for_disabled, WaitConfig):
+                wait_for_disabled = WaitConfig.default()
+            attempts = 0
+            while attempts < wait_for_disabled.max_attempts:
+                description = await self.describe_time_to_live(table)
+                if description.status == TimeToLiveStatus.disabled:
+                    return
+                attempts += 1
+                await asyncio.sleep(wait_for_disabled.retry_delay)
+            raise TimeToLiveStatusNotChanged()
 
     async def describe_table(self, name: TableName):
         try:
@@ -307,9 +353,7 @@ class Client:
         else:
             attributes = None
         if "CreationDateTime" in description:
-            creation_time = datetime.datetime.fromtimestamp(
-                description["CreationDateTime"], datetime.timezone.utc
-            )
+            creation_time = description["CreationDateTime"]
         else:
             creation_time = None
         if attributes and "KeySchema" in description:
@@ -345,7 +389,7 @@ class Client:
         key: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None
+        condition: ConditionBase = None,
     ) -> Union[None, Item]:
         key = py2dy(key)
         if not key:
@@ -398,7 +442,7 @@ class Client:
         table: TableName,
         key: Dict[str, Any],
         *,
-        projection: ProjectionExpr = None
+        projection: ProjectionExpr = None,
     ) -> Item:
         projection_expression, expression_attribute_names = get_projection(projection)
         key = py2dy(key)
@@ -425,7 +469,7 @@ class Client:
         item: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None
+        condition: ConditionBase = None,
     ) -> Union[None, Item]:
         if condition:
             (
@@ -468,7 +512,7 @@ class Client:
         index: str = None,
         limit: int = None,
         projection: ProjectionExpr = None,
-        select: Select = Select.all_attributes
+        select: Select = Select.all_attributes,
     ) -> AsyncIterator[Item]:
         if projection:
             select = Select.specific_attributes
@@ -509,7 +553,7 @@ class Client:
                 ExpressionAttributeNames=expression_attribute_names,
                 ExpressionAttributeValues=py2dy(expression_attribute_values),
                 Select=select.value,
-            )
+            ),
         )
         async for raw in unroll(
             coro_func,
@@ -530,7 +574,7 @@ class Client:
         limit: int = None,
         start_key: Dict[str, Any] = None,
         projection: ProjectionExpr = None,
-        filter_expression: ConditionBase = None
+        filter_expression: ConditionBase = None,
     ) -> AsyncIterator[Item]:
         expression_attribute_names = {}
         expression_attribute_values = {}
@@ -554,7 +598,7 @@ class Client:
                 FilterExpression=filter_expression,
                 ExpressionAttributeNames=expression_attribute_names,
                 ExpressionAttributeValues=py2dy(expression_attribute_values),
-            )
+            ),
         )
         async for raw in unroll(
             coro_func,
@@ -574,7 +618,7 @@ class Client:
         *,
         start_key: Dict[str, Any] = None,
         filter_expression: ConditionBase = None,
-        index: str = None
+        index: str = None,
     ) -> int:
         expression_attribute_names = {}
         expression_attribute_values = {}
@@ -605,7 +649,7 @@ class Client:
                 ExpressionAttributeNames=expression_attribute_names,
                 ExpressionAttributeValues=py2dy(expression_attribute_values),
                 Select=Select.count.value,
-            )
+            ),
         )
         count_sum = 0
         async for count in unroll(
@@ -626,7 +670,7 @@ class Client:
         update_expression: UpdateExpression,
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None
+        condition: ConditionBase = None,
     ) -> Union[Item, None]:
 
         (
