@@ -724,8 +724,8 @@ class FastClient:
         self, action: str, payload: Dict[str, Any]
     ) -> AsyncIterator[Dict[str, Any]]:
         """
-        This function consumes (mutates) the payload. Do not use the payload passed in
-        after calling this function.
+        Internal API to depaginate the results from query/scan/count.
+        Don't call this directly, use .query, .scan or .count instead.
         """
         task = asyncio.create_task(self.send_request(action=action, payload=payload))
         try:
@@ -733,7 +733,10 @@ class FastClient:
                 result = await task
                 try:
                     # TODO: Limit!
-                    payload["ExclusiveStartKey"] = result["LastEvaluatedKey"]
+                    payload = {
+                        **payload,
+                        "ExclusiveStartKey": result["LastEvaluatedKey"],
+                    }
                     task = asyncio.create_task(
                         self.send_request(action=action, payload=payload)
                     )
