@@ -12,7 +12,7 @@ from boto3.dynamodb.types import DYNAMODB_CONTEXT
 from botocore.exceptions import ClientError
 
 from .errors import EmptyItem, ItemNotFound, TableNotFound
-from .fast.errors import TableDidNotBecomeActive
+from .fast.errors import TableDidNotBecomeActive, TableDidNotBecomeDisabled
 from .models import (
     GlobalSecondaryIndex,
     KeySchema,
@@ -29,6 +29,7 @@ from .models import (
     TimeToLiveDescription,
     TimeToLiveStatus,
     UpdateExpression,
+    WaitConfig,
     get_projection,
 )
 from .types import Item, TableName
@@ -68,7 +69,7 @@ class Table:
         lsis: List[LocalSecondaryIndex] = None,
         gsis: List[GlobalSecondaryIndex] = None,
         stream: StreamSpecification = None,
-        wait_for_active: bool = False
+        wait_for_active: Union[bool, WaitConfig] = False
     ):
         return await self.client.create_table(
             self.name,
@@ -87,8 +88,10 @@ class Table:
     async def describe(self) -> TableDescription:
         return await self.client.describe_table(self.name)
 
-    async def delete(self):
-        return await self.client.delete_table(self.name)
+    async def delete(self, *, wait_for_disabled: Union[bool, WaitConfig] = False):
+        return await self.client.delete_table(
+            self.name, wait_for_disabled=wait_for_disabled
+        )
 
     async def delete_item(
         self,
@@ -219,7 +222,7 @@ class Client:
         lsis: List[LocalSecondaryIndex] = None,
         gsis: List[GlobalSecondaryIndex] = None,
         stream: StreamSpecification = None,
-        wait_for_active: bool = False
+        wait_for_active: Union[bool, WaitConfig] = False
     ):
         lsis: List[LocalSecondaryIndex] = lsis or []
         gsis: List[GlobalSecondaryIndex] = gsis or []
@@ -249,12 +252,14 @@ class Client:
             )
         )
         if wait_for_active:
+            if not isinstance(wait_for_active, WaitConfig):
+                wait_for_active = WaitConfig.default()
             attempts = 0
-            while attempts < 25:
+            while attempts < wait_for_active.max_attempts:
                 if await self.table_exists(name):
                     return
                 attempts += 1
-                await asyncio.sleep(20)
+                await asyncio.sleep(wait_for_active.retry_delay)
             raise TableDidNotBecomeActive()
         return None
 
@@ -354,8 +359,21 @@ class Client:
         else:
             return None
 
-    async def delete_table(self, table: TableName):
+    async def delete_table(
+        self, table: TableName, *, wait_for_disabled: Union[bool, WaitConfig] = False
+    ):
         await self.core.delete_table(TableName=table)
+        if not isinstance(wait_for_disabled, WaitConfig):
+            wait_for_disabled = WaitConfig.default()
+        attempts = 0
+        while attempts < wait_for_disabled.max_attempts:
+            try:
+                await self.describe_table(table)
+            except TableNotFound:
+                return
+            attempts += 1
+            await asyncio.sleep(wait_for_disabled.retry_delay)
+        raise TableDidNotBecomeDisabled()
 
     async def get_item(
         self,

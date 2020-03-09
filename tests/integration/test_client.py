@@ -12,6 +12,7 @@ from aiodynamo.models import (
     ReturnValues,
     TableStatus,
     Throughput,
+    WaitConfig,
 )
 from aiodynamo.types import TableName
 from boto3.dynamodb import conditions
@@ -123,10 +124,13 @@ async def test_delete_table(client: Client, table_name_prefix: str):
         name,
         Throughput(5, 5),
         KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
+        wait_for_active=WaitConfig(max_attempts=25, retry_delay=5),
     )
     # no error
     await client.put_item(name, {"h": "h", "r": "r"})
-    await client.delete_table(name)
+    await client.delete_table(
+        name, wait_for_disabled=WaitConfig(max_attempts=25, retry_delay=5)
+    )
     with pytest.raises(Exception):
         await client.put_item(name, {"h": "h", "r": "r"})
 

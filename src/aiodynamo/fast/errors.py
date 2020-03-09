@@ -104,6 +104,10 @@ class TableDidNotBecomeActive(AIODynamoError):
     pass
 
 
+class TableDidNotBecomeDisabled(AIODynamoError):
+    pass
+
+
 ERRORS = {
     "ResourceNotFoundException": TableNotFound,
     "UnknownOperationException": UnknownOperation,

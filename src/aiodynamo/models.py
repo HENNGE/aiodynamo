@@ -399,3 +399,13 @@ def get_projection(
     else:
         encoder = Encoder("#N")
         return projection.encode(encoder), encoder.finalize()
+
+
+@dataclass(frozen=True)
+class WaitConfig:
+    max_attempts: int
+    retry_delay: int
+
+    @classmethod
+    def default(cls):
+        return WaitConfig(25, 20)

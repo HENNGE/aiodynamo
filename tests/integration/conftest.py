@@ -9,7 +9,7 @@ from aiodynamo.fast.client import FastClient
 from aiodynamo.fast.credentials import Credentials
 from aiodynamo.fast.http.aiohttp import AIOHTTP
 from aiodynamo.fast.http.httpx import HTTPX
-from aiodynamo.models import KeySchema, KeySpec, KeyType, Throughput
+from aiodynamo.models import KeySchema, KeySpec, KeyType, Throughput, WaitConfig
 from aiohttp import ClientSession
 from yarl import URL
 
@@ -79,7 +79,7 @@ async def table(client: Client, table_name_prefix: str):
         name,
         Throughput(5, 5),
         KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
-        wait_for_active=True,
+        wait_for_active=WaitConfig(max_attempts=25, retry_delay=5),
     )
     try:
         yield name

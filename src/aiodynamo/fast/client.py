@@ -24,12 +24,13 @@ from ..models import (
     TimeToLiveDescription,
     TimeToLiveStatus,
     UpdateExpression,
+    WaitConfig,
     get_projection,
 )
 from ..types import Item, TableName
 from ..utils import dy2py, py2dy
 from .credentials import Credentials
-from .errors import TableDidNotBecomeActive
+from .errors import TableDidNotBecomeActive, TableDidNotBecomeDisabled
 from .http.base import HTTP
 from .sign import signed_dynamo_request
 
@@ -64,7 +65,7 @@ class FastTable:
         lsis: List[LocalSecondaryIndex] = None,
         gsis: List[GlobalSecondaryIndex] = None,
         stream: StreamSpecification = None,
-        wait_for_active: bool = False,
+        wait_for_active: Union[bool, WaitConfig] = False,
     ):
         return await self.client.create_table(
             self.name,
@@ -83,8 +84,10 @@ class FastTable:
     async def describe(self) -> TableDescription:
         return await self.client.describe_table(self.name)
 
-    async def delete(self):
-        return await self.client.delete_table(self.name)
+    async def delete(self, *, wait_for_disabled: Union[bool, WaitConfig] = False):
+        return await self.client.delete_table(
+            self.name, wait_for_disabled=wait_for_disabled
+        )
 
     async def delete_item(
         self,
@@ -213,7 +216,7 @@ class FastClient:
         lsis: List[LocalSecondaryIndex] = None,
         gsis: List[GlobalSecondaryIndex] = None,
         stream: StreamSpecification = None,
-        wait_for_active: bool = False,
+        wait_for_active: Union[bool, WaitConfig] = False,
     ):
         attributes = keys.to_attributes()
         if lsis is not None:
@@ -241,12 +244,18 @@ class FastClient:
 
         await self.send_request(action="CreateTable", payload=payload)
         if wait_for_active:
+            if not isinstance(wait_for_active, WaitConfig):
+                wait_for_active = WaitConfig.default()
             attempts = 0
-            while attempts < 25:
-                if await self.table_exists(name):
-                    return
+            while attempts < wait_for_active.max_attempts:
+                try:
+                    description = await self.describe_table(name)
+                    if description.status == TableStatus.active:
+                        return
+                except TableNotFound:
+                    pass
                 attempts += 1
-                await asyncio.sleep(20)
+                await asyncio.sleep(wait_for_active.retry_delay)
             raise TableDidNotBecomeActive()
 
     async def enable_time_to_live(self, table: TableName, attribute: str):
@@ -340,8 +349,21 @@ class FastClient:
         else:
             return None
 
-    async def delete_table(self, table: TableName):
+    async def delete_table(
+        self, table: TableName, *, wait_for_disabled: Union[bool, WaitConfig] = False
+    ):
         await self.send_request(action="DeleteTable", payload={"TableName": table})
+        if not isinstance(wait_for_disabled, WaitConfig):
+            wait_for_disabled = WaitConfig.default()
+        attempts = 0
+        while attempts < wait_for_disabled.max_attempts:
+            try:
+                await self.describe_table(table)
+            except TableNotFound:
+                return
+            attempts += 1
+            await asyncio.sleep(wait_for_disabled.retry_delay)
+        raise TableDidNotBecomeDisabled()
 
     async def get_item(
         self,
