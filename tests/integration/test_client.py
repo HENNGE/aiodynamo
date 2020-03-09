@@ -159,15 +159,17 @@ async def test_scan(client: Client, table: TableName):
         index += 1
 
 
-async def test_exists(client: Client):
-    name = str(uuid.uuid4())
+async def test_exists(client: Client, table_name_prefix: str):
+    name = table_name_prefix + str(uuid.uuid4())
     assert await client.table_exists(name) == False
     with pytest.raises(TableNotFound):
         await client.describe_table(name)
     throughput = Throughput(5, 5)
     key_schema = KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string))
     attrs = {"h": KeyType.string, "r": KeyType.string}
-    await client.create_table(name, throughput, key_schema)
+    await client.create_table(
+        name, throughput, key_schema, wait_for_active=WaitConfig(25, 5)
+    )
     assert await client.table_exists(name)
     desc = await client.describe_table(name)
     assert desc.throughput == throughput
