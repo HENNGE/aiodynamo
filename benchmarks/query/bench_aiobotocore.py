@@ -26,6 +26,7 @@ async def inner():
         lek = response.get("LastEvaluatedKey", None)
         if lek is None:
             break
+    await client.close()
 
 
 def query_aiobotocore():
