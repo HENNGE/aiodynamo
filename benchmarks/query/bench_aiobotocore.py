@@ -19,7 +19,7 @@ async def inner():
             TableName=TABLE_NAME,
             KeyConditionExpression="#k = :v",
             ExpressionAttributeNames={"#k": KEY_FIELD},
-            ExpressionAttributeValues={":v", {"S": KEY_VALUE}},
+            ExpressionAttributeValues={":v": {"S": KEY_VALUE}},
             **kwargs
         )
         items.extend(response["Items"])
