@@ -39,4 +39,4 @@ You'll also need to make sure that the environment has valid credentials set up.
 
 ## Compare
 
-`pyperf compare boto3.json botocore.json aiobotocore.json aiodynamo_aiohttp.json aiodynamo_httpx.json`
+`pyperf compare_to boto3.json botocore.json aiobotocore.json aiodynamo_aiohttp.json aiodynamo_httpx.json`

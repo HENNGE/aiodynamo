@@ -13,4 +13,4 @@ You'll need `boto3`, `aiodynamo` and `pyperf` installed.
 
 ## Compare
 
-`pyperf compare boto3.json aiodynamo.json`
+`pyperf compare_to boto3.json aiodynamo.json`
