@@ -1,16 +1,10 @@
 import os
 import uuid
 
-import httpx
 import pytest
-from aiobotocore import get_session
 from aiodynamo.client import Client
-from aiodynamo.fast.client import FastClient
-from aiodynamo.fast.credentials import Credentials
-from aiodynamo.fast.http.aiohttp import AIOHTTP
-from aiodynamo.fast.http.httpx import HTTPX
+from aiodynamo.credentials import Credentials
 from aiodynamo.models import KeySchema, KeySpec, KeyType, Throughput, WaitConfig
-from aiohttp import ClientSession
 from yarl import URL
 
 
@@ -34,42 +28,13 @@ def region():
 
 
 @pytest.fixture
-async def core(endpoint, region):
-    if endpoint is None:
-        core = get_session().create_client("dynamodb", region_name=region)
-    else:
-        core = get_session().create_client(
-            "dynamodb", endpoint_url=endpoint, use_ssl=False, region_name=region,
-        )
-    try:
-        yield core
-
-    finally:
-        await core.close()
-
-
-@pytest.fixture(params=["fast-aiohttp", "fast-httpx", "boto"])
-async def client(request, core, endpoint, region):
-    if request.param == "boto":
-        yield Client(core)
-    elif request.param == "fast-aiohttp":
-        async with ClientSession() as session:
-            http = AIOHTTP(session)
-            yield FastClient(
-                http,
-                Credentials.auto(),
-                region,
-                URL(endpoint) if endpoint is not None else endpoint,
-            )
-    elif request.param == "fast-httpx":
-        async with httpx.AsyncClient() as http_client:
-            http = HTTPX(http_client)
-            yield FastClient(
-                http,
-                Credentials.auto(),
-                region,
-                URL(endpoint) if endpoint is not None else endpoint,
-            )
+async def client(http, endpoint, region):
+    yield Client(
+        http,
+        Credentials.auto(),
+        region,
+        URL(endpoint) if endpoint is not None else endpoint,
+    )
 
 
 @pytest.fixture

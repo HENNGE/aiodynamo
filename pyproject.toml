@@ -15,10 +15,9 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.7"
-aiobotocore= ">=0.10.0"
-boto3 = ">=1.9.49"
 httpx = {version = "^0.11.1", extras = ["httpx"]}
 aiohttp = {version = "^3.6.2", extras = ["aiohttp"]}
+yarl = "^1.4.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^3.0"
@@ -27,6 +26,7 @@ pytest-cov = "^2.6"
 black = {version = "^19.10b0",allow-prereleases = true}
 sphinx = "^1.8"
 pyperf = "^1.7.0"
+boto3 = "^1.12.18"
 
 [tool.isort]
 line_length = "88"

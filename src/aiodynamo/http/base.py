@@ -2,7 +2,7 @@ import abc
 from dataclasses import dataclass
 from typing import *
 
-from aiodynamo.types import Numeric
+from aiodynamo.types import Timeout
 from yarl import URL
 
 Headers = Mapping[str, str]
@@ -24,7 +24,7 @@ class TooManyRetries(Exception):
 class HTTP(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     async def get(
-        self, *, url: URL, headers: Optional[Headers] = None, timeout: Numeric
+        self, *, url: URL, headers: Optional[Headers] = None, timeout: Timeout
     ) -> bytes:
         pass
 

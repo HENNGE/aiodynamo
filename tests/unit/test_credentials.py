@@ -1,30 +1,16 @@
 import datetime
 
-import aiohttp
-import httpx
 import pytest
-from aiodynamo.fast.credentials import (
+from aiodynamo.credentials import (
     EnvironmentCredentials,
     InstanceMetadataCredentials,
     Key,
     Metadata,
 )
-from aiodynamo.fast.http.aiohttp import AIOHTTP
-from aiodynamo.fast.http.httpx import HTTPX
 from aiohttp import web
 from yarl import URL
 
 pytestmark = [pytest.mark.asyncio]
-
-
-@pytest.fixture(params=["aiohttp", "httpx"])
-async def http(request):
-    if request.param == "aiohttp":
-        async with aiohttp.ClientSession() as session:
-            yield AIOHTTP(session)
-    else:
-        async with httpx.AsyncClient() as client:
-            yield HTTPX(client)
 
 
 class InstanceMetadataServer:

@@ -3,45 +3,46 @@ from __future__ import annotations
 import asyncio
 import datetime
 from dataclasses import dataclass
-from functools import partial
-from itertools import chain
-from typing import Any, AsyncIterator, Callable, Dict, List, TypeVar, Union
+from typing import *
 
-from aiobotocore.client import AioBaseClient
-from boto3.dynamodb.conditions import ConditionBase, ConditionExpressionBuilder
-from boto3.dynamodb.types import DYNAMODB_CONTEXT
-from botocore.exceptions import ClientError
-
-from .errors import EmptyItem, ItemNotFound, TableNotFound
-from .fast.errors import (
-    TableDidNotBecomeActive,
-    TableDidNotBecomeDisabled,
-    TimeToLiveStatusNotChanged,
-)
-from .models import (
+from aiodynamo.errors import *
+from aiodynamo.models import (
     GlobalSecondaryIndex,
     KeySchema,
     KeySpec,
     KeyType,
     LocalSecondaryIndex,
-    ProjectionExpr,
     ReturnValues,
     Select,
     StreamSpecification,
     TableDescription,
     TableStatus,
+    ThrottleConfig,
     Throughput,
     TimeToLiveDescription,
     TimeToLiveStatus,
-    UpdateExpression,
     WaitConfig,
-    get_projection,
 )
-from .types import Item, TableName
-from .utils import clean, dy2py, py2dy, unroll
+from yarl import URL
 
-_Key = TypeVar("_Key")
-_Val = TypeVar("_Val")
+from .credentials import Credentials
+from .errors import (
+    TableDidNotBecomeActive,
+    TableDidNotBecomeDisabled,
+    Throttled,
+    TimeToLiveStatusNotChanged,
+)
+from .expressions import (
+    Condition,
+    KeyCondition,
+    Parameters,
+    ProjectionExpression,
+    UpdateExpression,
+)
+from .http.base import HTTP
+from .sign import signed_dynamo_request
+from .types import Item, TableName
+from .utils import dy2py, py2dy
 
 
 @dataclass(frozen=True)
@@ -111,14 +112,14 @@ class Table:
         key: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None,
+        condition: Condition = None,
     ) -> Union[None, Item]:
         return await self.client.delete_item(
             self.name, key, return_values=return_values, condition=condition
         )
 
     async def get_item(
-        self, key: Dict[str, Any], *, projection: ProjectionExpr = None
+        self, key: Dict[str, Any], *, projection: ProjectionExpression = None
     ) -> Item:
         return await self.client.get_item(self.name, key, projection=projection)
 
@@ -127,7 +128,7 @@ class Table:
         item: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None,
+        condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
         return await self.client.put_item(
             self.name, item, return_values=return_values, condition=condition
@@ -135,14 +136,14 @@ class Table:
 
     def query(
         self,
-        key_condition: ConditionBase,
+        key_condition: KeyCondition,
         *,
-        start_key: Dict[str, Any] = None,
-        filter_expression: ConditionBase = None,
+        start_key: Optional[Dict[str, Any]] = None,
+        filter_expression: Optional[Condition] = None,
         scan_forward: bool = True,
-        index: str = None,
-        limit: int = None,
-        projection: ProjectionExpr = None,
+        index: Optional[str] = None,
+        limit: Optional[int] = None,
+        projection: Optional[ProjectionExpression] = None,
         select: Select = Select.all_attributes,
     ) -> AsyncIterator[Item]:
         return self.client.query(
@@ -163,8 +164,8 @@ class Table:
         index: str = None,
         limit: int = None,
         start_key: Dict[str, Any] = None,
-        projection: ProjectionExpr = None,
-        filter_expression: ConditionBase = None,
+        projection: ProjectionExpression = None,
+        filter_expression: Condition = None,
     ) -> AsyncIterator[Item]:
         return self.client.scan(
             self.name,
@@ -177,10 +178,10 @@ class Table:
 
     async def count(
         self,
-        key_condition: ConditionBase,
+        key_condition: KeyCondition,
         *,
         start_key: Dict[str, Any] = None,
-        filter_expression: ConditionBase = None,
+        filter_expression: Condition = None,
         index: str = None,
     ) -> int:
         return await self.client.count(
@@ -197,7 +198,7 @@ class Table:
         update_expression: UpdateExpression,
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None,
+        condition: Condition = None,
     ) -> Union[Item, None]:
         return await self.client.update_item(
             self.name,
@@ -210,13 +211,12 @@ class Table:
 
 @dataclass(frozen=True)
 class Client:
-    # core is an aiobotocore DynamoDB client, use aiobotocore.get_session().create_client("dynamodb") to create one.
-    core: AioBaseClient
-    # pass `float` if you want numeric types returned as floats
-    numeric_type: Callable[[str], Any] = DYNAMODB_CONTEXT.create_decimal
-
-    def table(self, name: TableName) -> Table:
-        return Table(self, name)
+    http: HTTP
+    credentials: Credentials
+    region: str
+    endpoint: Optional[URL] = None
+    numeric_type: Callable[[Any], Any] = float
+    throttle_config: ThrottleConfig = ThrottleConfig.default()
 
     async def table_exists(self, name: TableName) -> bool:
         try:
@@ -237,44 +237,45 @@ class Client:
         stream: StreamSpecification = None,
         wait_for_active: Union[bool, WaitConfig] = False,
     ):
-        lsis: List[LocalSecondaryIndex] = lsis or []
-        gsis: List[GlobalSecondaryIndex] = gsis or []
-        stream = stream or StreamSpecification()
-        attributes = {}
-        attributes.update(keys.to_attributes())
-        for index in chain(lsis, gsis):
-            attributes.update(index.schema.to_attributes())
+        attributes = keys.to_attributes()
+        if lsis is not None:
+            for index in lsis:
+                attributes.update(index.schema.to_attributes())
+        if gsis is not None:
+            for index in gsis:
+                attributes.update(index.schema.to_attributes())
         attribute_definitions = [
             {"AttributeName": key, "AttributeType": value}
             for key, value in attributes.items()
         ]
-        key_schema = keys.encode()
-        local_secondary_indexes = [index.encode() for index in lsis]
-        global_secondary_indexes = [index.encode() for index in gsis]
-        provisioned_throughput = throughput.encode()
-        stream_specification = stream.encode()
-        await self.core.create_table(
-            **clean(
-                AttributeDefinitions=attribute_definitions,
-                TableName=name,
-                KeySchema=key_schema,
-                LocalSecondaryIndexes=local_secondary_indexes,
-                GlobalSecondaryIndexes=global_secondary_indexes,
-                ProvisionedThroughput=provisioned_throughput,
-                StreamSpecification=stream_specification,
-            )
-        )
+        payload = {
+            "AttributeDefinitions": attribute_definitions,
+            "TableName": name,
+            "KeySchema": keys.encode(),
+            "ProvisionedThroughput": throughput.encode(),
+        }
+        if lsis:
+            payload["LocalSecondaryIndexes"] = [index.encode() for index in lsis]
+        if gsis:
+            payload["GlobalSecondaryIndexes"] = [index.encode() for index in gsis]
+        if stream:
+            payload["StreamSpecification"] = stream.encode()
+
+        await self.send_request(action="CreateTable", payload=payload)
         if wait_for_active:
             if not isinstance(wait_for_active, WaitConfig):
                 wait_for_active = WaitConfig.default()
             attempts = 0
             while attempts < wait_for_active.max_attempts:
-                if await self.table_exists(name):
-                    return
+                try:
+                    description = await self.describe_table(name)
+                    if description.status == TableStatus.active:
+                        return
+                except TableNotFound:
+                    pass
                 attempts += 1
                 await asyncio.sleep(wait_for_active.retry_delay)
             raise TableDidNotBecomeActive()
-        return None
 
     async def enable_time_to_live(
         self,
@@ -283,24 +284,14 @@ class Client:
         *,
         wait_for_enabled: Union[bool, WaitConfig] = False,
     ):
-        await self.core.update_time_to_live(
-            TableName=table,
-            TimeToLiveSpecification={"AttributeName": attribute, "Enabled": True},
+        await self.set_time_to_live(
+            table, attribute, True, wait_for_change=wait_for_enabled
         )
-        if wait_for_enabled:
-            if not isinstance(wait_for_enabled, WaitConfig):
-                wait_for_enabled = WaitConfig.default()
-            attempts = 0
-            while attempts < wait_for_enabled.max_attempts:
-                description = await self.describe_time_to_live(table)
-                if description.status == TimeToLiveStatus.enabled:
-                    return
-                attempts += 1
-                await asyncio.sleep(wait_for_enabled.retry_delay)
-            raise TimeToLiveStatusNotChanged()
 
     async def describe_time_to_live(self, table: TableName) -> TimeToLiveDescription:
-        response = await self.core.describe_time_to_live(TableName=table)
+        response = await self.send_request(
+            action="DescribeTimeToLive", payload={"TableName": table}
+        )
         return TimeToLiveDescription(
             table=table,
             attribute=response["TimeToLiveDescription"].get("AttributeName"),
@@ -316,33 +307,47 @@ class Client:
         *,
         wait_for_disabled: Union[bool, WaitConfig] = False,
     ):
-        await self.core.update_time_to_live(
-            TableName=table,
-            TimeToLiveSpecification={"AttributeName": attribute, "Enabled": False},
+        await self.set_time_to_live(
+            table, attribute, False, wait_for_change=wait_for_disabled
         )
-        if wait_for_disabled:
-            if not isinstance(wait_for_disabled, WaitConfig):
-                wait_for_disabled = WaitConfig.default()
+
+    async def set_time_to_live(
+        self,
+        table: TableName,
+        attribute: str,
+        status: bool,
+        *,
+        wait_for_change: Union[bool, WaitConfig] = False,
+    ):
+        await self.send_request(
+            action="UpdateTimeToLive",
+            payload={
+                "TableName": table,
+                "TimeToLiveSpecification": {
+                    "AttributeName": attribute,
+                    "Enabled": status,
+                },
+            },
+        )
+        if wait_for_change:
+            result_state = (
+                TimeToLiveStatus.enabled if status else TimeToLiveStatus.disabled
+            )
+            if not isinstance(wait_for_change, WaitConfig):
+                wait_for_change = WaitConfig.default()
             attempts = 0
-            while attempts < wait_for_disabled.max_attempts:
+            while attempts < wait_for_change.max_attempts:
                 description = await self.describe_time_to_live(table)
-                if description.status == TimeToLiveStatus.disabled:
+                if description.status == result_state:
                     return
                 attempts += 1
-                await asyncio.sleep(wait_for_disabled.retry_delay)
+                await asyncio.sleep(wait_for_change.retry_delay)
             raise TimeToLiveStatusNotChanged()
 
     async def describe_table(self, name: TableName):
-        try:
-            response = await self.core.describe_table(TableName=name)
-        except ClientError as exc:
-            try:
-                if exc.response["Error"]["Code"] == "ResourceNotFoundException":
-                    raise TableNotFound(name)
-
-            except KeyError:
-                pass
-            raise exc
+        response = await self.send_request(
+            action="DescribeTable", payload={"TableName": name}
+        )
 
         description = response["Table"]
         if "AttributeDefinitions" in description:
@@ -353,7 +358,9 @@ class Client:
         else:
             attributes = None
         if "CreationDateTime" in description:
-            creation_time = description["CreationDateTime"]
+            creation_time = datetime.datetime.fromtimestamp(
+                description["CreationDateTime"], datetime.timezone.utc
+            )
         else:
             creation_time = None
         if attributes and "KeySchema" in description:
@@ -389,32 +396,25 @@ class Client:
         key: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None,
+        condition: Condition = None,
     ) -> Union[None, Item]:
         key = py2dy(key)
         if not key:
             raise EmptyItem()
 
+        payload = {
+            "TableName": table,
+            "Key": key,
+            "ReturnValues": return_values.value,
+        }
+
         if condition:
-            (
-                condition_expression,
-                expression_attribute_names,
-                expression_attribute_values,
-            ) = ConditionExpressionBuilder().build_expression(condition)
-        else:
-            condition_expression = (
-                expression_attribute_names
-            ) = expression_attribute_values = None
-        resp = await self.core.delete_item(
-            **clean(
-                TableName=table,
-                Key=key,
-                ReturnValues=return_values.value,
-                ConditionExpression=condition_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=expression_attribute_values,
-            )
-        )
+            params = Parameters()
+            payload["ConditionExpression"] = condition.encode(params)
+            payload["ExpressionAttributeNames"] = params.get_expression_names()
+            payload["ExpressionAttributeValues"] = params.get_expression_values()
+
+        resp = await self.send_request(action="DeleteItem", payload=payload)
         if "Attributes" in resp:
             return dy2py(resp["Attributes"], self.numeric_type)
 
@@ -424,7 +424,7 @@ class Client:
     async def delete_table(
         self, table: TableName, *, wait_for_disabled: Union[bool, WaitConfig] = False
     ):
-        await self.core.delete_table(TableName=table)
+        await self.send_request(action="DeleteTable", payload={"TableName": table})
         if not isinstance(wait_for_disabled, WaitConfig):
             wait_for_disabled = WaitConfig.default()
         attempts = 0
@@ -442,21 +442,22 @@ class Client:
         table: TableName,
         key: Dict[str, Any],
         *,
-        projection: ProjectionExpr = None,
+        projection: ProjectionExpression = None,
     ) -> Item:
-        projection_expression, expression_attribute_names = get_projection(projection)
         key = py2dy(key)
         if not key:
             raise EmptyItem()
 
-        resp = await self.core.get_item(
-            **clean(
-                TableName=table,
-                Key=key,
-                ProjectionExpression=projection_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-            )
-        )
+        payload = {
+            "TableName": table,
+            "Key": key,
+        }
+        if projection:
+            params = Parameters()
+            payload["ProjectionExpression"] = projection.encode(params)
+            payload["ExpressionAttributeNames"] = params.get_expression_names()
+
+        resp = await self.send_request(action="GetItem", payload=payload)
         if "Item" in resp:
             return dy2py(resp["Item"], self.numeric_type)
 
@@ -469,32 +470,24 @@ class Client:
         item: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None,
+        condition: Condition = None,
     ) -> Union[None, Item]:
-        if condition:
-            (
-                condition_expression,
-                expression_attribute_names,
-                expression_attribute_values,
-            ) = ConditionExpressionBuilder().build_expression(condition)
-        else:
-            condition_expression = (
-                expression_attribute_names
-            ) = expression_attribute_values = None
         item = py2dy(item)
         if not item:
             raise EmptyItem()
+        payload = {
+            "TableName": table,
+            "Item": item,
+            "ReturnValues": return_values.value,
+        }
+        if condition:
+            params = Parameters()
+            payload["ConditionExpression"] = condition.encode(params)
+            payload["ExpressionAttributeNames"] = params.get_expression_names()
+            payload["ExpressionAttributeValues"] = params.get_expression_values()
 
-        resp = await self.core.put_item(
-            **clean(
-                TableName=table,
-                Item=item,
-                ReturnValues=return_values.value,
-                ConditionExpression=condition_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=py2dy(expression_attribute_values),
-            )
-        )
+        resp = await self.send_request(action="PutItem", payload=payload)
+
         if "Attributes" in resp:
             return dy2py(resp["Attributes"], self.numeric_type)
 
@@ -504,14 +497,14 @@ class Client:
     async def query(
         self,
         table: TableName,
-        key_condition: ConditionBase,
+        key_condition: KeyCondition,
         *,
         start_key: Dict[str, Any] = None,
-        filter_expression: ConditionBase = None,
+        filter_expression: Condition = None,
         scan_forward: bool = True,
         index: str = None,
         limit: int = None,
-        projection: ProjectionExpr = None,
+        projection: ProjectionExpression = None,
         select: Select = Select.all_attributes,
     ) -> AsyncIterator[Item]:
         if projection:
@@ -519,52 +512,41 @@ class Client:
         if select is Select.count:
             raise TypeError("Cannot use Select.count with query, use count instead")
 
-        expression_attribute_names = {}
-        expression_attribute_values = {}
+        params = Parameters()
 
-        projection_expression, ean = get_projection(projection)
-        expression_attribute_names.update(ean)
+        payload = {
+            "TableName": table,
+            "KeyConditionExpression": key_condition.encode(params),
+            "ScanForward": scan_forward,
+        }
 
-        builder = ConditionExpressionBuilder()
+        if projection:
+            payload["ProjectionExpression"] = projection.encode(params)
 
         if filter_expression:
-            filter_expression, ean, eav = builder.build_expression(filter_expression)
-            expression_attribute_names.update(ean)
-            expression_attribute_values.update(eav)
+            payload["FilterExpression"] = filter_expression.encode(params)
 
-        if key_condition:
-            key_condition_expression, ean, eav = builder.build_expression(
-                key_condition, True
-            )
-            expression_attribute_names.update(ean)
-            expression_attribute_values.update(eav)
-        else:
-            key_condition_expression = None
+        if start_key:
+            payload["ExclusiveStartKey"] = start_key
+        if index:
+            payload["IndexName"] = index
+        if limit:
+            payload["Limit"] = limit
+        if select:
+            payload["Select"] = select.value
 
-        coro_func = partial(
-            self.core.query,
-            **clean(
-                TableName=table,
-                IndexName=index,
-                ScanIndexForward=scan_forward,
-                ProjectionExpression=projection_expression,
-                FilterExpression=filter_expression,
-                KeyConditionExpression=key_condition_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=py2dy(expression_attribute_values),
-                Select=select.value,
-            ),
-        )
-        async for raw in unroll(
-            coro_func,
-            "ExclusiveStartKey",
-            "LastEvaluatedKey",
-            "Items",
-            py2dy(start_key) if start_key else None,
-            limit,
-            "Limit",
-        ):
-            yield dy2py(raw, self.numeric_type)
+        payload["ExpressionAttributeNames"] = params.get_expression_names()
+        payload["ExpressionAttributeValues"] = params.get_expression_values()
+
+        got = 0
+
+        async for result in self._fast_depaginate("Query", payload):
+            for item in result["Items"]:
+                yield dy2py(item, self.numeric_type)
+                if limit:
+                    got += 1
+                    if got >= limit:
+                        return
 
     async def scan(
         self,
@@ -573,94 +555,67 @@ class Client:
         index: str = None,
         limit: int = None,
         start_key: Dict[str, Any] = None,
-        projection: ProjectionExpr = None,
-        filter_expression: ConditionBase = None,
+        projection: ProjectionExpression = None,
+        filter_expression: Condition = None,
     ) -> AsyncIterator[Item]:
-        expression_attribute_names = {}
-        expression_attribute_values = {}
 
-        projection_expression, ean = get_projection(projection)
-        expression_attribute_names.update(ean)
+        params = Parameters()
 
-        builder = ConditionExpressionBuilder()
+        payload = {
+            "TableName": table,
+        }
 
+        if index:
+            payload["IndexName"] = index
+        if limit:
+            payload["Limit"] = limit
+        if start_key:
+            payload["ExclusiveStartKey"] = start_key
+        if projection:
+            payload["ProjectionExpression"] = projection.encode(params)
         if filter_expression:
-            filter_expression, ean, eav = builder.build_expression(filter_expression)
-            expression_attribute_names.update(ean)
-            expression_attribute_values.update(eav)
+            payload["FilterExpression"] = filter_expression.encode(params)
+        if projection or filter_expression:
+            payload["ExpressionAttributeNames"] = params.get_expression_names()
+            payload["ExpressionAttributeValues"] = params.get_expression_values()
 
-        coro_func = partial(
-            self.core.scan,
-            **clean(
-                TableName=table,
-                IndexName=index,
-                ProjectionExpression=projection_expression,
-                FilterExpression=filter_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=py2dy(expression_attribute_values),
-            ),
-        )
-        async for raw in unroll(
-            coro_func,
-            "ExclusiveStartKey",
-            "LastEvaluatedKey",
-            "Items",
-            py2dy(start_key) if start_key else None,
-            limit,
-            "Limit",
-        ):
-            yield dy2py(raw, self.numeric_type)
+        got = 0
+        async for result in self._fast_depaginate("Scan", payload):
+            for item in result["Items"]:
+                yield dy2py(item, self.numeric_type)
+                if limit:
+                    got += 1
+                    if got >= limit:
+                        return
 
     async def count(
         self,
         table: TableName,
-        key_condition: ConditionBase,
+        key_condition: KeyCondition,
         *,
         start_key: Dict[str, Any] = None,
-        filter_expression: ConditionBase = None,
+        filter_expression: Condition = None,
         index: str = None,
     ) -> int:
-        expression_attribute_names = {}
-        expression_attribute_values = {}
+        params = Parameters()
 
-        builder = ConditionExpressionBuilder()
+        payload = {
+            "TableName": table,
+            "KeyConditionExpression": key_condition.encode(params),
+            "Select": Select.count.value,
+        }
 
+        if start_key:
+            payload["ExclusiveStartKey"] = start_key
         if filter_expression:
-            filter_expression, ean, eav = builder.build_expression(filter_expression)
-            expression_attribute_names.update(ean)
-            expression_attribute_values.update(eav)
-
-        if key_condition:
-            key_condition_expression, ean, eav = builder.build_expression(
-                key_condition, True
-            )
-            expression_attribute_names.update(ean)
-            expression_attribute_values.update(eav)
-        else:
-            key_condition_expression = None
-
-        coro_func = partial(
-            self.core.query,
-            **clean(
-                TableName=table,
-                IndexName=index,
-                FilterExpression=filter_expression,
-                KeyConditionExpression=key_condition_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=py2dy(expression_attribute_values),
-                Select=Select.count.value,
-            ),
-        )
+            payload["FilterExpression"] = filter_expression.encode(params)
+        if index:
+            payload["IndexName"] = index
+        payload["ExpressionAttributeNames"] = params.get_expression_names()
+        payload["ExpressionAttributeValues"] = params.get_expression_values()
         count_sum = 0
-        async for count in unroll(
-            coro_func,
-            "ExclusiveStartKey",
-            "LastEvaluatedKey",
-            "Count",
-            py2dy(start_key) if start_key else None,
-            process=lambda x: [x],
-        ):
-            count_sum += count
+        async for result in self._fast_depaginate("Query", payload):
+            count_sum += result["Count"]
         return count_sum
 
     async def update_item(
@@ -670,38 +625,79 @@ class Client:
         update_expression: UpdateExpression,
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: ConditionBase = None,
+        condition: Condition = None,
     ) -> Union[Item, None]:
+        params = Parameters()
 
-        (
-            update_expression,
-            expression_attribute_names,
-            expression_attribute_values,
-        ) = update_expression.encode()
-
-        if not update_expression:
+        expression = update_expression.encode(params)
+        if not expression:
             raise EmptyItem()
 
-        builder = ConditionExpressionBuilder()
+        payload = {
+            "TableName": table,
+            "Key": py2dy(key),
+            "UpdateExpression": expression,
+            "ReturnValues": return_values.value,
+        }
         if condition:
-            condition_expression, ean, eav = builder.build_expression(condition)
-            expression_attribute_names.update(ean)
-            expression_attribute_values.update(eav)
-        else:
-            condition_expression = None
-        resp = await self.core.update_item(
-            **clean(
-                TableName=table,
-                Key=py2dy(key),
-                UpdateExpression=update_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=py2dy(expression_attribute_values),
-                ConditionExpression=condition_expression,
-                ReturnValues=return_values.value,
-            )
-        )
+            payload["ConditionExpression"] = condition.encode(params)
+
+        payload["ExpressionAttributeNames"] = params.get_expression_names()
+        payload["ExpressionAttributeValues"] = params.get_expression_values()
+
+        resp = await self.send_request(action="UpdateItem", payload=payload)
+
         if "Attributes" in resp:
             return dy2py(resp["Attributes"], self.numeric_type)
-
         else:
             return None
+
+    async def send_request(
+        self, *, action: str, payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        key = await self.credentials.get_key(self.http)
+        request = signed_dynamo_request(
+            key=key,
+            payload=payload,
+            action=action,
+            region=self.region,
+            endpoint=self.endpoint,
+        )
+        attempt = 0
+        while attempt < self.throttle_config.max_attempts:
+            try:
+                return await self.http.post(
+                    url=request.url, headers=request.headers, body=request.body
+                )
+            except Throttled:
+                await asyncio.sleep(self.throttle_config.delay_func(attempt))
+                attempt += 1
+        raise Throttled()
+
+    async def _fast_depaginate(
+        self, action: str, payload: Dict[str, Any]
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Internal API to depaginate the results from query/scan/count.
+        Don't call this directly, use .query, .scan or .count instead.
+        """
+        task = asyncio.create_task(self.send_request(action=action, payload=payload))
+        try:
+            while task:
+                result = await task
+                try:
+                    # TODO: Limit!
+                    payload = {
+                        **payload,
+                        "ExclusiveStartKey": result["LastEvaluatedKey"],
+                    }
+                    task = asyncio.create_task(
+                        self.send_request(action=action, payload=payload)
+                    )
+                except KeyError:
+                    task = None
+                yield result
+        except asyncio.CancelledError:
+            if task:
+                task.cancel()
+            raise

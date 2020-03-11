@@ -11,11 +11,10 @@ from enum import Enum, auto
 from functools import wraps
 from typing import *
 
-from aiohttp import ClientSession
+from aiodynamo.types import Timeout
+from aiodynamo.utils import parse_amazon_timestamp
 from yarl import URL
 
-from ..types import Numeric
-from ..utils import parse_amazon_timestamp
 from .http.base import HTTP, Headers, TooManyRetries
 
 
@@ -71,7 +70,7 @@ class EnvironmentCredentials(Credentials):
         except KeyError:
             self.key = None
 
-    async def get_key(self, http: ClientSession) -> Optional[Key]:
+    async def get_key(self, http: HTTP) -> Optional[Key]:
         return self.key
 
 
@@ -150,7 +149,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
         http: HTTP,
         max_attempts: int,
         url: URL,
-        timeout: Numeric,
+        timeout: Timeout,
         headers: Optional[Headers] = None
     ) -> bytes:
         for attempt in range(max_attempts):
@@ -223,7 +222,7 @@ def and_then(thing: Optional[T], mapper: Callable[[T], U]) -> Optional[U]:
 # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint.html
 @dataclass
 class ContainerMetadataCredentials(MetadataCredentials):
-    timeout: Numeric = 2
+    timeout: Timeout = 2
     max_attempts: int = 3
     base_url: URL = URL("http://169.254.170.2")
     relative_uri: str = field(
@@ -271,7 +270,7 @@ class ContainerMetadataCredentials(MetadataCredentials):
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 @dataclass
 class InstanceMetadataCredentials(MetadataCredentials):
-    timeout: Numeric = 1
+    timeout: Timeout = 1
     max_attempts: int = 1
     base_url: URL = URL("http://169.254.169.254")
     disabled: bool = field(

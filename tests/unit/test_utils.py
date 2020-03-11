@@ -2,46 +2,8 @@ from decimal import Decimal
 from functools import partial
 
 import pytest
-from aiodynamo import utils
-from aiodynamo.utils import clean, deserialize, dy2py, remove_empty_strings
+from aiodynamo.utils import deserialize, dy2py
 from boto3.dynamodb.types import DYNAMODB_CONTEXT, TypeDeserializer
-
-
-@pytest.mark.asyncio
-async def test_unroll():
-    async def func(**kwargs):
-        if "InKey" in kwargs:
-            return {"Items": [1, 2, 3]}
-
-        else:
-            return {"OutKey": "Foo", "Items": ["a", "b", "c"]}
-
-    result = [item async for item in utils.unroll(func, "InKey", "OutKey", "Items")]
-    assert result == ["a", "b", "c", 1, 2, 3]
-
-
-@pytest.mark.asyncio
-async def test_unroll_with_limit():
-    async def func(**kwargs):
-        if "InKey" in kwargs:
-            return {"OutKey": "Bar", "Items": [1, 2, 3]}
-
-        else:
-            return {"OutKey": "Foo", "Items": ["a", "b", "c"]}
-
-    result = [
-        item
-        async for item in utils.unroll(
-            func, "InKey", "OutKey", "Items", limit=4, limitkey="Limit"
-        )
-    ]
-    assert result == ["a", "b", "c", 1]
-
-
-def test_clean():
-    assert clean(
-        foo="bar", none=None, list=[], tuple=(), dict={}, int=0, bool=False
-    ) == {"foo": "bar", "bool": False}
 
 
 def test_binary_decode():
@@ -61,15 +23,7 @@ def test_numeric_decode(value, numeric_type, result):
     assert deserialize(value, numeric_type) == result
 
 
-@pytest.mark.parametrize(
-    "item,result",
-    [({"foo": ""}, {}), ({"foo": {"bar": "", "baz": 1}}, {"foo": {"baz": 1}})],
-)
-def test_remove_empty_strings(item, result):
-    assert dict(remove_empty_strings(item)) == result
-
-
-def test_fast_decode_compatibility():
+def test_serde_compatibility():
     def generate_item(nest):
         item = {
             "hash": {"S": "string",},

@@ -2,10 +2,9 @@ import uuid
 
 import pytest
 from aiodynamo.client import Client, TimeToLiveStatus
-from aiodynamo.errors import EmptyItem, ItemNotFound, TableNotFound
-from aiodynamo.fast.errors import UnknownOperation
+from aiodynamo.errors import EmptyItem, ItemNotFound, TableNotFound, UnknownOperation
+from aiodynamo.expressions import F, HashKey, RangeKey
 from aiodynamo.models import (
-    F,
     KeySchema,
     KeySpec,
     KeyType,
@@ -15,9 +14,6 @@ from aiodynamo.models import (
     WaitConfig,
 )
 from aiodynamo.types import TableName
-from boto3.dynamodb import conditions
-from boto3.dynamodb.conditions import Key
-from botocore.exceptions import ClientError
 
 pytestmark = pytest.mark.asyncio
 
@@ -59,17 +55,21 @@ async def test_get_item_with_projection(client: Client, table: TableName):
 
 
 async def test_count(client: Client, table: TableName):
-    assert await client.count(table, conditions.Key("h").eq("h1")) == 0
-    assert await client.count(table, conditions.Key("h").eq("h2")) == 0
+    assert await client.count(table, HashKey("h", "h1")) == 0
+    assert await client.count(table, HashKey("h", "h2")) == 0
     await client.put_item(table, {"h": "h1", "r": "r1"})
-    assert await client.count(table, conditions.Key("h").eq("h1")) == 1
-    assert await client.count(table, conditions.Key("h").eq("h2")) == 0
+    assert await client.count(table, HashKey("h", "h1")) == 1
+    assert await client.count(table, HashKey("h", "h2")) == 0
     await client.put_item(table, {"h": "h2", "r": "r2"})
-    assert await client.count(table, conditions.Key("h").eq("h1")) == 1
-    assert await client.count(table, conditions.Key("h").eq("h2")) == 1
+    assert await client.count(table, HashKey("h", "h1")) == 1
+    assert await client.count(table, HashKey("h", "h2")) == 1
     await client.put_item(table, {"h": "h2", "r": "r1"})
-    assert await client.count(table, conditions.Key("h").eq("h2")) == 2
-    assert await client.count(table, conditions.Key("h").eq("h1")) == 1
+    assert await client.count(table, HashKey("h", "h2")) == 2
+    assert await client.count(table, HashKey("h", "h1")) == 1
+    assert (
+        await client.count(table, HashKey("h", "h1") & RangeKey("r").begins_with("x"))
+        == 0
+    )
 
 
 async def test_update_item(client: Client, table: TableName):
@@ -142,7 +142,7 @@ async def test_query(client: Client, table: TableName):
     await client.put_item(table, item1)
     await client.put_item(table, item2)
     index = 0
-    async for item in client.query(table, Key("h").eq("h")):
+    async for item in client.query(table, HashKey("h", "h")):
         assert item == items[index]
         index += 1
 
@@ -211,10 +211,6 @@ async def test_ttl(client: Client, table: TableName):
         desc = await client.describe_time_to_live(table)
     except UnknownOperation:
         raise pytest.skip("TTL not supported by database")
-    except ClientError as err:
-        if err.response.get("Error", {}).get("Code") == "UnknownOperationException":
-            raise pytest.skip("TTL not supported by database")
-        raise
     assert desc.status == TimeToLiveStatus.disabled
     assert desc.attribute == None
     await client.enable_time_to_live(table, "ttl")
@@ -231,7 +227,7 @@ async def test_query_with_limit(client: Client, table: TableName):
     item2 = {"h": "h", "r": "2", "d": "y"}
     await client.put_item(table, item1)
     await client.put_item(table, item2)
-    items = [item async for item in client.query(table, Key("h").eq("h"), limit=1)]
+    items = [item async for item in client.query(table, HashKey("h", "h"), limit=1)]
     assert len(items) == 1
     assert items[0] == item1
 

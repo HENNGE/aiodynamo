@@ -2,10 +2,10 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+from aiodynamo.types import Timeout
 from httpx import AsyncClient
 from yarl import URL
 
-from ...types import Numeric
 from ..errors import exception_from_response
 from .base import HTTP, Headers, RequestFailed
 
@@ -15,7 +15,7 @@ class HTTPX(HTTP):
     client: AsyncClient
 
     async def get(
-        self, *, url: URL, headers: Optional[Headers] = None, timeout: Numeric
+        self, *, url: URL, headers: Optional[Headers] = None, timeout: Timeout
     ) -> bytes:
         response = await self.client.get(str(url), headers=headers, timeout=timeout)
         if response.status_code >= 400:

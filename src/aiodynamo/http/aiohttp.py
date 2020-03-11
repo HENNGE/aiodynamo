@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Optional
 
+from aiodynamo.types import Timeout
 from aiohttp import ClientSession
 from yarl import URL
 
-from ...types import Numeric
 from ..errors import exception_from_response
 from .base import HTTP, Headers, RequestFailed
 
@@ -14,7 +14,7 @@ class AIOHTTP(HTTP):
     session: ClientSession
 
     async def get(
-        self, *, url: URL, headers: Optional[Headers] = None, timeout: Numeric
+        self, *, url: URL, headers: Optional[Headers] = None, timeout: Timeout
     ) -> bytes:
         async with self.session.request(
             method="GET", url=url, headers=headers, timeout=timeout
