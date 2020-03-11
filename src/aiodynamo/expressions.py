@@ -394,7 +394,7 @@ class NotCondition(Condition):
     base: Condition
 
     def encode(self, params: Parameters) -> str:
-        return f"NOT {self.base.encode(params)}"
+        return f"(NOT {self.base.encode(params)})"
 
 
 @dataclass(frozen=True)
