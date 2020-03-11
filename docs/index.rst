@@ -9,7 +9,10 @@ Welcome to aiodynamo's documentation!
 .. toctree::
    :maxdepth: 2
 
+   installation
    quickstart
+   usage
+   advanced
    concepts
    development
    changelog

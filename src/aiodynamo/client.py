@@ -5,8 +5,25 @@ import datetime
 from dataclasses import dataclass
 from typing import *
 
-from aiodynamo.errors import *
-from aiodynamo.models import (
+from yarl import URL
+
+from .credentials import Credentials
+from .errors import *
+from .errors import (
+    TableDidNotBecomeActive,
+    TableDidNotBecomeDisabled,
+    Throttled,
+    TimeToLiveStatusNotChanged,
+)
+from .expressions import (
+    Condition,
+    KeyCondition,
+    Parameters,
+    ProjectionExpression,
+    UpdateExpression,
+)
+from .http.base import HTTP
+from .models import (
     GlobalSecondaryIndex,
     KeySchema,
     KeySpec,
@@ -23,23 +40,6 @@ from aiodynamo.models import (
     TimeToLiveStatus,
     WaitConfig,
 )
-from yarl import URL
-
-from .credentials import Credentials
-from .errors import (
-    TableDidNotBecomeActive,
-    TableDidNotBecomeDisabled,
-    Throttled,
-    TimeToLiveStatusNotChanged,
-)
-from .expressions import (
-    Condition,
-    KeyCondition,
-    Parameters,
-    ProjectionExpression,
-    UpdateExpression,
-)
-from .http.base import HTTP
 from .sign import signed_dynamo_request
 from .types import Item, TableName
 from .utils import dy2py, py2dy
@@ -217,6 +217,9 @@ class Client:
     endpoint: Optional[URL] = None
     numeric_type: Callable[[Any], Any] = float
     throttle_config: ThrottleConfig = ThrottleConfig.default()
+
+    def table(self, name: str) -> Table:
+        return Table(self, name)
 
     async def table_exists(self, name: TableName) -> bool:
         try:

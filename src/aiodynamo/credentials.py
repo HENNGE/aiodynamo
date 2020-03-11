@@ -11,11 +11,11 @@ from enum import Enum, auto
 from functools import wraps
 from typing import *
 
-from aiodynamo.types import Timeout
-from aiodynamo.utils import parse_amazon_timestamp
 from yarl import URL
 
-from .http.base import HTTP, Headers, TooManyRetries
+from .http.base import HTTP, Headers
+from .types import Timeout
+from .utils import parse_amazon_timestamp
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,9 @@ class Key:
 class Credentials(metaclass=abc.ABCMeta):
     @classmethod
     def auto(cls) -> ChainCredentials:
+        """
+        Return the default credentials loader chain.
+        """
         return ChainCredentials(
             candidates=[
                 EnvironmentCredentials(),
@@ -38,11 +41,18 @@ class Credentials(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     async def get_key(self, http: HTTP) -> Optional[Key]:
-        pass
+        """
+        Return a Key if one could be found.
+        """
 
 
 @dataclass(frozen=True)
 class ChainCredentials(Credentials):
+    """
+    Chains multiple credentials providers together, trying them
+    in order. Returns the first key found. Exceptions are suppressed.
+    """
+
     candidates: Sequence[Credentials]
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
@@ -60,6 +70,10 @@ class ChainCredentials(Credentials):
 
 
 class EnvironmentCredentials(Credentials):
+    """
+    Loads the credentials from the environment.
+    """
+
     def __init__(self):
         try:
             self.key = Key(
@@ -310,3 +324,7 @@ class InstanceMetadataCredentials(MetadataCredentials):
             ),
             expires=parse_amazon_timestamp(credentials["Expiration"]),
         )
+
+
+class TooManyRetries(Exception):
+    pass

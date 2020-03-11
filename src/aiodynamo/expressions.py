@@ -7,8 +7,9 @@ from enum import Enum
 from itertools import count
 from typing import *
 
-from aiodynamo.types import KeyPath, Numeric
-from aiodynamo.utils import low_level_serialize
+from .errors import CannotAddToNestedField
+from .types import KeyPath, Numeric
+from .utils import low_level_serialize
 
 _ParametersCache = Dict[Tuple[Any, Any], Any]
 
@@ -70,78 +71,157 @@ class F(ProjectionExpression):
     # Condition Expressions
 
     def does_not_exist(self) -> Condition:
+        """
+        Checks that a field does not exist.
+        """
         return DoesNotExist(self)
 
     def exists(self) -> Condition:
+        """
+        Checks that a field exist.
+        """
         return Exists(self)
 
     def attribute_type(self, attribute_type: AttributeType) -> Condition:
+        """
+        Checks the attribute type of a field.
+        """
         return AttributeTypeCondition(self, attribute_type)
 
     def begins_with(self, substr: str) -> Condition:
+        """
+        Checks that a field begins with a substring.
+        The substring must not be empty.
+        Fields matching the substring provided completely are not returned.
+        """
         if not substr:
             raise ValueError("Substring may not be empty")
         return BeginsWith(self, substr)
 
     def between(self, low: Any, high: Any) -> Condition:
+        """
+        Checks that a field is between two given values.
+        """
         return Between(self, low, high)
 
     def contains(
         self, value: Union[str, bytes, int, float, decimal.Decimal]
     ) -> Condition:
+        """
+        Checks if a set or list contains a certain value.
+        If a string or bytes object is used as a value, they must not be empty.
+        """
         if isinstance(value, (bytes, str)) and not value:
             raise ValueError("Value may not be empty")
         return Contains(self, value)
 
     def size(self) -> Size:
+        """
+        Allows checking for the item size. Does not return a condition,
+        to return a condition, call the appropriate method on the Size
+        class instance returned.
+        """
         return Size(self)
 
     def is_in(self, values: Sequence[Any]) -> Condition:
+        """
+        Checks if the field is in a sequence of values.
+        Between one and one hundred values may be provided.
+        """
         return In(self, values)
 
     def gt(self, other: Any) -> Condition:
+        """
+        Checks if a field is greater than a value.
+        """
         return Comparison(self, ">", other)
 
     def gte(self, other: Any) -> Condition:
+        """
+        Checks if a field is greater than a value.
+        """
         return Comparison(self, ">=", other)
 
     def lt(self, other: Any) -> Condition:
+        """
+        Checks if a field is less than a value.
+        """
         return Comparison(self, "<", other)
 
     def lte(self, other: Any) -> Condition:
+        """
+        Checks if a field is less or equal than a value.
+        """
         return Comparison(self, "<=", other)
 
     def equals(self, other: Any) -> Condition:
+        """
+        Checks if a field is equal to value.
+        """
         return Comparison(self, "=", other)
 
     def not_equals(self, other: Any) -> Condition:
+        """
+        Checks if a field is not equal to a value.
+        """
         return Comparison(self, "<>", other)
 
     # Update Expressions
 
     def set(self, value: Any) -> UpdateExpression:
+        """
+        Set a field to a value. If the value is an empty string or an empty
+        bytes object, the field is instead removed.
+        """
         if isinstance(value, (bytes, str)) and not value:
             return UpdateExpression(remove={self})
         return UpdateExpression(set_updates={self: Value(value)})
 
     def set_if_not_exists(self, value: Any) -> UpdateExpression:
+        """
+        Set a field to a value if the field does not exist in the item yet.
+        If the value is an empty string or an empty bytes object, this does
+        nothing.
+        """
         if isinstance(value, (bytes, str)) and not value:
             return UpdateExpression()
         return UpdateExpression(set_updates={self: IfNotExists(value)})
 
     def change(self, diff: Numeric) -> UpdateExpression:
+        """
+        Change a numeric field by a given value.
+        """
         return UpdateExpression(set_updates={self: Modify(diff)})
 
     def append(self, value: List[Any]) -> UpdateExpression:
+        """
+        Add items to a list field. Note that the value passed in should be a
+        list, not an individual item.
+        """
         return UpdateExpression(set_updates={self: Append(list(value))})
 
     def remove(self) -> UpdateExpression:
+        """
+        Remove a field.
+        """
         return UpdateExpression(remove={self})
 
     def add(self, value: Addable) -> UpdateExpression:
+        """
+        Add a value to a field. Only allowed for top level fields.
+
+        For numeric fields add a numeric value.
+        For set fields, this will set the field to the union of the existing
+        set and the set provided.
+        """
+        if len(self.path) > 1:
+            raise CannotAddToNestedField()
         return UpdateExpression(add={self: value})
 
     def delete(self, value: Set[Any]) -> UpdateExpression:
+        """
+        Deletes all items in the set provided from the set stored in this field.
+        """
         return UpdateExpression(delete={self: value})
 
 
@@ -153,6 +233,13 @@ class KeyCondition(metaclass=abc.ABCMeta):
 
 @dataclass(frozen=True)
 class HashKey(KeyCondition):
+    """
+    Used for Key Conditions. To also constrain the Key Condition by the
+    range key, create an instance of RangeKey, call a method on it and
+    combine the HashKey with the return value of that method call using
+    the & operator.
+    """
+
     name: str
     value: Any
 
@@ -165,9 +252,19 @@ class HashKey(KeyCondition):
 
 @dataclass(frozen=True)
 class RangeKey:
+    """
+    Can be used to further constrain a Key Condition. Must be used
+    together with a HashKey instance.
+
+    The provided methods behave the same as their counterparts in the
+    F class.
+    """
+
     name: str
 
     def begins_with(self, substr: str) -> Condition:
+        if not substr:
+            raise ValueError("Substring may not be empty")
         return BeginsWith(F(self.name), substr)
 
     def between(self, low: Any, high: Any) -> Condition:

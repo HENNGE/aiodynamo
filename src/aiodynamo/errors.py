@@ -13,6 +13,10 @@ class ItemNotFound(AIODynamoError):
     pass
 
 
+class CannotAddToNestedField(AIODynamoError):
+    pass
+
+
 class UnknownError(AIODynamoError):
     def __init__(self, status: int, body: bytes):
         self.status = status
