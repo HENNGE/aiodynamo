@@ -543,7 +543,7 @@ class Client:
 
         got = 0
 
-        async for result in self._fast_depaginate("Query", payload):
+        async for result in self._depaginate("Query", payload):
             for item in result["Items"]:
                 yield dy2py(item, self.numeric_type)
                 if limit:
@@ -583,7 +583,7 @@ class Client:
             payload["ExpressionAttributeValues"] = params.get_expression_values()
 
         got = 0
-        async for result in self._fast_depaginate("Scan", payload):
+        async for result in self._depaginate("Scan", payload):
             for item in result["Items"]:
                 yield dy2py(item, self.numeric_type)
                 if limit:
@@ -617,7 +617,7 @@ class Client:
         payload["ExpressionAttributeNames"] = params.get_expression_names()
         payload["ExpressionAttributeValues"] = params.get_expression_values()
         count_sum = 0
-        async for result in self._fast_depaginate("Query", payload):
+        async for result in self._depaginate("Query", payload):
             count_sum += result["Count"]
         return count_sum
 
@@ -677,7 +677,7 @@ class Client:
                 attempt += 1
         raise Throttled()
 
-    async def _fast_depaginate(
+    async def _depaginate(
         self, action: str, payload: Dict[str, Any]
     ) -> AsyncIterator[Dict[str, Any]]:
         """
