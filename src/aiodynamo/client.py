@@ -689,7 +689,6 @@ class Client:
             while task:
                 result = await task
                 try:
-                    # TODO: Limit!
                     payload = {
                         **payload,
                         "ExclusiveStartKey": result["LastEvaluatedKey"],

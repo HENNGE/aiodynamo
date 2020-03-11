@@ -353,11 +353,11 @@ class Parameters:
     ) -> str:
         try:
             return cache[cache_key]
-
         except KeyError:
             can_cache = True
         except TypeError:
             can_cache = False
+
         encoded = f"{prefix}{next(index_gen)}"
         data[encoded] = thing
         if can_cache:

@@ -165,5 +165,5 @@ def exception_from_response(status: int, body: bytes) -> Exception:
     try:
         data = json.loads(body)
         return ERRORS[data["__type"].split("#", 1)[1]](data)
-    except:
+    except Exception:
         return UnknownError(status, body)
