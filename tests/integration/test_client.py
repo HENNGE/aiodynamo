@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 import pytest
@@ -223,13 +224,16 @@ async def test_ttl(client: Client, table: TableName):
 
 
 async def test_query_with_limit(client: Client, table: TableName):
-    item1 = {"h": "h", "r": "1", "d": "x"}
-    item2 = {"h": "h", "r": "2", "d": "y"}
-    await client.put_item(table, item1)
-    await client.put_item(table, item2)
+    big = "x" * 20_000
+    await asyncio.gather(
+        *(
+            client.put_item(table, {"h": "h", "r": str(i), "big": big})
+            for i in range(100)
+        )
+    )
     items = [item async for item in client.query(table, HashKey("h", "h"), limit=1)]
     assert len(items) == 1
-    assert items[0] == item1
+    assert items[0]["r"] == "0"
 
 
 async def test_scan_with_limit(client: Client, table: TableName):

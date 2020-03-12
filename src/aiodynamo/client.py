@@ -533,23 +533,15 @@ class Client:
             payload["ExclusiveStartKey"] = start_key
         if index:
             payload["IndexName"] = index
-        if limit:
-            payload["Limit"] = limit
         if select:
             payload["Select"] = select.value
 
         payload["ExpressionAttributeNames"] = params.get_expression_names()
         payload["ExpressionAttributeValues"] = params.get_expression_values()
 
-        got = 0
-
-        async for result in self._depaginate("Query", payload):
+        async for result in self._depaginate("Query", payload, limit):
             for item in result["Items"]:
                 yield dy2py(item, self.numeric_type)
-                if limit:
-                    got += 1
-                    if got >= limit:
-                        return
 
     async def scan(
         self,
@@ -570,8 +562,6 @@ class Client:
 
         if index:
             payload["IndexName"] = index
-        if limit:
-            payload["Limit"] = limit
         if start_key:
             payload["ExclusiveStartKey"] = start_key
         if projection:
@@ -582,14 +572,9 @@ class Client:
             payload["ExpressionAttributeNames"] = params.get_expression_names()
             payload["ExpressionAttributeValues"] = params.get_expression_values()
 
-        got = 0
-        async for result in self._depaginate("Scan", payload):
+        async for result in self._depaginate("Scan", payload, limit):
             for item in result["Items"]:
                 yield dy2py(item, self.numeric_type)
-                if limit:
-                    got += 1
-                    if got >= limit:
-                        return
 
     async def count(
         self,
@@ -678,12 +663,14 @@ class Client:
         raise Throttled()
 
     async def _depaginate(
-        self, action: str, payload: Dict[str, Any]
+        self, action: str, payload: Dict[str, Any], limit: Optional[int] = None
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Internal API to depaginate the results from query/scan/count.
         Don't call this directly, use .query, .scan or .count instead.
         """
+        if limit is not None:
+            payload = {**payload, "Limit": limit}
         task = asyncio.create_task(self.send_request(action=action, payload=payload))
         try:
             while task:
@@ -693,10 +680,20 @@ class Client:
                         **payload,
                         "ExclusiveStartKey": result["LastEvaluatedKey"],
                     }
+                except KeyError:
+                    payload = None
+                else:
+                    if limit is not None:
+                        limit -= len(result["Items"])
+                        if limit > 0:
+                            payload["Limit"] = limit
+                        else:
+                            payload = None
+                if payload:
                     task = asyncio.create_task(
                         self.send_request(action=action, payload=payload)
                     )
-                except KeyError:
+                else:
                     task = None
                 yield result
         except asyncio.CancelledError:
