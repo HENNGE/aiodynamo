@@ -27,6 +27,11 @@ async def test_put_get_item(client: Client, table: TableName):
         "number-key": 123,
         "list-key": ["hello", "world"],
         "nested": {"nested": "key"},
+        "binary": b"hello world",
+        "string-set": {"string", "set"},
+        "number-set": {1, 2},
+        "binary-set": {b"hello", b"world"},
+        "map": {"foo": "bar"},
     }
     await client.put_item(table, item)
     db_item = await client.get_item(

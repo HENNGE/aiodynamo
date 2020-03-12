@@ -1,3 +1,4 @@
+import base64
 from decimal import Decimal
 from functools import partial
 
@@ -7,7 +8,9 @@ from boto3.dynamodb.types import DYNAMODB_CONTEXT, TypeDeserializer
 
 
 def test_binary_decode():
-    assert dy2py({"test": {"B": b"hello"}}, float) == {"test": b"hello"}
+    assert dy2py({"test": {"B": base64.b64encode(b"hello")}}, float) == {
+        "test": b"hello"
+    }
 
 
 @pytest.mark.parametrize(
@@ -27,7 +30,7 @@ def test_serde_compatibility():
     def generate_item(nest):
         item = {
             "hash": {"S": "string",},
-            "range": {"B": b"bytes",},
+            "range": {"B": base64.b64encode(b"bytes"),},
             "null": {"NULL": True},
             "true": {"BOOL": True},
             "false": {"BOOL": False},
@@ -35,7 +38,9 @@ def test_serde_compatibility():
             "float": {"N": "4.2"},
             "numeric_set": {"NS": ["42", "4.2"]},
             "string_set": {"SS": ["hello", "world"]},
-            "binary_set": {"BS": [b"hello", b"world"]},
+            "binary_set": {
+                "BS": [base64.b64encode(b"hello"), base64.b64encode(b"world")]
+            },
         }
         if nest:
             item["list"] = {"L": [{"M": generate_item(False)}]}
@@ -45,7 +50,7 @@ def test_serde_compatibility():
 
     class BinaryDeserializer(TypeDeserializer):
         def _deserialize_b(self, value):
-            return value
+            return base64.b64decode(value)
 
     def deserialize_item(item, deserializer):
         return {k: deserializer(v) for k, v in item.items()}

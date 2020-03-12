@@ -16,22 +16,13 @@ _ParametersCache = Dict[Tuple[Any, Any], Any]
 Addable = Union[Numeric, Set[bytes], Set[str], Set[Numeric]]
 
 
-class AttributeType(Enum):
-    string = "S"
-    string_set = "SS"
-    number = "N"
-    number_set = "NS"
-    binary = "B"
-    binary_set = "BS"
-    boolean = "BOOL"
-    null = "NULL"
-    list = "L"
-    map = "M"
-
-
 class ProjectionExpression(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def encode(self, params: Parameters) -> str:
+        pass
+
+    @abc.abstractmethod
+    def __and__(self, other: ProjectionExpression) -> ProjectionExpression:
         pass
 
 

@@ -1,4 +1,5 @@
 import decimal
+from enum import Enum
 from typing import Any, Callable, Dict, Sequence, TypeVar, Union
 
 Timeout = Union[float, int]
@@ -13,6 +14,17 @@ EncoderFunc = Callable[[Any], str]
 NOTHING = object()
 
 
-SIMPLE_TYPES = frozenset({"BOOL", "S", "B"})
-SIMPLE_SET_TYPES = frozenset({"SS", "BS"})
-NULL_TYPE = "NULL"
+class AttributeType(Enum):
+    string = "S"
+    string_set = "SS"
+    number = "N"
+    number_set = "NS"
+    binary = "B"
+    binary_set = "BS"
+    boolean = "BOOL"
+    null = "NULL"
+    list = "L"
+    map = "M"
+
+
+SIMPLE_TYPES = frozenset({AttributeType.boolean, AttributeType.string})

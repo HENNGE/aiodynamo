@@ -5,7 +5,7 @@ from collections import abc as collections_abc
 from functools import reduce
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union
 
-from .types import NULL_TYPE, SIMPLE_SET_TYPES, SIMPLE_TYPES, DynamoItem, Item
+from .types import SIMPLE_TYPES, AttributeType, DynamoItem, Item
 
 
 def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:
@@ -39,21 +39,29 @@ def deserialize(value: Dict[str, Any], numeric_type: Callable[[str], Any]) -> An
             "Value must be a nonempty dictionary whose key " "is a valid dynamodb type."
         )
     tag, val = next(iter(value.items()))
-    if tag in SIMPLE_TYPES:
+    try:
+        attr_type = AttributeType(tag)
+    except ValueError:
+        raise TypeError(f"Dynamodb type {tag} is not supported")
+    if attr_type in SIMPLE_TYPES:
         return val
-    if tag == NULL_TYPE:
+    if attr_type is AttributeType.null:
         return None
-    if tag == "N":
+    if attr_type is AttributeType.binary:
+        return base64.b64decode(val)
+    if attr_type is AttributeType.number:
         return numeric_type(val)
-    if tag in SIMPLE_SET_TYPES:
+    if attr_type is AttributeType.string_set:
         return set(val)
-    if tag == "NS":
+    if attr_type is AttributeType.binary_set:
+        return {base64.b64decode(v) for v in val}
+    if attr_type is AttributeType.number_set:
         return {numeric_type(v) for v in val}
-    if tag == "L":
+    if attr_type is AttributeType.list:
         return [deserialize(v, numeric_type) for v in val]
-    if tag == "M":
+    if attr_type is AttributeType.map:
         return {k: deserialize(v, numeric_type) for k, v in val.items()}
-    raise TypeError(f"Dynamodb type {tag} is not supported")
+    raise TypeError(f"Dynamodb type {attr_type} is not supported")
 
 
 NUMERIC_TYPES = int, float, decimal.Decimal
@@ -110,7 +118,7 @@ def low_level_serialize(value: Any) -> Optional[Tuple[str, Any]]:
             )
     elif isinstance(value, collections_abc.Mapping):
         return "M", serialize_dict(value)
-    elif isinstance(value, list):
+    elif isinstance(value, collections_abc.Sequence):
         return "L", [item for item in map(serialize, value) if item is not None]
     else:
         raise TypeError(f"Unsupported type {type(value)}: {value!r}")
