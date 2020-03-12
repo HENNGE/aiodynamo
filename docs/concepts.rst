@@ -2,7 +2,7 @@ Concepts
 ========
 
 Aiodynamo does not rely on boto3, botocore or aiobotocore. This is primarily done for performance reasons,
-as profiling showed that especially for querying data, boto libraries are very slow.
+as profiling showed that especially for querying data, boto libraries were very slow.
 
 Main differences to boto3/botocore/aiobotocore
 ----------------------------------------------
