@@ -15,7 +15,7 @@ The :py:class:`aiodynamo.client.Client` class takes three required and three opt
 3. The region your DynamoDB is in.
 4. An optional endpoint URL of your DynamoDB, as a :py:class:`yarl.URL` instance. Useful when using a local DynamoDB implementation such as dynalite or dynamodb-local.
 5. Which numeric type to use. This should be a callable which accepts a string as input and returns your numeric type as output. Defaults to ``float``.
-6. The throttling configuration to use. An instance of :py:class:`aiodynamo.models.ThrottleConfig`. By default, if the DynamoDB rate limit is exceeded, aiodynamo will attempt up to 5 times with increasing delays betwene requests.
+6. The throttling configuration to use. An instance of :py:class:`aiodynamo.models.ThrottleConfig`. By default, if the DynamoDB rate limit is exceeded, aiodynamo will attempt up to 5 times with increasing delays between requests.
 
 The ``F`` class
 ---------------
