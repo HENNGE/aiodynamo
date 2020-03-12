@@ -1,13 +1,17 @@
+import asyncio
 import datetime
 
 import pytest
 from aiodynamo.credentials import (
+    EXPIRED_THRESHOLD,
+    EXPIRES_SOON_THRESHOLD,
     EnvironmentCredentials,
     InstanceMetadataCredentials,
     Key,
     Metadata,
 )
 from aiohttp import web
+from freezegun import freeze_time
 from yarl import URL
 
 pytestmark = [pytest.mark.asyncio]
@@ -18,6 +22,7 @@ class InstanceMetadataServer:
         self.port = 0
         self.role = None
         self.metadata = None
+        self.calls = 0
 
     async def role_handler(self, request):
         if self.role is None:
@@ -25,6 +30,7 @@ class InstanceMetadataServer:
         return web.Response(body=self.role.encode("utf-8"))
 
     async def credentials_handler(self, request):
+        self.calls += 1
         if self.role is None:
             raise web.HTTPNotFound()
         if request.match_info["role"] != self.role:
@@ -105,3 +111,29 @@ async def test_ec2_instance_metdata_credentials(http, instance_metadata_server):
     instance_metadata_server.role = None
     instance_metadata_server.metadata = None
     assert await imc.get_key(http) == metadata.key
+
+
+async def test_simultaneous_credentials_refresh(http, instance_metadata_server):
+    instance_metadata_server.role = "hoge"
+    now = datetime.datetime(2020, 3, 12, 15, 37, 51, tzinfo=datetime.timezone.utc)
+    expires = now + EXPIRES_SOON_THRESHOLD - datetime.timedelta(seconds=10)
+    expired = now + EXPIRED_THRESHOLD - datetime.timedelta(seconds=10)
+    not_expired = now + datetime.timedelta(days=2)
+    imc = InstanceMetadataCredentials(
+        timeout=0.1,
+        base_url=URL("http://localhost").with_port(instance_metadata_server.port),
+    )
+    key1 = Key("id1", "secret1")
+    key2 = Key("id2", "secret2")
+    imc._metadata = Metadata(key1, expires,)
+    instance_metadata_server.metadata = Metadata(key2, not_expired)
+    assert instance_metadata_server.calls == 0
+    with freeze_time(now):
+        key = await imc.get_key(http)
+        assert key == key1
+        assert instance_metadata_server.calls == 0
+        assert imc._refresher is not None
+        imc._metadata = Metadata(key1, expired)
+        key = await imc.get_key(http)
+        assert key == key2
+        assert instance_metadata_server.calls == 1

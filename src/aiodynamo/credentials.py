@@ -8,7 +8,6 @@ import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from functools import wraps
 from typing import *
 
 from yarl import URL
@@ -88,43 +87,10 @@ class EnvironmentCredentials(Credentials):
         return self.key
 
 
-def highlander(coro_func):
-    """
-    Ensures there can only ever be one "active" instance of the wrapped coroutine function.
-
-    Multiple concurrent calls will only result in a single call to the wrapped coroutine and
-    all callers will get the same result (or Exception).
-
-    Non-concurrent calls will behave as if the coroutine function is not wrapped in this decorator.
-    """
-    future = None
-
-    def reset_future(_):
-        nonlocal future
-        future = None
-
-    async def shielded(*args, **kwargs):
-        nonlocal future
-        future = asyncio.create_task(coro_func(*args, **kwargs))
-        future.add_done_callback(reset_future)
-        return await future
-
-    @wraps(coro_func)
-    async def wrapper(*args, **kwargs):
-        nonlocal future
-        if future is not None:
-            return await future
-        # This shield is needed in case the caller to this gets cancelled. Otherwise
-        # other "queued" callers will get a cancelled exception instead of the result.
-        return await asyncio.shield(shielded(*args, **kwargs))
-
-    return wrapper
-
-
-class Expiration(Enum):
-    not_expired = auto()
-    expires_soon = auto()
-    expired = auto()
+class Refresh(Enum):
+    required = auto()
+    soon = auto()
+    not_required = auto()
 
 
 EXPIRES_SOON_THRESHOLD = datetime.timedelta(minutes=15)
@@ -136,25 +102,26 @@ class Metadata:
     key: Key
     expires: datetime.datetime
 
-    def lives_longer_than(self, other: Metadata) -> bool:
-        return self.expires > other.expires
-
-    def check_expiration(self) -> Expiration:
+    def check_refresh(self) -> Refresh:
         now = datetime.datetime.now(datetime.timezone.utc)
         if now >= self.expires:
-            return Expiration.expired
+            return Refresh.required
         diff = self.expires - now
         if diff < EXPIRED_THRESHOLD:
-            return Expiration.expired
+            return Refresh.required
         if diff < EXPIRES_SOON_THRESHOLD:
-            return Expiration.expires_soon
-        return Expiration.not_expired
+            return Refresh.soon
+        return Refresh.not_required
 
 
 @dataclass
 class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    async def _fetch_metadata(self, http: HTTP) -> Metadata:
+    async def fetch_metadata(self, http: HTTP) -> Metadata:
+        pass
+
+    @abc.abstractmethod
+    def is_disabled(self) -> bool:
         pass
 
     async def fetch_with_retry(
@@ -169,7 +136,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
         for attempt in range(max_attempts):
             try:
                 response = await http.get(url=url, headers=headers, timeout=timeout)
-            except:
+            except Exception:
                 logging.exception("GET failed")
                 continue
             if response:
@@ -178,49 +145,31 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
 
     def __post_init__(self):
         self._metadata: Optional[Metadata] = None
+        self._refresher: Optional[asyncio.Task] = None
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
-        try:
-            await self._check_metadata(http)
-        except Disabled:
+        if self.is_disabled():
             return None
+        refresh = self._check_refresh()
+        if refresh is Refresh.required:
+            if self._refresher is None:
+                self._refresher = asyncio.create_task(self._refresh(http))
+            try:
+                await self._refresher
+            finally:
+                self._refresher = None
+        elif refresh is Refresh.soon:
+            if self._refresher is None:
+                self._refresher = asyncio.create_task(self._refresh(http))
         return self._metadata and self._metadata.key
 
-    @highlander
-    async def _check_metadata(self, http: HTTP):
+    def _check_refresh(self) -> Refresh:
         if self._metadata is None:
-            await self._refresh(http)
-            return
-        expiration = self._metadata.check_expiration()
-        if expiration is Expiration.expired:
-            await self._refresh(http)
-            return
-        elif expiration is Expiration.expires_soon:
-            asyncio.create_task(self._maybe_refresh(http))
-            return
-        return self._metadata.key
+            return Refresh.required
+        return self._metadata.check_refresh()
 
-    @highlander
     async def _refresh(self, http: HTTP):
-        self._maybe_set_metadata(await self._fetch_metadata(http))
-
-    @highlander
-    async def _maybe_refresh(self, http: HTTP):
-        try:
-            self._maybe_set_metadata(await self._fetch_metadata(http))
-        except:
-            pass
-
-    def _maybe_set_metadata(self, metadata: Metadata):
-        """
-        Guards against `_maybe_refresh` somehow being slower than `_refresh`
-        """
-        if self._metadata is None or metadata.lives_longer_than(self._metadata):
-            self._metadata = metadata
-
-
-class Disabled(Exception):
-    pass
+        self._metadata = await self.fetch_metadata(http)
 
 
 T = TypeVar("T")
@@ -244,7 +193,7 @@ class ContainerMetadataCredentials(MetadataCredentials):
             "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", None
         )
     )
-    full_uri: str = field(
+    full_uri: URL = field(
         default_factory=lambda: and_then(
             os.environ.get("AWS_CONTAINER_CREDENTIALS_FULL_URI", None), URL
         )
@@ -255,18 +204,24 @@ class ContainerMetadataCredentials(MetadataCredentials):
         )
     )
 
-    async def _fetch_metadata(self, http: HTTP) -> Metadata:
+    @property
+    def url(self) -> Optional[URL]:
         if self.relative_uri is not None:
-            url = self.base_url.with_path(self.relative_uri)
+            return self.base_url.with_path(self.relative_uri)
         elif self.full_uri is not None:
-            url = self.full_uri
+            return self.full_uri
         else:
-            raise Disabled()
+            return None
+
+    def is_disabled(self) -> bool:
+        return self.url is None
+
+    async def fetch_metadata(self, http: HTTP) -> Metadata:
         headers = and_then(self.auth_token, lambda token: {"Authorization": token})
         response = await self.fetch_with_retry(
             http=http,
             max_attempts=self.max_attempts,
-            url=url,
+            url=self.url,
             headers=headers,
             timeout=self.timeout,
         )
@@ -275,7 +230,7 @@ class ContainerMetadataCredentials(MetadataCredentials):
             key=Key(
                 id=data["AccessKeyId"],
                 secret=data["SecretAccessKey"],
-                token=data["Token"],
+                token=data.get("Token", None),
             ),
             expires=parse_amazon_timestamp(data["Expiration"]),
         )
@@ -294,9 +249,10 @@ class InstanceMetadataCredentials(MetadataCredentials):
         == "true"
     )
 
-    async def _fetch_metadata(self, http: HTTP) -> Metadata:
-        if self.disabled:
-            raise Disabled()
+    def is_disabled(self) -> bool:
+        return self.disabled
+
+    async def fetch_metadata(self, http: HTTP) -> Metadata:
         role_url = self.base_url.with_path(
             "/latest/meta-data/iam/security-credentials/"
         )
@@ -320,7 +276,7 @@ class InstanceMetadataCredentials(MetadataCredentials):
             key=Key(
                 credentials["AccessKeyId"],
                 credentials["SecretAccessKey"],
-                credentials["Token"],
+                credentials.get("Token", None),
             ),
             expires=parse_amazon_timestamp(credentials["Expiration"]),
         )

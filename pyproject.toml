@@ -30,6 +30,7 @@ black = {version = "^19.10b0",allow-prereleases = true}
 sphinx = "^1.8"
 pyperf = "^1.7.0"
 boto3 = "^1.12.18"
+freezegun = "^0.3.15"
 
 [tool.isort]
 line_length = "88"
