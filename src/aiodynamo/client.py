@@ -268,16 +268,13 @@ class Client:
         if wait_for_active:
             if not isinstance(wait_for_active, WaitConfig):
                 wait_for_active = WaitConfig.default()
-            attempts = 0
-            while attempts < wait_for_active.max_attempts:
+            async for _ in wait_for_active.attempts():
                 try:
                     description = await self.describe_table(name)
                     if description.status == TableStatus.active:
                         return
                 except TableNotFound:
                     pass
-                attempts += 1
-                await asyncio.sleep(wait_for_active.retry_delay)
             raise TableDidNotBecomeActive()
 
     async def enable_time_to_live(
@@ -338,13 +335,10 @@ class Client:
             )
             if not isinstance(wait_for_change, WaitConfig):
                 wait_for_change = WaitConfig.default()
-            attempts = 0
-            while attempts < wait_for_change.max_attempts:
+            async for _ in wait_for_change.attempts():
                 description = await self.describe_time_to_live(table)
                 if description.status == result_state:
                     return
-                attempts += 1
-                await asyncio.sleep(wait_for_change.retry_delay)
             raise TimeToLiveStatusNotChanged()
 
     async def describe_table(self, name: TableName):
@@ -430,14 +424,11 @@ class Client:
         await self.send_request(action="DeleteTable", payload={"TableName": table})
         if not isinstance(wait_for_disabled, WaitConfig):
             wait_for_disabled = WaitConfig.default()
-        attempts = 0
-        while attempts < wait_for_disabled.max_attempts:
+        async for _ in wait_for_disabled.attempts():
             try:
                 await self.describe_table(table)
             except TableNotFound:
                 return
-            attempts += 1
-            await asyncio.sleep(wait_for_disabled.retry_delay)
         raise TableDidNotBecomeDisabled()
 
     async def get_item(

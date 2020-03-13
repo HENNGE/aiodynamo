@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 from dataclasses import dataclass
 from enum import Enum, unique
@@ -166,6 +167,11 @@ class WaitConfig:
     @classmethod
     def default(cls):
         return WaitConfig(25, 20)
+
+    async def attempts(self):
+        for _ in range(self.max_attempts):
+            yield
+            await asyncio.sleep(self.retry_delay)
 
 
 @dataclass(frozen=True)
