@@ -22,7 +22,7 @@ Locally
 ~~~~~~~
 
 To also run the integration tests, set ``DYNAMODB_URL`` to the endpoint of a DynamoDB instance. We recommend you use
-`dynalite`_ for local testing. You also need to set ``AWS_ACCESS_KEY_ID`` and ``AWS_SECRET_ACCESS_KEY``.
+``dynalite`` (repository_, container_) for local testing. You also need to set ``AWS_ACCESS_KEY_ID`` and ``AWS_SECRET_ACCESS_KEY``.
 
 Docs
 ----
@@ -41,4 +41,5 @@ Releasing
 Run `poetry build -fwheel` to create a wheel, then `twine upload dist/aiodynamo-<version>-py3-none-any.whl`.
 
 .. _poetry: https://poetry.eustace.io/
-.. _dynalite: https://github.com/mhart/dynalite
+.. _repository: https://github.com/mhart/dynalite
+.. _container: https://hub.docker.com/r/dimaqq/dynalite/
