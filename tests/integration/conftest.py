@@ -37,6 +37,7 @@ async def client(http, endpoint, region):
         URL(endpoint) if endpoint is not None else endpoint,
     )
 
+
 @contextlib.asynccontextmanager
 async def table_factory(client: Client, table_name_prefix: str, throughput: int = 5):
     name = table_name_prefix + str(uuid.uuid4())

@@ -243,7 +243,9 @@ async def test_query_with_limit(client: Client, fast_table: TableName):
         )
     )
 
-    items = [item async for item in client.query(fast_table, HashKey("h", "h"), limit=1)]
+    items = [
+        item async for item in client.query(fast_table, HashKey("h", "h"), limit=1)
+    ]
     assert len(items) == 1
     assert items[0]["r"] == "0"
 
