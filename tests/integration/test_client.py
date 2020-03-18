@@ -153,6 +153,16 @@ async def test_query(client: Client, table: TableName):
         index += 1
 
 
+async def test_query_descending(client: Client, table: TableName):
+    item1 = {"h": "h", "r": "1", "d": "x"}
+    item2 = {"h": "h", "r": "2", "d": "y"}
+    items = [item1, item2]
+    await client.put_item(table, item1)
+    await client.put_item(table, item2)
+    rv = [item async for item in client.query(table, HashKey("h", "h"), scan_forward=False)]
+    assert rv == list(reversed(items))
+
+
 async def test_scan(client: Client, table: TableName):
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
