@@ -219,7 +219,10 @@ async def test_ttl(client: Client, table: TableName):
         raise pytest.skip("TTL not supported by database")
     assert desc.status == TimeToLiveStatus.disabled
     assert desc.attribute == None
-    await client.enable_time_to_live(table, "ttl")
+    try:
+        await client.enable_time_to_live(table, "ttl")
+    except UnknownOperation:
+        raise pytest.skip("TTL not supported by database")
     enabled_desc = await client.describe_time_to_live(table)
     assert enabled_desc.status == TimeToLiveStatus.enabled
     assert enabled_desc.attribute == "ttl"
