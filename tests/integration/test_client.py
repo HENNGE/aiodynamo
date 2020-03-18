@@ -159,7 +159,10 @@ async def test_query_descending(client: Client, table: TableName):
     items = [item1, item2]
     await client.put_item(table, item1)
     await client.put_item(table, item2)
-    rv = [item async for item in client.query(table, HashKey("h", "h"), scan_forward=False)]
+    rv = [
+        item
+        async for item in client.query(table, HashKey("h", "h"), scan_forward=False)
+    ]
     assert rv == list(reversed(items))
 
 
