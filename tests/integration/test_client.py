@@ -151,6 +151,7 @@ async def test_query(client: Client, table: TableName):
     async for item in client.query(table, HashKey("h", "h")):
         assert item == items[index]
         index += 1
+    assert index == 2
 
 
 async def test_scan(client: Client, table: TableName):
@@ -163,6 +164,7 @@ async def test_scan(client: Client, table: TableName):
     async for item in client.scan(table):
         assert item == items[index]
         index += 1
+    assert index == 2
 
 
 async def test_exists(client: Client, table_name_prefix: str):
@@ -231,15 +233,17 @@ async def test_ttl(client: Client, table: TableName):
     # See: https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTimeToLive.html
 
 
-async def test_query_with_limit(client: Client, table: TableName):
+async def test_query_with_limit(client: Client, fast_table: TableName):
     big = "x" * 20_000
+
     await asyncio.gather(
         *(
-            client.put_item(table, {"h": "h", "r": str(i), "big": big})
+            client.put_item(fast_table, {"h": "h", "r": str(i), "big": big})
             for i in range(100)
         )
     )
-    items = [item async for item in client.query(table, HashKey("h", "h"), limit=1)]
+
+    items = [item async for item in client.query(fast_table, HashKey("h", "h"), limit=1)]
     assert len(items) == 1
     assert items[0]["r"] == "0"
 

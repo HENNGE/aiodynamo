@@ -1,3 +1,4 @@
+import contextlib
 import os
 import uuid
 
@@ -36,13 +37,12 @@ async def client(http, endpoint, region):
         URL(endpoint) if endpoint is not None else endpoint,
     )
 
-
-@pytest.fixture
-async def table(client: Client, table_name_prefix: str):
+@contextlib.asynccontextmanager
+async def table_factory(client: Client, table_name_prefix: str, throughput: int = 5):
     name = table_name_prefix + str(uuid.uuid4())
     await client.create_table(
         name,
-        Throughput(5, 5),
+        Throughput(throughput, throughput),
         KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
         wait_for_active=WaitConfig(max_attempts=25, retry_delay=5),
     )
@@ -50,3 +50,15 @@ async def table(client: Client, table_name_prefix: str):
         yield name
     finally:
         await client.delete_table(name)
+
+
+@pytest.fixture
+async def table(client: Client, table_name_prefix: str):
+    async with table_factory(client, table_name_prefix) as name:
+        yield name
+
+
+@pytest.fixture
+async def fast_table(client: Client, table_name_prefix: str):
+    async with table_factory(client, table_name_prefix, throughput=1000) as name:
+        yield name
