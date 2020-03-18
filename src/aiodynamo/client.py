@@ -511,7 +511,7 @@ class Client:
         payload = {
             "TableName": table,
             "KeyConditionExpression": key_condition.encode(params),
-            "ScanForward": scan_forward,
+            "ScanIndexForward": scan_forward,
         }
 
         if projection:

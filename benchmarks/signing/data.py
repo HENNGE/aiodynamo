@@ -13,7 +13,7 @@ ACTION = "Query"
 PAYLOAD = {
     "TableName": "table-name",
     "KeyConditionExpression": "#n0.#n1.#n2.#n3.#n4.#n5.#n3.#n2.#n6.#n7.#n1 = :v0 AND size(#n8) <= :v1",
-    "ScanForward": True,
+    "ScanIndexForward": True,
     "ProjectionExpression": "#n9,#n1,#n10[4].#n11",
     "FilterExpression": "(begins_with(#n12, :v2) AND contains(#n13, :v3))",
     "ExclusiveStartKey": {
