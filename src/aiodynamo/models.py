@@ -200,7 +200,7 @@ class ThrottleConfig(metaclass=abc.ABCMeta):
 
 
 @dataclass(frozen=True)
-class DecorrelatedJitterThrottling(ThrottleConfig):
+class DecorelatedJitterThrottling(ThrottleConfig):
     max_time_secs: int = 60
     base_delay_secs: int = 0.05
     max_delay_secs: int = 1
