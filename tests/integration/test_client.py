@@ -124,14 +124,8 @@ async def test_delete_item(client: Client, table: TableName):
         await client.get_item(table, item)
 
 
-async def test_delete_table(client: Client, table_name_prefix: str):
-    name = table_name_prefix + str(uuid.uuid4())
-    await client.create_table(
-        name,
-        Throughput(5, 5),
-        KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
-        wait_for_active=WaitConfig(max_attempts=25, retry_delay=5),
-    )
+async def test_delete_table(client: Client, table_factory):
+    name = await table_factory()
     # no error
     await client.put_item(name, {"h": "h", "r": "r"})
     await client.delete_table(
@@ -151,6 +145,7 @@ async def test_query(client: Client, table: TableName):
     async for item in client.query(table, HashKey("h", "h")):
         assert item == items[index]
         index += 1
+    assert index == 2
 
 
 async def test_query_descending(client: Client, table: TableName):
@@ -176,19 +171,14 @@ async def test_scan(client: Client, table: TableName):
     async for item in client.scan(table):
         assert item == items[index]
         index += 1
+    assert index == 2
 
 
-async def test_exists(client: Client, table_name_prefix: str):
-    name = table_name_prefix + str(uuid.uuid4())
-    assert await client.table_exists(name) == False
-    with pytest.raises(TableNotFound):
-        await client.describe_table(name)
+async def test_exists(client: Client, table_factory):
     throughput = Throughput(5, 5)
     key_schema = KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string))
     attrs = {"h": KeyType.string, "r": KeyType.string}
-    await client.create_table(
-        name, throughput, key_schema, wait_for_active=WaitConfig(25, 5)
-    )
+    name = await table_factory()
     try:
         assert await client.table_exists(name)
         desc = await client.describe_table(name)
@@ -199,6 +189,9 @@ async def test_exists(client: Client, table_name_prefix: str):
         assert desc.item_count == 0
     finally:
         await client.delete_table(name)
+    assert await client.table_exists(name) == False
+    with pytest.raises(TableNotFound):
+        await client.describe_table(name)
 
 
 async def test_empty_string(client: Client, table: TableName):
@@ -244,15 +237,22 @@ async def test_ttl(client: Client, table: TableName):
     # See: https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTimeToLive.html
 
 
-async def test_query_with_limit(client: Client, table: TableName):
+async def test_query_with_limit(client: Client, high_throughput_table: TableName):
     big = "x" * 20_000
+
     await asyncio.gather(
         *(
-            client.put_item(table, {"h": "h", "r": str(i), "big": big})
+            client.put_item(high_throughput_table, {"h": "h", "r": str(i), "big": big})
             for i in range(100)
         )
     )
-    items = [item async for item in client.query(table, HashKey("h", "h"), limit=1)]
+
+    items = [
+        item
+        async for item in client.query(
+            high_throughput_table, HashKey("h", "h"), limit=1
+        )
+    ]
     assert len(items) == 1
     assert items[0]["r"] == "0"
 

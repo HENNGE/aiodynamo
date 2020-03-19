@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import abc
 import asyncio
 import datetime
+import random
+import time
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Callable, Dict, List, Optional, Union
+from itertools import count
+from typing import AsyncIterable, Dict, Iterable, List, Optional, Union
 
-from .types import Timeout
+from .errors import Throttled
 
 ProjectionExpr = Union["ProjectionExpression", "F"]
 
@@ -175,10 +179,49 @@ class WaitConfig:
 
 
 @dataclass(frozen=True)
-class ThrottleConfig:
-    max_attempts: int
-    delay_func: Callable[[int], Timeout]
+class ThrottleConfig(metaclass=abc.ABCMeta):
+    time_limit_secs: int = 60
 
     @classmethod
     def default(cls):
-        return ThrottleConfig(5, lambda attempt: attempt + 1)
+        return ExponentialBackoffThrottling()
+
+    @abc.abstractmethod
+    def delays(self) -> Iterable[float]:
+        raise NotImplementedError()
+
+    async def attempts(self) -> AsyncIterable[None]:
+        deadline = time.monotonic() + self.time_limit_secs
+        for delay in self.delays():
+            yield
+            if time.monotonic() > deadline:
+                raise Throttled()
+            await asyncio.sleep(delay)
+
+
+@dataclass(frozen=True)
+class DecorelatedJitterThrottling(ThrottleConfig):
+    max_time_secs: int = 60
+    base_delay_secs: int = 0.05
+    max_delay_secs: int = 1
+
+    def delays(self):
+        current_delay_secs = self.base_delay_secs
+        while True:
+            current_delay_secs = min(
+                self.max_delay_secs,
+                random.uniform(self.base_delay_secs, current_delay_secs * 3),
+            )
+            yield current_delay_secs
+
+
+@dataclass(frozen=True)
+class ExponentialBackoffThrottling(ThrottleConfig):
+    base_delay_secs: int = 2
+    max_delay_secs: int = 20
+
+    def delays(self) -> Iterable[float]:
+        for attempt in count():
+            yield min(
+                random.random() * (self.base_delay_secs ** attempt), self.max_delay_secs
+            )
