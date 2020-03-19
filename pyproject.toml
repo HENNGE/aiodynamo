@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aiodynamo"
-version = "20.3.rc3"
+version = "20.3.rc4"
 description = "Asyncio DynamoDB client"
 authors = ["Jonas Obrist <jonas.obrist@hennge.com>"]
 license = "Apache-2.0"
