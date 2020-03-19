@@ -521,7 +521,7 @@ class Client:
             payload["FilterExpression"] = filter_expression.encode(params)
 
         if start_key:
-            payload["ExclusiveStartKey"] = start_key
+            payload["ExclusiveStartKey"] = py2dy(start_key)
         if index:
             payload["IndexName"] = index
         if select:
@@ -554,7 +554,7 @@ class Client:
         if index:
             payload["IndexName"] = index
         if start_key:
-            payload["ExclusiveStartKey"] = start_key
+            payload["ExclusiveStartKey"] = py2dy(start_key)
         if projection:
             payload["ProjectionExpression"] = projection.encode(params)
         if filter_expression:
@@ -585,7 +585,7 @@ class Client:
         }
 
         if start_key:
-            payload["ExclusiveStartKey"] = start_key
+            payload["ExclusiveStartKey"] = py2dy(start_key)
         if filter_expression:
             payload["FilterExpression"] = filter_expression.encode(params)
         if index:
