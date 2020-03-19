@@ -636,24 +636,21 @@ class Client:
     async def send_request(
         self, *, action: str, payload: Dict[str, Any],
     ) -> Dict[str, Any]:
-        key = await self.credentials.get_key(self.http)
-        request = signed_dynamo_request(
-            key=key,
-            payload=payload,
-            action=action,
-            region=self.region,
-            endpoint=self.endpoint,
-        )
-        attempt = 0
-        while attempt < self.throttle_config.max_attempts:
+        async for _ in self.throttle_config.attempts():
+            key = await self.credentials.get_key(self.http)
+            request = signed_dynamo_request(
+                key=key,
+                payload=payload,
+                action=action,
+                region=self.region,
+                endpoint=self.endpoint,
+            )
             try:
                 return await self.http.post(
                     url=request.url, headers=request.headers, body=request.body
                 )
-            except Throttled:
-                await asyncio.sleep(self.throttle_config.delay_func(attempt))
-                attempt += 1
-        raise Throttled()
+            except (Throttled, ProvisionedThroughputExceeded):
+                pass
 
     async def _depaginate(
         self, action: str, payload: Dict[str, Any], limit: Optional[int] = None

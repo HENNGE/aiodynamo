@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import abc
 import asyncio
 import datetime
+import random
+import time
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Callable, Dict, List, Optional, Union
+from typing import AsyncIterable, Dict, List, Optional, Union
 
-from .types import Timeout
+from .errors import Throttled
 
 ProjectionExpr = Union["ProjectionExpression", "F"]
 
@@ -174,11 +177,36 @@ class WaitConfig:
             await asyncio.sleep(self.retry_delay)
 
 
-@dataclass(frozen=True)
-class ThrottleConfig:
-    max_attempts: int
-    delay_func: Callable[[int], Timeout]
-
+class ThrottleConfig(metaclass=abc.ABCMeta):
     @classmethod
     def default(cls):
-        return ThrottleConfig(5, lambda attempt: attempt + 1)
+        return DecorrelatedJitterThrottling()
+
+    @abc.abstractmethod
+    async def attempts(self) -> AsyncIterable[None]:
+        raise NotImplementedError()
+
+
+@dataclass(frozen=True)
+class DecorrelatedJitterThrottling(ThrottleConfig):
+    time_limit_secs: int = 60
+    max_time_secs: int = 60
+    base_delay_secs: int = 0.05
+    max_delay_secs: int = 1
+
+    def delays(self):
+        current_delay_secs = self.base_delay_secs
+        while True:
+            current_delay_secs = min(
+                self.max_delay_secs,
+                random.uniform(self.base_delay_secs, current_delay_secs * 3),
+            )
+            yield current_delay_secs
+
+    async def attempts(self) -> AsyncIterable[None]:
+        deadline = time.monotonic() + self.time_limit_secs
+        for delay in self.delays():
+            yield
+            if time.monotonic() > deadline:
+                raise Throttled()
+            await asyncio.sleep(delay)
