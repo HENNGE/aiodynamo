@@ -7,7 +7,8 @@ import random
 import time
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import AsyncIterable, Dict, List, Optional, Union
+from itertools import count
+from typing import AsyncIterable, Dict, Iterable, List, Optional, Union
 
 from .errors import Throttled
 
@@ -177,19 +178,29 @@ class WaitConfig:
             await asyncio.sleep(self.retry_delay)
 
 
+@dataclass(frozen=True)
 class ThrottleConfig(metaclass=abc.ABCMeta):
+    time_limit_secs: int = 60
+
     @classmethod
     def default(cls):
-        return DecorrelatedJitterThrottling()
+        return ExponentialBackoffThrottling()
 
     @abc.abstractmethod
-    async def attempts(self) -> AsyncIterable[None]:
+    def delays(self) -> Iterable[float]:
         raise NotImplementedError()
+
+    async def attempts(self) -> AsyncIterable[None]:
+        deadline = time.monotonic() + self.time_limit_secs
+        for delay in self.delays():
+            yield
+            if time.monotonic() > deadline:
+                raise Throttled()
+            await asyncio.sleep(delay)
 
 
 @dataclass(frozen=True)
 class DecorrelatedJitterThrottling(ThrottleConfig):
-    time_limit_secs: int = 60
     max_time_secs: int = 60
     base_delay_secs: int = 0.05
     max_delay_secs: int = 1
@@ -203,10 +214,14 @@ class DecorrelatedJitterThrottling(ThrottleConfig):
             )
             yield current_delay_secs
 
-    async def attempts(self) -> AsyncIterable[None]:
-        deadline = time.monotonic() + self.time_limit_secs
-        for delay in self.delays():
-            yield
-            if time.monotonic() > deadline:
-                raise Throttled()
-            await asyncio.sleep(delay)
+
+@dataclass(frozen=True)
+class ExponentialBackoffThrottling(ThrottleConfig):
+    base_delay_secs: int = 2
+    max_delay_secs: int = 20
+
+    def delays(self) -> Iterable[float]:
+        for attempt in count():
+            yield min(
+                random.random() * (self.base_delay_secs ** attempt), self.max_delay_secs
+            )
