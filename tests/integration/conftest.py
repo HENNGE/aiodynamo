@@ -1,10 +1,12 @@
-import contextlib
+import asyncio
 import os
 import uuid
+from typing import Awaitable, Callable, List, Optional
 
 import pytest
 from aiodynamo.client import Client
 from aiodynamo.credentials import Credentials
+from aiodynamo.http.base import HTTP
 from aiodynamo.models import KeySchema, KeySpec, KeyType, Throughput, WaitConfig
 from yarl import URL
 
@@ -15,38 +17,48 @@ def table_name_prefix() -> str:
 
 
 @pytest.fixture
-def endpoint():
+def endpoint() -> Optional[URL]:
     if os.environ.get("TEST_ON_AWS", "false") == "true":
         return None
     if "DYNAMODB_URL" not in os.environ:
         raise pytest.skip("DYNAMODB_URL not defined in environment")
-    return os.environ["DYNAMODB_URL"]
+    return URL(os.environ["DYNAMODB_URL"])
 
 
 @pytest.fixture
-def region():
+def region() -> str:
     return os.environ.get("DYNAMODB_REGION", "us-east-1")
 
 
 @pytest.fixture
-async def client(http, endpoint, region):
+def client(http: HTTP, endpoint: URL, region: str) -> Client:
     yield Client(
-        http,
-        Credentials.auto(),
-        region,
-        URL(endpoint) if endpoint is not None else endpoint,
+        http, Credentials.auto(), region, endpoint,
     )
 
 
-@contextlib.asynccontextmanager
-async def table_factory(client: Client, table_name_prefix: str, throughput: int = 5):
-    name = table_name_prefix + str(uuid.uuid4())
-    await client.create_table(
-        name,
-        Throughput(throughput, throughput),
-        KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
-        wait_for_active=WaitConfig(max_attempts=25, retry_delay=5),
-    )
+@pytest.fixture
+async def table_factory(
+    client: Client, table_name_prefix: str
+) -> Callable[[Optional[Throughput]], Awaitable[str]]:
+    async def factory(throughput: Throughput = Throughput(5, 5)) -> str:
+        name = table_name_prefix + str(uuid.uuid4())
+        await client.create_table(
+            name,
+            throughput,
+            KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
+            wait_for_active=WaitConfig(max_attempts=25, retry_delay=5),
+        )
+        return name
+
+    return factory
+
+
+@pytest.fixture
+async def table(
+    client: Client, table_factory: Callable[[Optional[Throughput]], Awaitable[str]]
+) -> str:
+    name = await table_factory()
     try:
         yield name
     finally:
@@ -54,12 +66,11 @@ async def table_factory(client: Client, table_name_prefix: str, throughput: int 
 
 
 @pytest.fixture
-async def table(client: Client, table_name_prefix: str):
-    async with table_factory(client, table_name_prefix) as name:
+async def high_throughput_table(
+    client: Client, table_factory: Callable[[Optional[Throughput]], Awaitable[str]]
+):
+    name = await table_factory(Throughput(1000, 2500))
+    try:
         yield name
-
-
-@pytest.fixture
-async def fast_table(client: Client, table_name_prefix: str):
-    async with table_factory(client, table_name_prefix, throughput=1000) as name:
-        yield name
+    finally:
+        await client.delete_table(name)
