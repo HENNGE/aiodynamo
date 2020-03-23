@@ -44,6 +44,13 @@ class Credentials(metaclass=abc.ABCMeta):
         Return a Key if one could be found.
         """
 
+    @abc.abstractmethod
+    def invalidate(self) -> bool:
+        """
+        Invalidate the credentials if possible and return whether credentials
+        got invalidated or not.
+        """
+
 
 @dataclass(frozen=True)
 class ChainCredentials(Credentials):
@@ -64,8 +71,12 @@ class ChainCredentials(Credentials):
             if key is None:
                 logging.info("Candidate %r didn't find a key", candidate)
             else:
+                logging.info("Candidate %r found a key %r", candidate, key)
                 return key
         return None
+
+    def invalidate(self) -> bool:
+        return any(candidate.invalidate() for candidate in self.candidates)
 
 
 class EnvironmentCredentials(Credentials):
@@ -86,6 +97,9 @@ class EnvironmentCredentials(Credentials):
     async def get_key(self, http: HTTP) -> Optional[Key]:
         return self.key
 
+    def invalidate(self) -> bool:
+        return False
+
 
 class Refresh(Enum):
     required = auto()
@@ -94,7 +108,7 @@ class Refresh(Enum):
 
 
 EXPIRES_SOON_THRESHOLD = datetime.timedelta(minutes=15)
-EXPIRED_THRESHOLD = datetime.timedelta(minutes=5)
+EXPIRED_THRESHOLD = datetime.timedelta(minutes=10)
 
 
 @dataclass(frozen=True)
@@ -140,6 +154,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
                 logging.exception("GET failed")
                 continue
             if response:
+                logging.info("fetchhed metadata %r", response)
                 return response
         raise TooManyRetries()
 
@@ -149,19 +164,32 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
         if self.is_disabled():
+            logging.info("%r is disabled", self)
             return None
         refresh = self._check_refresh()
+        logging.info("refresh status %r", refresh)
         if refresh is Refresh.required:
             if self._refresher is None:
+                logging.info("starting mandatory refresh")
                 self._refresher = asyncio.create_task(self._refresh(http))
+            else:
+                logging.info("re-using refresh")
             try:
                 await self._refresher
             finally:
                 self._refresher = None
         elif refresh is Refresh.soon:
             if self._refresher is None:
+                logging.info("starting early refresh")
                 self._refresher = asyncio.create_task(self._refresh(http))
+            else:
+                logging.info("already refreshing")
         return self._metadata and self._metadata.key
+
+    def invalidate(self) -> bool:
+        logging.info("%r invalidated", self)
+        self._metadata = None
+        return True
 
     def _check_refresh(self) -> Refresh:
         if self._metadata is None:
@@ -170,6 +198,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
 
     async def _refresh(self, http: HTTP):
         self._metadata = await self.fetch_metadata(http)
+        logging.info("fetched metadata %r", self._metadata)
 
 
 T = TypeVar("T")

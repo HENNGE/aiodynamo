@@ -132,6 +132,10 @@ class TimeToLiveStatusNotChanged(AIODynamoError):
     pass
 
 
+class ExpiredToken(AIODynamoError):
+    pass
+
+
 ERRORS = {
     "ResourceNotFoundException": TableNotFound,
     "UnknownOperationException": UnknownOperation,
@@ -156,6 +160,7 @@ ERRORS = {
     "ReplicaNotFoundException": ReplicaNotFound,
     "ThrottlingException": Throttled,
     "ValidationException": ValidationException,
+    "ExpiredTokenException": ExpiredToken,
 }
 
 

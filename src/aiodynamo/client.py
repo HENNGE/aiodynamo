@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import logging
 from dataclasses import dataclass
 from typing import *
 
@@ -646,11 +647,18 @@ class Client:
                 endpoint=self.endpoint,
             )
             try:
+                logging.debug("sending request %r", request)
                 return await self.http.post(
                     url=request.url, headers=request.headers, body=request.body
                 )
-            except (Throttled, ProvisionedThroughputExceeded):
-                pass
+            except Throttled:
+                logging.debug("request throttled")
+            except ProvisionedThroughputExceeded:
+                logging.debug("provisioned throughput exceeded")
+            except ExpiredToken:
+                logging.debug("token expired")
+                if not self.credentials.invalidate():
+                    raise
 
     async def _depaginate(
         self, action: str, payload: Dict[str, Any], limit: Optional[int] = None
