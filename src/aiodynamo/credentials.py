@@ -69,9 +69,9 @@ class ChainCredentials(Credentials):
                 logging.exception("Candidate %r failed", candidate)
                 continue
             if key is None:
-                logging.info("Candidate %r didn't find a key", candidate)
+                logging.debug("Candidate %r didn't find a key", candidate)
             else:
-                logging.info("Candidate %r found a key %r", candidate, key)
+                logging.debug("Candidate %r found a key %r", candidate, key)
                 return key
         return None
 
@@ -154,7 +154,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
                 logging.exception("GET failed")
                 continue
             if response:
-                logging.info("fetchhed metadata %r", response)
+                logging.debug("fetchhed metadata %r", response)
                 return response
         raise TooManyRetries()
 
@@ -164,30 +164,30 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
         if self.is_disabled():
-            logging.info("%r is disabled", self)
+            logging.debug("%r is disabled", self)
             return None
         refresh = self._check_refresh()
-        logging.info("refresh status %r", refresh)
+        logging.debug("refresh status %r", refresh)
         if refresh is Refresh.required:
             if self._refresher is None:
-                logging.info("starting mandatory refresh")
+                logging.debug("starting mandatory refresh")
                 self._refresher = asyncio.create_task(self._refresh(http))
             else:
-                logging.info("re-using refresh")
+                logging.debug("re-using refresh")
             try:
                 await self._refresher
             finally:
                 self._refresher = None
         elif refresh is Refresh.soon:
             if self._refresher is None:
-                logging.info("starting early refresh")
+                logging.debug("starting early refresh")
                 self._refresher = asyncio.create_task(self._refresh(http))
             else:
-                logging.info("already refreshing")
+                logging.debug("already refreshing")
         return self._metadata and self._metadata.key
 
     def invalidate(self) -> bool:
-        logging.info("%r invalidated", self)
+        logging.debug("%r invalidated", self)
         self._metadata = None
         return True
 
@@ -198,7 +198,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
 
     async def _refresh(self, http: HTTP):
         self._metadata = await self.fetch_metadata(http)
-        logging.info("fetched metadata %r", self._metadata)
+        logging.debug("fetched metadata %r", self._metadata)
 
 
 T = TypeVar("T")
