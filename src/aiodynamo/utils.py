@@ -1,11 +1,14 @@
 import base64
 import datetime
 import decimal
+import logging
 from collections import abc as collections_abc
 from functools import reduce
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union
 
 from .types import SIMPLE_TYPES, AttributeType, DynamoItem, Item
+
+logger = logging.getLogger("aiodynamo")
 
 
 def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:

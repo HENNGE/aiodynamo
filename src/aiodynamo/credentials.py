@@ -4,7 +4,6 @@ import abc
 import asyncio
 import datetime
 import json
-import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -14,7 +13,7 @@ from yarl import URL
 
 from .http.base import HTTP, Headers
 from .types import Timeout
-from .utils import parse_amazon_timestamp
+from .utils import logger, parse_amazon_timestamp
 
 
 @dataclass(frozen=True)
@@ -66,12 +65,12 @@ class ChainCredentials(Credentials):
             try:
                 key = await candidate.get_key(http)
             except:
-                logging.exception("Candidate %r failed", candidate)
+                logger.exception("Candidate %r failed", candidate)
                 continue
             if key is None:
-                logging.debug("Candidate %r didn't find a key", candidate)
+                logger.debug("Candidate %r didn't find a key", candidate)
             else:
-                logging.debug("Candidate %r found a key %r", candidate, key)
+                logger.debug("Candidate %r found a key %r", candidate, key)
                 return key
         return None
 
@@ -151,10 +150,10 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
             try:
                 response = await http.get(url=url, headers=headers, timeout=timeout)
             except Exception:
-                logging.exception("GET failed")
+                logger.exception("GET failed")
                 continue
             if response:
-                logging.debug("fetchhed metadata %r", response)
+                logger.debug("fetchhed metadata %r", response)
                 return response
         raise TooManyRetries()
 
@@ -164,30 +163,30 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
         if self.is_disabled():
-            logging.debug("%r is disabled", self)
+            logger.debug("%r is disabled", self)
             return None
         refresh = self._check_refresh()
-        logging.debug("refresh status %r", refresh)
+        logger.debug("refresh status %r", refresh)
         if refresh is Refresh.required:
             if self._refresher is None:
-                logging.debug("starting mandatory refresh")
+                logger.debug("starting mandatory refresh")
                 self._refresher = asyncio.create_task(self._refresh(http))
             else:
-                logging.debug("re-using refresh")
+                logger.debug("re-using refresh")
             try:
                 await self._refresher
             finally:
                 self._refresher = None
         elif refresh is Refresh.soon:
             if self._refresher is None:
-                logging.debug("starting early refresh")
+                logger.debug("starting early refresh")
                 self._refresher = asyncio.create_task(self._refresh(http))
             else:
-                logging.debug("already refreshing")
+                logger.debug("already refreshing")
         return self._metadata and self._metadata.key
 
     def invalidate(self) -> bool:
-        logging.debug("%r invalidated", self)
+        logger.debug("%r invalidated", self)
         self._metadata = None
         return True
 
@@ -198,7 +197,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
 
     async def _refresh(self, http: HTTP):
         self._metadata = await self.fetch_metadata(http)
-        logging.debug("fetched metadata %r", self._metadata)
+        logger.debug("fetched metadata %r", self._metadata)
 
 
 T = TypeVar("T")

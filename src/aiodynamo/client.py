@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import logging
 from dataclasses import dataclass
 from typing import *
 
@@ -43,7 +42,7 @@ from .models import (
 )
 from .sign import signed_dynamo_request
 from .types import Item, TableName
-from .utils import dy2py, py2dy
+from .utils import dy2py, logger, py2dy
 
 
 @dataclass(frozen=True)
@@ -647,16 +646,16 @@ class Client:
                 endpoint=self.endpoint,
             )
             try:
-                logging.debug("sending request %r", request)
+                logger.debug("sending request %r", request)
                 return await self.http.post(
                     url=request.url, headers=request.headers, body=request.body
                 )
             except Throttled:
-                logging.debug("request throttled")
+                logger.debug("request throttled")
             except ProvisionedThroughputExceeded:
-                logging.debug("provisioned throughput exceeded")
+                logger.debug("provisioned throughput exceeded")
             except ExpiredToken:
-                logging.debug("token expired")
+                logger.debug("token expired")
                 if not self.credentials.invalidate():
                     raise
 
