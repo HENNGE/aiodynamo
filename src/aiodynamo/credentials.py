@@ -50,8 +50,16 @@ class Credentials(metaclass=abc.ABCMeta):
         got invalidated or not.
         """
 
+    @abc.abstractmethod
+    def is_disabled(self) -> bool:
+        """
+        Indicate if this credentials provider is disabled. Used by ChainCredentials
+        to ignore providers that won't ever find a key.
 
-@dataclass(frozen=True)
+        If the status could change over the lifetime of a program, return True.
+        """
+
+
 class ChainCredentials(Credentials):
     """
     Chains multiple credentials providers together, trying them
@@ -59,6 +67,11 @@ class ChainCredentials(Credentials):
     """
 
     candidates: Sequence[Credentials]
+
+    def __init__(self, candidates: Sequence[Credentials]):
+        self.candidates = [
+            candidate for candidate in candidates if not candidate.is_disabled()
+        ]
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
         for candidate in self.candidates:
@@ -76,6 +89,9 @@ class ChainCredentials(Credentials):
 
     def invalidate(self) -> bool:
         return any(candidate.invalidate() for candidate in self.candidates)
+
+    def is_disabled(self) -> bool:
+        return not self.candidates
 
 
 class EnvironmentCredentials(Credentials):
@@ -98,6 +114,9 @@ class EnvironmentCredentials(Credentials):
 
     def invalidate(self) -> bool:
         return False
+
+    def is_disabled(self) -> bool:
+        return self.key is None
 
 
 class Refresh(Enum):
@@ -131,10 +150,6 @@ class Metadata:
 class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     async def fetch_metadata(self, http: HTTP) -> Metadata:
-        pass
-
-    @abc.abstractmethod
-    def is_disabled(self) -> bool:
         pass
 
     async def fetch_with_retry(

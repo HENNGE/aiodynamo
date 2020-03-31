@@ -1,10 +1,12 @@
-import asyncio
 import datetime
 
 import pytest
 from aiodynamo.credentials import (
     EXPIRED_THRESHOLD,
     EXPIRES_SOON_THRESHOLD,
+    ChainCredentials,
+    ContainerMetadataCredentials,
+    Credentials,
     EnvironmentCredentials,
     InstanceMetadataCredentials,
     Key,
@@ -137,3 +139,23 @@ async def test_simultaneous_credentials_refresh(http, instance_metadata_server):
         key = await imc.get_key(http)
         assert key == key2
         assert instance_metadata_server.calls == 1
+
+
+async def test_disabled(monkeypatch):
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("AWS_SESSION_TOKEN", raising=False)
+    monkeypatch.delenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", raising=False)
+    monkeypatch.delenv("AWS_CONTAINER_CREDENTIALS_FULL_URI", raising=False)
+    monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
+    creds = Credentials.auto()
+    assert creds.candidates == []
+    assert creds.is_disabled()
+    assert EnvironmentCredentials().is_disabled()
+    assert InstanceMetadataCredentials().is_disabled()
+    assert ContainerMetadataCredentials().is_disabled()
+    monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "false")
+    assert not InstanceMetadataCredentials().is_disabled()
+    creds = Credentials.auto()
+    assert len(creds.candidates) == 1
+    assert not creds.is_disabled()
