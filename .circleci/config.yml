@@ -12,7 +12,7 @@ jobs:
     steps:
       - checkout
       - run: pip install poetry
-      - run: poetry install
+      - run: poetry install -E "httpx aiohttp"
       - run: find . -regex '.*__pycache__.*' -delete
       - run: poetry run pytest --verbose --cov=aiodynamo --cov-report html:reports/coverage/ --junitxml=reports/results/junit.xml
       - run: poetry run black --check src/ tests/
