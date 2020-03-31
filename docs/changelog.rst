@@ -4,13 +4,16 @@ Changelog
 20.3
 ----
 
-Release Date: Unreleased
+Release Date: March 31st, 2020
 
 * Added TTL support
+* Added support for pluggable HTTP clients. Built in support for ``httpx`` and ``aiohttp``.
+* Added custom client implementation.
+* Added custom credentials loaders, with support for custom credential loaders.
 * Fixed a typo in ``delete_item``
 * Improved item deserialization performance
-* Improved overall client performance, especially for query, scan and count.
-* Changed condition, key condition and filter expression APIs.
+* Improved overall client performance, especially for query, scan and count, which are now up to twice as fast.
+* Changed condition, key condition and filter expression APIs to not rely on boto3.
 * Moved :py:class:`aiodynamo.models.F` to :py:class:`aiodynamo.expressions.F`.
 * Removed boto3 dependency
 * Removed botocore dependency
