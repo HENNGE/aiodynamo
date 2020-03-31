@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aiodynamo"
-version = "19.9"
+version = "20.3.rc6"
 description = "Asyncio DynamoDB client"
 authors = ["Jonas Obrist <jonas.obrist@hennge.com>"]
 license = "Apache-2.0"
@@ -12,13 +12,19 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "License :: OSI Approved :: Apache Software License",
 ]
+readme = "readme.md"
+homepage = "https://github.com/HENNGE/aiodynamo"
+keywords = ["dynamodb", "asyncio", "aws"]
 
 [tool.poetry.dependencies]
 python = "^3.7"
-attrs = ">=18.2"
-aiobotocore= ">=0.10.0"
-boto3 = ">=1.9.49"
-aiohttp = ">=3.5.4"
+httpx = {version = "^0.11.1", optional = true}
+aiohttp = {version = "^3.6.2", optional = true}
+yarl = "^1.4.2"
+
+[tool.poetry.extras]
+httpx = ["httpx"]
+aiohttp = ["aiohttp"]
 
 [tool.poetry.dev-dependencies]
 pytest = "^3.0"
@@ -27,12 +33,15 @@ pytest-cov = "^2.6"
 black = {version = "^19.10b0",allow-prereleases = true}
 sphinx = "^1.8"
 pyperf = "^1.7.0"
+boto3 = "^1.12.18"
+freezegun = "^0.3.15"
 
 [tool.isort]
 line_length = "88"
 multi_line_output = "3"
 combine_as_imports = "1"
 include_trailing_comma = "True"
+known_first_party = "aiodynamo"
 
 [build-system]
 requires = ["poetry>=0.12"]

@@ -1,81 +1,22 @@
-import os
+import asyncio
 import uuid
 
 import pytest
-from aiobotocore import get_session
 from aiodynamo.client import Client, TimeToLiveStatus
-from aiodynamo.errors import EmptyItem, ItemNotFound, TableNotFound
+from aiodynamo.errors import EmptyItem, ItemNotFound, TableNotFound, UnknownOperation
+from aiodynamo.expressions import F, HashKey, RangeKey
 from aiodynamo.models import (
-    F,
     KeySchema,
     KeySpec,
     KeyType,
     ReturnValues,
     TableStatus,
     Throughput,
+    WaitConfig,
 )
 from aiodynamo.types import TableName
-from aiodynamo.utils import unroll
-from boto3.dynamodb import conditions
-from boto3.dynamodb.conditions import Key
-from botocore.exceptions import ClientError
 
 pytestmark = pytest.mark.asyncio
-
-
-def _get_tables(core):
-    return unroll(
-        core.list_tables,
-        "ExclusiveStartTableName",
-        "LastEvaluatedTableName",
-        "TableNames",
-    )
-
-
-async def _get_tables_list(core):
-    return [table async for table in _get_tables(core)]
-
-
-async def _cleanup(core, tables):
-    async for table in _get_tables(core):
-        if table not in tables:
-            await core.delete_table(TableName=table)
-
-
-@pytest.fixture
-async def core():
-    if "DYNAMODB_URL" not in os.environ:
-        raise pytest.skip("DYNAMODB_URL not defined in environment")
-
-    core = get_session().create_client(
-        "dynamodb",
-        endpoint_url=os.environ["DYNAMODB_URL"],
-        use_ssl=False,
-        region_name=os.environ.get("DYNAMODB_REGION", "us-east-1"),
-    )
-    tables = await _get_tables_list(core)
-    try:
-        yield core
-
-    finally:
-        await _cleanup(core, tables)
-        await core.close()
-
-
-@pytest.fixture
-async def client(core):
-    return Client(core)
-
-
-@pytest.fixture
-async def table(client: Client):
-    name = str(uuid.uuid4())
-    await client.create_table(
-        name,
-        Throughput(5, 5),
-        KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
-    )
-    return name
 
 
 async def test_put_get_item(client: Client, table: TableName):
@@ -86,6 +27,11 @@ async def test_put_get_item(client: Client, table: TableName):
         "number-key": 123,
         "list-key": ["hello", "world"],
         "nested": {"nested": "key"},
+        "binary": b"hello world",
+        "string-set": {"string", "set"},
+        "number-set": {1, 2},
+        "binary-set": {b"hello", b"world"},
+        "map": {"foo": "bar"},
     }
     await client.put_item(table, item)
     db_item = await client.get_item(
@@ -115,17 +61,21 @@ async def test_get_item_with_projection(client: Client, table: TableName):
 
 
 async def test_count(client: Client, table: TableName):
-    assert await client.count(table, conditions.Key("h").eq("h1")) == 0
-    assert await client.count(table, conditions.Key("h").eq("h2")) == 0
+    assert await client.count(table, HashKey("h", "h1")) == 0
+    assert await client.count(table, HashKey("h", "h2")) == 0
     await client.put_item(table, {"h": "h1", "r": "r1"})
-    assert await client.count(table, conditions.Key("h").eq("h1")) == 1
-    assert await client.count(table, conditions.Key("h").eq("h2")) == 0
+    assert await client.count(table, HashKey("h", "h1")) == 1
+    assert await client.count(table, HashKey("h", "h2")) == 0
     await client.put_item(table, {"h": "h2", "r": "r2"})
-    assert await client.count(table, conditions.Key("h").eq("h1")) == 1
-    assert await client.count(table, conditions.Key("h").eq("h2")) == 1
+    assert await client.count(table, HashKey("h", "h1")) == 1
+    assert await client.count(table, HashKey("h", "h2")) == 1
     await client.put_item(table, {"h": "h2", "r": "r1"})
-    assert await client.count(table, conditions.Key("h").eq("h2")) == 2
-    assert await client.count(table, conditions.Key("h").eq("h1")) == 1
+    assert await client.count(table, HashKey("h", "h2")) == 2
+    assert await client.count(table, HashKey("h", "h1")) == 1
+    assert (
+        await client.count(table, HashKey("h", "h1") & RangeKey("r").begins_with("x"))
+        == 0
+    )
 
 
 async def test_update_item(client: Client, table: TableName):
@@ -174,10 +124,15 @@ async def test_delete_item(client: Client, table: TableName):
         await client.get_item(table, item)
 
 
-async def test_delete_table(client: Client, table: TableName):
-    await client.delete_table(table)
+async def test_delete_table(client: Client, table_factory):
+    name = await table_factory()
+    # no error
+    await client.put_item(name, {"h": "h", "r": "r"})
+    await client.delete_table(
+        name, wait_for_disabled=WaitConfig(max_attempts=25, retry_delay=5)
+    )
     with pytest.raises(Exception):
-        await client.put_item(table, {"h": "h", "r": "r"})
+        await client.put_item(name, {"h": "h", "r": "r"})
 
 
 async def test_query(client: Client, table: TableName):
@@ -187,9 +142,23 @@ async def test_query(client: Client, table: TableName):
     await client.put_item(table, item1)
     await client.put_item(table, item2)
     index = 0
-    async for item in client.query(table, Key("h").eq("h")):
+    async for item in client.query(table, HashKey("h", "h")):
         assert item == items[index]
         index += 1
+    assert index == 2
+
+
+async def test_query_descending(client: Client, table: TableName):
+    item1 = {"h": "h", "r": "1", "d": "x"}
+    item2 = {"h": "h", "r": "2", "d": "y"}
+    items = [item1, item2]
+    await client.put_item(table, item1)
+    await client.put_item(table, item2)
+    rv = [
+        item
+        async for item in client.query(table, HashKey("h", "h"), scan_forward=False)
+    ]
+    assert rv == list(reversed(items))
 
 
 async def test_scan(client: Client, table: TableName):
@@ -202,24 +171,27 @@ async def test_scan(client: Client, table: TableName):
     async for item in client.scan(table):
         assert item == items[index]
         index += 1
+    assert index == 2
 
 
-async def test_exists(client: Client):
-    name = str(uuid.uuid4())
-    assert await client.table_exists(name) == False
-    with pytest.raises(TableNotFound):
-        await client.describe_table(name)
+async def test_exists(client: Client, table_factory):
     throughput = Throughput(5, 5)
     key_schema = KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string))
     attrs = {"h": KeyType.string, "r": KeyType.string}
-    await client.create_table(name, throughput, key_schema)
-    assert await client.table_exists(name)
-    desc = await client.describe_table(name)
-    assert desc.throughput == throughput
-    assert desc.status is TableStatus.active
-    assert desc.attributes == attrs
-    assert desc.key_schema == key_schema
-    assert desc.item_count == 0
+    name = await table_factory()
+    try:
+        assert await client.table_exists(name)
+        desc = await client.describe_table(name)
+        assert desc.throughput == throughput
+        assert desc.status is TableStatus.active
+        assert desc.attributes == attrs
+        assert desc.key_schema == key_schema
+        assert desc.item_count == 0
+    finally:
+        await client.delete_table(name)
+    assert await client.table_exists(name) == False
+    with pytest.raises(TableNotFound):
+        await client.describe_table(name)
 
 
 async def test_empty_string(client: Client, table: TableName):
@@ -249,17 +221,47 @@ async def test_empty_list(client: Client, table: TableName):
 async def test_ttl(client: Client, table: TableName):
     try:
         desc = await client.describe_time_to_live(table)
-    except ClientError as err:
-        if err.response.get("Error", {}).get("Code") == "UnknownOperationException":
-            raise pytest.skip("TTL not supported by database")
-        raise
+    except UnknownOperation:
+        raise pytest.skip("TTL not supported by database")
     assert desc.status == TimeToLiveStatus.disabled
     assert desc.attribute == None
-    await client.enable_time_to_live(table, "ttl")
+    try:
+        await client.enable_time_to_live(table, "ttl")
+    except UnknownOperation:
+        raise pytest.skip("TTL not supported by database")
     enabled_desc = await client.describe_time_to_live(table)
     assert enabled_desc.status == TimeToLiveStatus.enabled
     assert enabled_desc.attribute == "ttl"
-    await client.disable_time_to_live(table, "ttl")
-    disabled_desc = await client.describe_time_to_live(table)
-    assert disabled_desc.status == TimeToLiveStatus.disabled
-    assert desc.attribute == None
+    # cannot disable TTL and test that since TTL changes can take up to one
+    # hour to complete and other calls to UpdateTimeToLive are not allowed.
+    # See: https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTimeToLive.html
+
+
+async def test_query_with_limit(client: Client, high_throughput_table: TableName):
+    big = "x" * 20_000
+
+    await asyncio.gather(
+        *(
+            client.put_item(high_throughput_table, {"h": "h", "r": str(i), "big": big})
+            for i in range(100)
+        )
+    )
+
+    items = [
+        item
+        async for item in client.query(
+            high_throughput_table, HashKey("h", "h"), limit=1
+        )
+    ]
+    assert len(items) == 1
+    assert items[0]["r"] == "0"
+
+
+async def test_scan_with_limit(client: Client, table: TableName):
+    item1 = {"h": "h", "r": "1", "d": "x"}
+    item2 = {"h": "h", "r": "2", "d": "y"}
+    await client.put_item(table, item1)
+    await client.put_item(table, item2)
+    items = [item async for item in client.scan(table, limit=1)]
+    assert len(items) == 1
+    assert items[0] == item1

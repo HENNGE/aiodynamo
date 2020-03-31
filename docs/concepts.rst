@@ -1,8 +1,18 @@
 Concepts
 ========
 
-Main differences to aiobotocore
--------------------------------
+Aiodynamo does not rely on boto3, botocore or aiobotocore. This is primarily done for performance reasons,
+as profiling showed that especially for querying data, boto libraries were very slow.
+
+Main differences to boto3/botocore/aiobotocore
+----------------------------------------------
+
+Credentials
+~~~~~~~~~~~
+
+Since aiodynamo does not rely on botocore, it uses its own logic to load AWS credentials. There is built in support for
+loading them from environment variables, EC2 instance metadata APIs and ECS container metadata APIs, and they're loaded
+in that order of priority.
 
 Pythonic Argument Names
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -13,14 +23,23 @@ names with underscores.
 Autopagination
 ~~~~~~~~~~~~~~
 
-DynamoDB APIs that return a paginated result, such as ``scan``, ``query`` or ``count`` are automatically paginated in
+DynamoDB APIs that return a paginated result, such as ``scan``, ``query`` or ``count`` are automatically de-paginated in
 aiodynamo and return asynchronous iterators over the whole result set instead.
 
 Empty String Safe
 ~~~~~~~~~~~~~~~~~
 
 DynamoDB APIs will return an error if an item contains an empty string as a value anywhere. aiodynamo removes these
-values automatically.
+values automatically wherever it can. This means that trying to set a field to an empty string in
+:py:meth:`aiodynamo.client.Client.update_item` will instead remove that field. In :py:meth:`aiodynamo.client.Client.put_item`
+that field is simply omitted.
+
+Numeric type handling
+~~~~~~~~~~~~~~~~~~~~~
+
+Boto3 uses :py:class:`decimal.Decimal` for numeric values. While this is more accurate and precise, it is also often
+an annoyance, as most of Python code deals with floats or ints instead. As a result, aiodynamo defaults to using floats
+for numeric values returned from DynamoDB, though you can override that behaviour when creating the client.
 
 Optional Arguments Allowed
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

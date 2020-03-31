@@ -1,22 +1,39 @@
+from __future__ import annotations
+
 import abc
+import asyncio
 import datetime
-from collections import defaultdict
-from enum import Enum
-from typing import Dict, List, Any, Set, Tuple, Union
+import random
+import time
+from dataclasses import dataclass
+from enum import Enum, unique
+from itertools import count
+from typing import AsyncIterable, Dict, Iterable, List, Optional, Union
 
-import attr
-
-from .types import Path, PathEncoder, EncoderFunc, NOTHING, EMPTY
-from .utils import clean, ensure_not_empty, check_empty_value, maybe_immutable
-
+from .errors import Throttled
 
 ProjectionExpr = Union["ProjectionExpression", "F"]
 
 
-@attr.s
+@unique
+class TimeToLiveStatus(Enum):
+    enabling = "ENABLING"
+    disabling = "DISABLING"
+    enabled = "ENABLED"
+    disabled = "DISABLED"
+
+
+@dataclass(frozen=True)
+class TimeToLiveDescription:
+    table: str
+    attribute: str
+    status: TimeToLiveStatus
+
+
+@dataclass(frozen=True)
 class Throughput:
-    read: int = attr.ib()
-    write: int = attr.ib()
+    read: int
+    write: int
 
     def encode(self):
         return {"ReadCapacityUnits": self.read, "WriteCapacityUnits": self.write}
@@ -28,16 +45,16 @@ class KeyType(Enum):
     binary = "B"
 
 
-@attr.s
+@dataclass(frozen=True)
 class KeySpec:
-    name: str = attr.ib()
-    type: KeyType = attr.ib()
+    name: str
+    type: KeyType
 
 
-@attr.s
+@dataclass(frozen=True)
 class KeySchema:
-    hash_key: KeySpec = attr.ib()
-    range_key: KeySpec = attr.ib(default=None)
+    hash_key: KeySpec
+    range_key: Optional[KeySpec] = None
 
     def __iter__(self):
         yield self.hash_key
@@ -61,10 +78,10 @@ class ProjectionType(Enum):
     include = "INCLUDE"
 
 
-@attr.s
+@dataclass(frozen=True)
 class Projection:
-    type: ProjectionType = attr.ib()
-    attrs: List[str] = attr.ib(default=None)
+    type: ProjectionType
+    attrs: Optional[List[str]] = None
 
     def encode(self):
         encoded = {"ProjectionType": self.type.value}
@@ -73,11 +90,11 @@ class Projection:
         return encoded
 
 
-@attr.s
+@dataclass(frozen=True)
 class LocalSecondaryIndex:
-    name: str = attr.ib()
-    schema: KeySchema = attr.ib()
-    projection: Projection = attr.ib()
+    name: str
+    schema: KeySchema
+    projection: Projection
 
     def encode(self):
         return {
@@ -87,9 +104,9 @@ class LocalSecondaryIndex:
         }
 
 
-@attr.s
+@dataclass(frozen=True)
 class GlobalSecondaryIndex(LocalSecondaryIndex):
-    throughput: Throughput = attr.ib()
+    throughput: Throughput
 
     def encode(self):
         return {**super().encode(), "ProvisionedThroughput": self.throughput.encode()}
@@ -102,16 +119,16 @@ class StreamViewType(Enum):
     new_and_old_images = "NEW_AND_OLD_IMAGES"
 
 
-@attr.s
+@dataclass(frozen=True)
 class StreamSpecification:
-    enabled: bool = attr.ib(default=False)
-    view_type: StreamViewType = attr.ib(default=StreamViewType.new_and_old_images)
+    enabled: bool = False
+    view_type: StreamViewType = StreamViewType.new_and_old_images
 
     def encode(self):
-        return clean(
-            StreamEnabled=self.enabled,
-            StreamViewType=self.view_type.value if self.enabled else None,
-        )
+        spec = {"StreamEnabled": self.enabled}
+        if self.enabled:
+            spec["StreamViewType"] = self.view_type.value
+        return spec
 
 
 class ReturnValues(Enum):
@@ -122,177 +139,6 @@ class ReturnValues(Enum):
     updated_new = "UPDATED_NEW"
 
 
-class ActionTypes(Enum):
-    set = "SET"
-    remove = "REMOVE"
-    add = "ADD"
-    delete = "DELETE"
-
-
-class BaseAction(metaclass=abc.ABCMeta):
-    type = abc.abstractproperty()
-
-    def encode(self, name_encoder: "Encoder", value_encoder: "Encoder") -> str:
-        return self._encode(name_encoder.encode_path, value_encoder.encode)
-
-    @abc.abstractmethod
-    def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
-        ...
-
-
-@attr.s
-class SetAction(BaseAction):
-    path: Path = attr.ib()
-    value: Any = attr.ib(converter=ensure_not_empty)
-    ine: "F" = attr.ib(default=NOTHING)
-
-    type = ActionTypes.set
-
-    @check_empty_value
-    def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
-        if self.ine is not NOTHING:
-            return f"{N(self.path)} = if_not_exists({N(self.ine.path)}, {V(self.value)}"
-
-        else:
-            return f"{N(self.path)} = {V(self.value)}"
-
-    def if_not_exists(self, key: "F") -> "SetAction":
-        return attr.evolve(self, ine=key)
-
-
-@attr.s
-class ChangeAction(BaseAction):
-    path: Path = attr.ib()
-    value: Any = attr.ib(converter=ensure_not_empty)
-
-    type = ActionTypes.set
-
-    @check_empty_value
-    def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
-        if self.value > 0:
-            op = "+"
-            value = self.value
-        else:
-            value = self.value * -1
-            op = "-"
-        return f"{N(self.path)} = {N(self.path)} {op} {V(value)}"
-
-
-@attr.s
-class AppendAction(BaseAction):
-    path: Path = attr.ib()
-    value: Any = attr.ib(converter=ensure_not_empty)
-
-    type = ActionTypes.set
-
-    @check_empty_value
-    def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
-        return f"{N(self.path)} = list_append({N(self.path)}, {V(self.value)})"
-
-
-@attr.s
-class RemoveAction(BaseAction):
-    path: Path = attr.ib()
-
-    type = ActionTypes.remove
-
-    def _encode(self, N, V) -> str:
-        return N(self.path)
-
-
-@attr.s
-class DeleteAction(BaseAction):
-    path: Path = attr.ib()
-    value: Any = attr.ib(converter=ensure_not_empty)
-
-    type = ActionTypes.delete
-
-    @check_empty_value
-    def _encode(self, N: PathEncoder, V: EncoderFunc) -> str:
-        return f"{N(self.path)} {V(self.value)}"
-
-
-@attr.s
-class AddAction(BaseAction):
-    path: Path = attr.ib()
-    value: Any = attr.ib(converter=ensure_not_empty)
-
-    type = ActionTypes.add
-
-    @check_empty_value
-    def _encode(self, N: PathEncoder, V: EncoderFunc):
-        return f"{N(self.path)} {V(self.value)}"
-
-
-class F:
-    def __init__(self, *path):
-        self.path: Path = path
-
-    def __and__(self, other: "F") -> "ProjectionExpression":
-        pe = ProjectionExpression()
-        return pe & self & other
-
-    def encode(self, encoder: "Encoder") -> str:
-        return encoder.encode_path(self.path)
-
-    def set(self, value: Any) -> "UpdateExpression":
-        return UpdateExpression(SetAction(self.path, value))
-
-    def change(self, diff: int) -> "UpdateExpression":
-        return UpdateExpression(ChangeAction(self.path, diff))
-
-    def append(self, value: List[Any]) -> "UpdateExpression":
-        return UpdateExpression(AppendAction(self.path, list(value)))
-
-    def remove(self) -> "UpdateExpression":
-        return UpdateExpression(RemoveAction(self.path))
-
-    def add(self, value: Set[Any]) -> "UpdateExpression":
-        return UpdateExpression(AddAction(self.path, value))
-
-    def delete(self, value: Set[Any]) -> "UpdateExpression":
-        return UpdateExpression(DeleteAction(self.path, value))
-
-
-class UpdateExpression:
-    def __init__(self, *updates: BaseAction):
-        self.updates = updates
-
-    def __and__(self, other: "UpdateExpression") -> "UpdateExpression":
-        return UpdateExpression(*self.updates, *other.updates)
-
-    def __bool__(self):
-        return bool(self.updates)
-
-    def encode(self) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
-        name_encoder = Encoder("#N")
-        value_encoder = Encoder(":V")
-        parts = defaultdict(list)
-        for action in self.updates:
-            value = action.encode(name_encoder, value_encoder)
-            if value is not EMPTY:
-                parts[action.type].append(value)
-        part_list = [
-            f'{action.value} {", ".join(values)}' for action, values in parts.items()
-        ]
-        return " ".join(part_list), name_encoder.finalize(), value_encoder.finalize()
-
-
-@attr.s
-class ProjectionExpression:
-    fields: List[F] = attr.ib(default=attr.Factory(list))
-
-    def __and__(self, field: F) -> "ProjectionExpression":
-        return ProjectionExpression(self.fields + [field])
-
-    def encode(self) -> Tuple[str, Dict[str, Any]]:
-        name_encoder = Encoder("#N")
-        return (
-            ",".join(field.encode(name_encoder) for field in self.fields),
-            name_encoder.finalize(),
-        )
-
-
 class TableStatus(Enum):
     creating = "CREATING"
     updating = "UPDATING"
@@ -300,49 +146,14 @@ class TableStatus(Enum):
     active = "ACTIVE"
 
 
-@attr.s
+@dataclass(frozen=True)
 class TableDescription:
-    attributes: Dict[str, KeyType] = attr.ib()
-    created: datetime.datetime = attr.ib()
-    item_count: int = attr.ib()
-    key_schema: KeySchema = attr.ib()
-    throughput: Throughput = attr.ib()
-    status: TableStatus = attr.ib()
-
-
-@attr.s
-class Encoder:
-    prefix: str = attr.ib()
-    data: List[Any] = attr.ib(default=attr.Factory(list))
-    cache: Dict[Tuple[Any, Any], Any] = attr.ib(default=attr.Factory(dict))
-
-    def finalize(self) -> Dict[str, str]:
-        return {f"{self.prefix}{index}": value for index, value in enumerate(self.data)}
-
-    def encode(self, name: Any) -> str:
-        key = maybe_immutable(name)
-        cache_key = (type(key), key)
-        try:
-            return self.cache[cache_key]
-
-        except KeyError:
-            can_cache = True
-        except TypeError:
-            can_cache = False
-        encoded = f"{self.prefix}{len(self.data)}"
-        self.data.append(name)
-        if can_cache:
-            self.cache[cache_key] = encoded
-        return encoded
-
-    def encode_path(self, path: Path) -> str:
-        bits = [self.encode(path[0])]
-        for part in path[1:]:
-            if isinstance(part, int):
-                bits.append(f"[{part}]")
-            else:
-                bits.append(f".{self.encode(part)}")
-        return "".join(bits)
+    attributes: Optional[Dict[str, KeyType]]
+    created: Optional[datetime.datetime]
+    item_count: Optional[int]
+    key_schema: Optional[KeySchema]
+    throughput: Optional[Throughput]
+    status: TableStatus
 
 
 class Select(Enum):
@@ -352,15 +163,65 @@ class Select(Enum):
     specific_attributes = "SPECIFIC_ATTRIBUTES"
 
 
-def get_projection(
-    projection: Union[ProjectionExpression, F, None]
-) -> Tuple[Union[str, None], Dict[str, Any]]:
-    if projection is None:
-        return None, {}
+@dataclass(frozen=True)
+class WaitConfig:
+    max_attempts: int
+    retry_delay: int
 
-    if isinstance(projection, ProjectionExpression):
-        return projection.encode()
+    @classmethod
+    def default(cls):
+        return WaitConfig(25, 20)
 
-    else:
-        encoder = Encoder("#N")
-        return projection.encode(encoder), encoder.finalize()
+    async def attempts(self):
+        for _ in range(self.max_attempts):
+            yield
+            await asyncio.sleep(self.retry_delay)
+
+
+@dataclass(frozen=True)
+class ThrottleConfig(metaclass=abc.ABCMeta):
+    time_limit_secs: int = 60
+
+    @classmethod
+    def default(cls):
+        return ExponentialBackoffThrottling()
+
+    @abc.abstractmethod
+    def delays(self) -> Iterable[float]:
+        raise NotImplementedError()
+
+    async def attempts(self) -> AsyncIterable[None]:
+        deadline = time.monotonic() + self.time_limit_secs
+        for delay in self.delays():
+            yield
+            if time.monotonic() > deadline:
+                raise Throttled()
+            await asyncio.sleep(delay)
+
+
+@dataclass(frozen=True)
+class DecorelatedJitterThrottling(ThrottleConfig):
+    max_time_secs: int = 60
+    base_delay_secs: int = 0.05
+    max_delay_secs: int = 1
+
+    def delays(self):
+        current_delay_secs = self.base_delay_secs
+        while True:
+            current_delay_secs = min(
+                self.max_delay_secs,
+                random.uniform(self.base_delay_secs, current_delay_secs * 3),
+            )
+            yield current_delay_secs
+
+
+@dataclass(frozen=True)
+class ExponentialBackoffThrottling(ThrottleConfig):
+    base_delay_secs: int = 2
+    max_delay_secs: int = 20
+
+    def delays(self) -> Iterable[float]:
+        for attempt in count():
+            yield min(
+                random.random() * (self.base_delay_secs ** attempt), self.max_delay_secs
+            )

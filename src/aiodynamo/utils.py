@@ -1,103 +1,25 @@
-import collections
-from functools import wraps
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Iterable, Tuple, Union
+import base64
+import datetime
+import decimal
+import logging
+from collections import abc as collections_abc
+from functools import reduce
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union
 
-from .types import (
-    EMPTY,
-    NULL_TYPE,
-    SIMPLE_SET_TYPES,
-    SIMPLE_TYPES,
-    DynamoItem,
-    Item,
-    Serializer,
-)
+from .types import SIMPLE_TYPES, AttributeType, DynamoItem, Item
 
-
-async def unroll(
-    coro_func: Callable[[], Awaitable[Dict[str, Any]]],
-    inkey: str,
-    outkey: str,
-    itemkey: str,
-    start: Any = None,
-    limit: int = None,
-    limitkey: str = None,
-    process: Callable[[Any], Iterable[Any]] = lambda x: x,
-) -> AsyncIterator[Any]:
-    value = start
-    got = 0
-    while True:
-        kwargs = {}
-        if value is not None:
-            kwargs[inkey] = value
-        if limit:
-            want = limit - got
-            kwargs[limitkey] = want
-        resp = await coro_func(**kwargs)
-        value = resp.get(outkey, None)
-        items = resp.get(itemkey, [])
-        for item in process(items):
-            yield item
-
-            got += 1
-            if limit and got >= limit:
-                return
-
-        if value is None:
-            break
-
-
-def ensure_not_empty(value):
-    if value is None:
-        return value
-
-    elif isinstance(value, (bytes, str)):
-        if not value:
-            return EMPTY
-
-    elif isinstance(value, collections.abc.Mapping):
-        value = dict(remove_empty_strings(value))
-    elif isinstance(value, collections.abc.Iterable):
-        value = value.__class__(
-            item for item in map(ensure_not_empty, value) if item is not EMPTY
-        )
-    return value
-
-
-def remove_empty_strings(data: Item) -> Iterable[Tuple[str, Any]]:
-    for key, value in data.items():
-        value = ensure_not_empty(value)
-        if value is not EMPTY:
-            yield key, value
+logger = logging.getLogger("aiodynamo")
 
 
 def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:
     if data is None:
         return data
 
-    return {
-        key: Serializer.serialize(value) for key, value in remove_empty_strings(data)
-    }
+    return serialize_dict(data)
 
 
 def dy2py(data: DynamoItem, numeric_type: Callable[[str], Any]) -> Item:
     return {key: deserialize(value, numeric_type) for key, value in data.items()}
-
-
-def check_empty_value(meth):
-    @wraps(meth)
-    def wrapper(self, *args, **kwargs):
-        if self.value is EMPTY:
-            return self.value
-
-        return meth(self, *args, **kwargs)
-
-    return wrapper
-
-
-def clean(**kwargs):
-    return {
-        key: value for key, value in kwargs.items() if value or isinstance(value, bool)
-    }
 
 
 def maybe_immutable(thing: Any):
@@ -106,6 +28,9 @@ def maybe_immutable(thing: Any):
 
     elif isinstance(thing, set):
         return frozenset(thing)
+
+    elif isinstance(thing, dict):
+        return frozenset((key, value) for key, value in thing.items())
 
     else:
         return thing
@@ -117,18 +42,103 @@ def deserialize(value: Dict[str, Any], numeric_type: Callable[[str], Any]) -> An
             "Value must be a nonempty dictionary whose key " "is a valid dynamodb type."
         )
     tag, val = next(iter(value.items()))
-    if tag in SIMPLE_TYPES:
+    try:
+        attr_type = AttributeType(tag)
+    except ValueError:
+        raise TypeError(f"Dynamodb type {tag} is not supported")
+    if attr_type in SIMPLE_TYPES:
         return val
-    if tag == NULL_TYPE:
+    if attr_type is AttributeType.null:
         return None
-    if tag == "N":
+    if attr_type is AttributeType.binary:
+        return base64.b64decode(val)
+    if attr_type is AttributeType.number:
         return numeric_type(val)
-    if tag in SIMPLE_SET_TYPES:
+    if attr_type is AttributeType.string_set:
         return set(val)
-    if tag == "NS":
+    if attr_type is AttributeType.binary_set:
+        return {base64.b64decode(v) for v in val}
+    if attr_type is AttributeType.number_set:
         return {numeric_type(v) for v in val}
-    if tag == "L":
+    if attr_type is AttributeType.list:
         return [deserialize(v, numeric_type) for v in val]
-    if tag == "M":
+    if attr_type is AttributeType.map:
         return {k: deserialize(v, numeric_type) for k, v in val.items()}
-    raise TypeError(f"Dynamodb type {tag} is not supported")
+    raise TypeError(f"Dynamodb type {attr_type} is not supported")
+
+
+NUMERIC_TYPES = int, float, decimal.Decimal
+
+
+def serialize(value: Any) -> Optional[Dict[str, Any]]:
+    """
+    Serialize a Python value to a Dynamo Value, removing empty strings.
+    """
+    tag_and_value = low_level_serialize(value)
+    if tag_and_value is not None:
+        return {tag_and_value[0]: tag_and_value[1]}
+    return None
+
+
+def low_level_serialize(value: Any) -> Optional[Tuple[str, Any]]:
+    if value is None:
+        return "NULL", True
+    elif isinstance(value, bool):
+        return "BOOL", value
+    elif isinstance(value, NUMERIC_TYPES):
+        return "N", str(value)
+    elif isinstance(value, str):
+        if not value:
+            return None
+        return "S", value
+    elif isinstance(value, bytes):
+        if not value:
+            return None
+        return "B", base64.b64encode(value).decode("ascii")
+    elif isinstance(value, collections_abc.Set):
+        numeric_items, str_items, byte_items, total = reduce(
+            lambda acc, item: (
+                acc[0] + isinstance(item, NUMERIC_TYPES),
+                acc[1] + isinstance(item, str),
+                acc[2] + isinstance(item, bytes),
+                acc[3] + 1,
+            ),
+            value,
+            (0, 0, 0, 0),
+        )
+        if numeric_items == total:
+            return "NS", [str(item) for item in value]
+        elif str_items == total:
+            return "SS", [item for item in value if item]
+        elif byte_items == total:
+            return (
+                "BS",
+                [base64.b64encode(item).decode("ascii") for item in value if item],
+            )
+        else:
+            raise TypeError(
+                f"Sets which are not entirely numeric, strings or bytes are not supported. value: {value!r}"
+            )
+    elif isinstance(value, collections_abc.Mapping):
+        return "M", serialize_dict(value)
+    elif isinstance(value, collections_abc.Sequence):
+        return "L", [item for item in map(serialize, value) if item is not None]
+    else:
+        raise TypeError(f"Unsupported type {type(value)}: {value!r}")
+
+
+def serialize_dict(value: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
+    return {
+        result_key: result_value
+        for result_key, result_value in (
+            (inner_key, serialize(inner_value))
+            for inner_key, inner_value in value.items()
+        )
+        if result_value is not None
+    }
+
+
+def parse_amazon_timestamp(timestamp: str) -> datetime.datetime:
+    return datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=datetime.timezone.utc
+    )

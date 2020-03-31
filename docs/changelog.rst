@@ -1,7 +1,7 @@
 Changelog
 =========
 
-20.2
+20.3
 ----
 
 Release Date: Unreleased
@@ -9,6 +9,12 @@ Release Date: Unreleased
 * Added TTL support
 * Fixed a typo in ``delete_item``
 * Improved item deserialization performance
+* Improved overall client performance, especially for query, scan and count.
+* Changed condition, key condition and filter expression APIs.
+* Moved :py:class:`aiodynamo.models.F` to :py:class:`aiodynamo.expressions.F`.
+* Removed boto3 dependency
+* Removed botocore dependency
+* Removed aiobotocore dependency
 
 19.9
 ----
