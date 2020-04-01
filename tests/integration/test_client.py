@@ -265,3 +265,13 @@ async def test_scan_with_limit(client: Client, table: TableName):
     items = [item async for item in client.scan(table, limit=1)]
     assert len(items) == 1
     assert items[0] == item1
+
+
+async def test_update_item_with_broken_update_expression(
+    client: Client, table: TableName
+):
+    item = {"h": "h", "r": "r", "f": 1}
+    await client.put_item(table, item)
+    await client.update_item(table, {"h": "h", "r": "r"}, F("f").set(2) & F("f").set(3))
+    item = await client.get_item(table, item)
+    assert item == {"h": "h", "r": "r", "f": 3}
