@@ -276,3 +276,12 @@ async def test_update_item_with_broken_update_expression(
         await client.update_item(
             table, {"h": "h", "r": "r"}, F("f").set(2) & F("f").set(3)
         )
+
+
+async def test_scan_with_projection_only(client: Client, table: TableName):
+    item1 = {"h": "h", "r": "1", "d": "x"}
+    item2 = {"h": "h", "r": "2", "d": "y"}
+    await client.put_item(table, item1)
+    await client.put_item(table, item2)
+    items = [item async for item in client.scan(table, projection=F("d"))]
+    assert items == [{"d": "x"}, {"d": "y"}]

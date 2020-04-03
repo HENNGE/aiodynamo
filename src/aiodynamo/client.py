@@ -561,6 +561,7 @@ class Client:
             payload["FilterExpression"] = filter_expression.encode(params)
         if projection or filter_expression:
             payload["ExpressionAttributeNames"] = params.get_expression_names()
+        if filter_expression:
             payload["ExpressionAttributeValues"] = params.get_expression_values()
 
         async for result in self._depaginate("Scan", payload, limit):
