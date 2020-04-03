@@ -28,7 +28,7 @@ from httpx import AsyncClient
 ### With aiohttp
 Install this library
 
-`pip install "aiodynamo[aiohttp]"`, for poetry users `poetry add aiodynamo -E aiohttp`
+`pip install "aiodynamo[aiohttp]"` or, for poetry users `poetry add aiodynamo -E aiohttp`
 
 Connect to DynamoDB
 
