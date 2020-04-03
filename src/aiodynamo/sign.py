@@ -2,7 +2,7 @@ import datetime
 import hashlib
 import hmac
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import *
 
 from yarl import URL
@@ -40,7 +40,7 @@ class Instant:
 @dataclass(frozen=True)
 class Request:
     url: URL
-    headers: Dict[str, str]
+    headers: Dict[str, str] = field(repr=False)
     body: bytes
 
 
