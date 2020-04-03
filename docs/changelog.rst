@@ -1,6 +1,13 @@
 Changelog
 =========
 
+20.4
+----
+
+Release Date: Unreleased
+
+* Fixed ``scan`` with a ``projection`` but no ``filter_expression``.
+
 20.3
 ----
 
