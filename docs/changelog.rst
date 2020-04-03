@@ -4,7 +4,7 @@ Changelog
 20.4
 ----
 
-Release Date: Unreleased
+Release Date: April 3rd, 2020
 
 * Fixed ``scan`` with a ``projection`` but no ``filter_expression``.
 * Fixed logs leaking session tokens (request sending) and keys (metadata fetch).
