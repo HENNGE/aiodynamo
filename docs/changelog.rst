@@ -7,6 +7,7 @@ Changelog
 Release Date: Unreleased
 
 * Fixed ``scan`` with a ``projection`` but no ``filter_expression``.
+* Fixed logs leaking session tokens (request sending) and keys (metadata fetch).
 
 20.3
 ----
