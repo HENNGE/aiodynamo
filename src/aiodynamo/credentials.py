@@ -168,7 +168,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
                 logger.exception("GET failed")
                 continue
             if response:
-                logger.debug("fetched metadata %r", response)
+                logger.debug("fetched metadata %s bytes", len(response))
                 return response
         raise TooManyRetries()
 
