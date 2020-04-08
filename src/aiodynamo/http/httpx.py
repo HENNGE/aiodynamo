@@ -22,7 +22,7 @@ def wrap_errors(coro):
                 exc.response and exc.response.status_code,
                 exc.response and await exc.response.aread(),
                 exc.request and exc.request.headers,
-                exc.request and await exc.request.read(),
+                exc.request and await exc.request.aread(),
             )
 
     return wrapper
