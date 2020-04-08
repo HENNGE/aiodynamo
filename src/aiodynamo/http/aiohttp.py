@@ -33,7 +33,7 @@ class AIOHTTP(HTTP):
             method="GET", url=url, headers=headers, timeout=timeout
         ) as response:
             if response.status >= 400:
-                raise RequestFailed(response.status)
+                raise RequestFailed()
             return await response.read()
 
     @wrap_errors
