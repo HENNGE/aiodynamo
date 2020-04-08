@@ -1,18 +1,39 @@
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional
+from functools import wraps
+from typing import Any, Dict, Optional
 
 from aiodynamo.types import Timeout
-from aiohttp import ClientSession
+from aiohttp import ClientError, ClientResponseError, ClientSession
 from yarl import URL
 
 from ..errors import exception_from_response
 from .base import HTTP, Headers, RequestFailed
 
 
+def wrap_errors(coro):
+    @wraps(coro)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await coro(*args, **kwargs)
+        except ClientResponseError as exc:
+            raise RequestFailed(
+                exc.request_info.url,
+                exc.status,
+                exc.message,
+                exc.request_info.headers,
+                None,
+            )
+        except ClientError:
+            raise RequestFailed()
+
+    return wrapper
+
+
 @dataclass(frozen=True)
 class AIOHTTP(HTTP):
     session: ClientSession
 
+    @wrap_errors
     async def get(
         self, *, url: URL, headers: Optional[Headers] = None, timeout: Timeout
     ) -> bytes:
@@ -25,6 +46,7 @@ class AIOHTTP(HTTP):
                 )
             return await response.read()
 
+    @wrap_errors
     async def post(
         self, *, url: URL, body: bytes, headers: Optional[Headers] = None
     ) -> Dict[str, Any]:

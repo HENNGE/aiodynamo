@@ -10,8 +10,8 @@ Headers = Mapping[str, str]
 
 @dataclass
 class RequestFailed(Exception):
-    url: URL
-    status: int
+    url: Optional[URL] = None
+    status: Optional[int] = None
     response: Optional[bytes] = None
     headers: Optional[Headers] = None
     body: Optional[bytes] = None
