@@ -3,7 +3,7 @@ from functools import wraps
 from typing import Any, Dict, Optional
 
 from aiodynamo.types import Timeout
-from aiohttp import ClientError, ClientResponseError, ClientSession
+from aiohttp import ClientError, ClientSession
 from yarl import URL
 
 from ..errors import exception_from_response
@@ -15,14 +15,6 @@ def wrap_errors(coro):
     async def wrapper(*args, **kwargs):
         try:
             return await coro(*args, **kwargs)
-        except ClientResponseError as exc:
-            raise RequestFailed(
-                exc.request_info.url,
-                exc.status,
-                exc.message,
-                exc.request_info.headers,
-                None,
-            )
         except ClientError:
             raise RequestFailed()
 
@@ -41,9 +33,7 @@ class AIOHTTP(HTTP):
             method="GET", url=url, headers=headers, timeout=timeout
         ) as response:
             if response.status >= 400:
-                raise RequestFailed(
-                    url, response.status, await response.read(), headers, None
-                )
+                raise RequestFailed(response.status)
             return await response.read()
 
     @wrap_errors

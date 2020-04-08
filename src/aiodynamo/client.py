@@ -22,7 +22,7 @@ from .expressions import (
     ProjectionExpression,
     UpdateExpression,
 )
-from .http.base import HTTP
+from .http.base import HTTP, RequestFailed
 from .models import (
     GlobalSecondaryIndex,
     KeySchema,
@@ -637,28 +637,37 @@ class Client:
     async def send_request(
         self, *, action: str, payload: Dict[str, Any],
     ) -> Dict[str, Any]:
-        async for _ in self.throttle_config.attempts():
-            key = await self.credentials.get_key(self.http)
-            request = signed_dynamo_request(
-                key=key,
-                payload=payload,
-                action=action,
-                region=self.region,
-                endpoint=self.endpoint,
-            )
-            try:
-                logger.debug("sending request %r", request)
-                return await self.http.post(
-                    url=request.url, headers=request.headers, body=request.body
+        failed = None
+        try:
+            async for _ in self.throttle_config.attempts():
+                key = await self.credentials.get_key(self.http)
+                request = signed_dynamo_request(
+                    key=key,
+                    payload=payload,
+                    action=action,
+                    region=self.region,
+                    endpoint=self.endpoint,
                 )
-            except Throttled:
-                logger.debug("request throttled")
-            except ProvisionedThroughputExceeded:
-                logger.debug("provisioned throughput exceeded")
-            except ExpiredToken:
-                logger.debug("token expired")
-                if not self.credentials.invalidate():
-                    raise
+                try:
+                    logger.debug("sending request %r", request)
+                    return await self.http.post(
+                        url=request.url, headers=request.headers, body=request.body
+                    )
+                except Throttled:
+                    logger.debug("request throttled")
+                except ProvisionedThroughputExceeded:
+                    logger.debug("provisioned throughput exceeded")
+                except ExpiredToken:
+                    logger.debug("token expired")
+                    if not self.credentials.invalidate():
+                        raise
+                except RequestFailed as exc:
+                    logger.debug("request failed")
+                    failed = exc
+        except Throttled:
+            if failed is not None:
+                raise failed
+            raise
 
     async def _depaginate(
         self, action: str, payload: Dict[str, Any], limit: Optional[int] = None
