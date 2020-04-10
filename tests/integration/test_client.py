@@ -295,3 +295,12 @@ async def test_put_item_with_condition_with_no_values(client: Client, table: Tab
         await client.put_item(
             table, {"h": "h", "r": "1"}, condition=F("h").does_not_exist()
         )
+
+
+async def test_delete_item_with_conditions(client: Client, table: TableName):
+    await client.put_item(table, {"h": "h", "r": "1", "d": "x"})
+    with pytest.raises(errors.ConditionalCheckFailed):
+        await client.delete_item(
+            table, {"h": "h", "r": "1"}, condition=F("d").does_not_exist()
+        )
+    assert await client.get_item(table, {"h": "h", "r": "1"})

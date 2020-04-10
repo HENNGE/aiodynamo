@@ -17,8 +17,9 @@ from aiodynamo.expressions import F, Parameters
 def test_project(pe, expression, names):
     params = Parameters()
     assert pe.encode(params) == expression
-    assert params.get_expression_names() == names
-    assert params.get_expression_values() == {}
+    payload = params.to_request_payload()
+    assert payload["ExpressionAttributeNames"] == names
+    assert "ExpressionAttributeValues" not in payload
 
 
 @pytest.mark.parametrize(
@@ -46,5 +47,6 @@ def test_project(pe, expression, names):
 def test_update_expression(exp, ue, ean, eav):
     params = Parameters()
     assert exp.encode(params) == ue
-    assert params.get_expression_names() == ean
-    assert params.get_expression_values() == eav
+    payload = params.to_request_payload()
+    assert payload["ExpressionAttributeNames"] == ean
+    assert payload["ExpressionAttributeValues"] == eav

@@ -6,7 +6,7 @@ Changelog
 
 Release Date: Unreleased
 
-* Fixed ``put_item`` with a ``condition`` which does not carry any values.
+* Fixed ``put_item`` and ``delete_item`` with a ``condition`` which does not carry any values.
 
 20.4
 ----
