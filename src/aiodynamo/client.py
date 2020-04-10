@@ -478,7 +478,9 @@ class Client:
             params = Parameters()
             payload["ConditionExpression"] = condition.encode(params)
             payload["ExpressionAttributeNames"] = params.get_expression_names()
-            payload["ExpressionAttributeValues"] = params.get_expression_values()
+            values = params.get_expression_values()
+            if values:
+                payload["ExpressionAttributeValues"] = values
 
         resp = await self.send_request(action="PutItem", payload=payload)
 
