@@ -664,6 +664,8 @@ class Client:
                 except RequestFailed as exc:
                     logger.debug("request failed")
                     failed = exc
+                except ServiceUnavailable:
+                    logger.debug("service unavailable")
         except Throttled:
             if failed is not None:
                 raise failed
