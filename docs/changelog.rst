@@ -1,6 +1,13 @@
 Changelog
 =========
 
+20.4.1
+------
+
+Release Date: Unreleased
+
+* Fixed ``put_item`` with a ``condition`` which does not carry any values.
+
 20.4
 ----
 
