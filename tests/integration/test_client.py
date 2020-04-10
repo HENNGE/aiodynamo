@@ -285,3 +285,13 @@ async def test_scan_with_projection_only(client: Client, table: TableName):
     await client.put_item(table, item2)
     items = [item async for item in client.scan(table, projection=F("d"))]
     assert items == [{"d": "x"}, {"d": "y"}]
+
+
+async def test_put_item_with_condition_with_no_values(client: Client, table: TableName):
+    await client.put_item(
+        table, {"h": "h", "r": "1"}, condition=F("h").does_not_exist()
+    )
+    with pytest.raises(errors.ConditionalCheckFailed):
+        await client.put_item(
+            table, {"h": "h", "r": "1"}, condition=F("h").does_not_exist()
+        )
