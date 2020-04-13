@@ -136,6 +136,10 @@ class ExpiredToken(AIODynamoError):
     pass
 
 
+class ServiceUnavailable(AIODynamoError):
+    pass
+
+
 ERRORS = {
     "ResourceNotFoundException": TableNotFound,
     "UnknownOperationException": UnknownOperation,
@@ -167,6 +171,8 @@ ERRORS = {
 def exception_from_response(status: int, body: bytes) -> Exception:
     if status == 500:
         return InternalDynamoError()
+    elif status == 503:
+        raise ServiceUnavailable()
     try:
         data = json.loads(body)
         return ERRORS[data["__type"].split("#", 1)[1]](data)

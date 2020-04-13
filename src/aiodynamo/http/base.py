@@ -1,5 +1,4 @@
 import abc
-from dataclasses import dataclass
 from typing import *
 
 from aiodynamo.types import Timeout
@@ -8,13 +7,8 @@ from yarl import URL
 Headers = Mapping[str, str]
 
 
-@dataclass
 class RequestFailed(Exception):
-    url: URL
-    status: int
-    response: Optional[bytes] = None
-    headers: Optional[Headers] = None
-    body: Optional[bytes] = None
+    pass
 
 
 class HTTP(metaclass=abc.ABCMeta):
