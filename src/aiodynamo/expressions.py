@@ -327,11 +327,15 @@ class Parameters:
                 bits.append(f".{self.encode_name(part)}")
         return "".join(bits)
 
-    def get_expression_names(self) -> Dict[str, str]:
-        return self.names
-
-    def get_expression_values(self) -> Dict[str, Dict[str, Any]]:
-        return {key: value for key, value in self.values.items()}
+    def to_request_payload(self) -> Dict[str, Union[str, Dict[str, Any]]]:
+        payload = {}
+        if self.names:
+            payload["ExpressionAttributeNames"] = self.names
+        if self.values:
+            payload["ExpressionAttributeValues"] = {
+                key: value for key, value in self.values.items()
+            }
+        return payload
 
     def _encode(
         self,

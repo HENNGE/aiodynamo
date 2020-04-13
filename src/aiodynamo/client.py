@@ -408,8 +408,7 @@ class Client:
         if condition:
             params = Parameters()
             payload["ConditionExpression"] = condition.encode(params)
-            payload["ExpressionAttributeNames"] = params.get_expression_names()
-            payload["ExpressionAttributeValues"] = params.get_expression_values()
+            payload.update(params.to_request_payload())
 
         resp = await self.send_request(action="DeleteItem", payload=payload)
         if "Attributes" in resp:
@@ -449,7 +448,7 @@ class Client:
         if projection:
             params = Parameters()
             payload["ProjectionExpression"] = projection.encode(params)
-            payload["ExpressionAttributeNames"] = params.get_expression_names()
+            payload.update(params.to_request_payload())
 
         resp = await self.send_request(action="GetItem", payload=payload)
         if "Item" in resp:
@@ -477,8 +476,7 @@ class Client:
         if condition:
             params = Parameters()
             payload["ConditionExpression"] = condition.encode(params)
-            payload["ExpressionAttributeNames"] = params.get_expression_names()
-            payload["ExpressionAttributeValues"] = params.get_expression_values()
+            payload.update(params.to_request_payload())
 
         resp = await self.send_request(action="PutItem", payload=payload)
 
@@ -527,8 +525,7 @@ class Client:
         if select:
             payload["Select"] = select.value
 
-        payload["ExpressionAttributeNames"] = params.get_expression_names()
-        payload["ExpressionAttributeValues"] = params.get_expression_values()
+        payload.update(params.to_request_payload())
 
         async for result in self._depaginate("Query", payload, limit):
             for item in result["Items"]:
@@ -559,10 +556,8 @@ class Client:
             payload["ProjectionExpression"] = projection.encode(params)
         if filter_expression:
             payload["FilterExpression"] = filter_expression.encode(params)
-        if projection or filter_expression:
-            payload["ExpressionAttributeNames"] = params.get_expression_names()
-        if filter_expression:
-            payload["ExpressionAttributeValues"] = params.get_expression_values()
+
+        payload.update(params.to_request_payload())
 
         async for result in self._depaginate("Scan", payload, limit):
             for item in result["Items"]:
@@ -591,8 +586,9 @@ class Client:
             payload["FilterExpression"] = filter_expression.encode(params)
         if index:
             payload["IndexName"] = index
-        payload["ExpressionAttributeNames"] = params.get_expression_names()
-        payload["ExpressionAttributeValues"] = params.get_expression_values()
+
+        payload.update(params.to_request_payload())
+
         count_sum = 0
         async for result in self._depaginate("Query", payload):
             count_sum += result["Count"]
@@ -622,10 +618,7 @@ class Client:
         if condition:
             payload["ConditionExpression"] = condition.encode(params)
 
-        payload["ExpressionAttributeNames"] = params.get_expression_names()
-        values = params.get_expression_values()
-        if values:
-            payload["ExpressionAttributeValues"] = values
+        payload.update(params.to_request_payload())
 
         resp = await self.send_request(action="UpdateItem", payload=payload)
 
