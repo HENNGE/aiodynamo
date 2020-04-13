@@ -18,16 +18,20 @@
 
 
 # -- Project information -----------------------------------------------------
+from pathlib import Path
 
 project = "aiodynamo"
-copyright = "2019, HENNGE K.K"
+copyright = "2020, HENNGE K.K"
 author = "HENNGE K.K"
 
-# The short X.Y version
-version = ""
 # The full version, including alpha/beta/rc tags
-release = "19.2"
-
+_metadata = Path(__file__).parent.parent.joinpath("pyproject.toml").read_text()
+for _line in _metadata.splitlines(keepends=False):
+    if _line.startswith("version = "):
+        release = version = _line.split("=", 1)[1].strip().strip('"')
+        break
+else:
+    release = version = "<unknown>"
 
 # -- General configuration ---------------------------------------------------
 

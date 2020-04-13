@@ -4,7 +4,7 @@ Changelog
 20.4.1
 ------
 
-Release Date: Unreleased
+Release Date: April 13th, 2020
 
 * Fixed ``put_item`` and ``delete_item`` with a ``condition`` which does not carry any values.
 * Wrap underlying HTTP client errors, such as connection issues, so networking issues during
