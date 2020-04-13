@@ -7,6 +7,8 @@ Changelog
 Release Date: Unreleased
 
 * Fixed ``put_item`` and ``delete_item`` with a ``condition`` which does not carry any values.
+* Wrap underlying HTTP client errors, such as connection issues, so networking issues during
+  requests are retried.
 
 20.4
 ----
