@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Dict, Optional
@@ -15,7 +16,7 @@ def wrap_errors(coro):
     async def wrapper(*args, **kwargs):
         try:
             return await coro(*args, **kwargs)
-        except ClientError:
+        except (ClientError, asyncio.TimeoutError):
             raise RequestFailed()
 
     return wrapper
