@@ -335,3 +335,31 @@ async def test_size_condition_expression(client: Client, table: TableName):
     )
     item = await client.get_item(table, key)
     assert item["v"] == "final"
+
+
+async def test_comparison_condition_expression(client: Client, table: TableName):
+    key = {"h": "h", "r": "r"}
+
+    await client.put_item(table, {**key, "v": "initial", "n": 5, "c": 6})
+    with pytest.raises(errors.ConditionalCheckFailed):
+        await client.update_item(
+            table,
+            key,
+            update_expression=F("v").set("unchanged"),
+            condition=F("n").equals(F("c")),
+        )
+    item = await client.get_item(table, key)
+    assert item["v"] == "initial"
+    await client.update_item(
+        table,
+        key,
+        update_expression=F("v").set("changed"),
+        condition=F("n").lt(F("c")),
+    )
+    item = await client.get_item(table, key)
+    assert item["v"] == "changed"
+    await client.update_item(
+        table, key, update_expression=F("v").set("final"), condition=F("n").gte(5),
+    )
+    item = await client.get_item(table, key)
+    assert item["v"] == "final"
