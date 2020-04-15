@@ -304,3 +304,34 @@ async def test_delete_item_with_conditions(client: Client, table: TableName):
             table, {"h": "h", "r": "1"}, condition=F("d").does_not_exist()
         )
     assert await client.get_item(table, {"h": "h", "r": "1"})
+
+
+async def test_size_condition_expression(client: Client, table: TableName):
+    key = {"h": "h", "r": "r"}
+
+    await client.put_item(table, {**key, "s": "hello", "v": "initial", "n": 5})
+    with pytest.raises(errors.ConditionalCheckFailed):
+        await client.update_item(
+            table,
+            key,
+            update_expression=F("v").set("unchanged"),
+            condition=F("s").size().not_equals(F("n")),
+        )
+    item = await client.get_item(table, key)
+    assert item["v"] == "initial"
+    await client.update_item(
+        table,
+        key,
+        update_expression=F("v").set("changed"),
+        condition=F("s").size().equals(F("n")),
+    )
+    item = await client.get_item(table, key)
+    assert item["v"] == "changed"
+    await client.update_item(
+        table,
+        key,
+        update_expression=F("v").set("final"),
+        condition=F("s").size().gt(6),
+    )
+    item = await client.get_item(table, key)
+    assert item["v"] == "final"
