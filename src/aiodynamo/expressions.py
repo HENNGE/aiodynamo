@@ -3,12 +3,11 @@ from __future__ import annotations
 import abc
 import decimal
 from dataclasses import dataclass, field
-from enum import Enum
 from itertools import count
 from typing import *
 
 from .errors import CannotAddToNestedField
-from .types import KeyPath, Numeric
+from .types import AttributeType, KeyPath, Numeric
 from .utils import low_level_serialize
 
 _ParametersCache = Dict[Tuple[Any, Any], Any]
