@@ -1,6 +1,16 @@
 Changelog
 =========
 
+20.4.2
+------
+
+Release Date: April 15th, 2020
+
+* Fix comparison conditions (``equals``, ``not_equals``, ``gt``, ``gte``, ``lt``, ``lte`` on :py:class:`aiodynamo.expressions.F`
+  and :py:class:`aiodynamo.expressions.Size` via :py:meth:`aiodynamo.expressions.F.size` to support referencing other
+  fields (using :py:class:`aiodynamo.expressions.F`)
+* Fix timeout handling in aiohttp based client.
+
 20.4.1
 ------
 
