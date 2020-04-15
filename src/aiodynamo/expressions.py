@@ -489,7 +489,11 @@ class Comparison(Condition):
     other: Any
 
     def encode(self, params: Parameters) -> str:
-        return f"{params.encode_path(self.field.path)} {self.operator} {params.encode_value(self.other)}"
+        if isinstance(self.other, F):
+            other = params.encode_path(self.other.path)
+        else:
+            other = params.encode_value(self.other)
+        return f"{params.encode_path(self.field.path)} {self.operator} {other}"
 
 
 @dataclass(frozen=True)
@@ -522,7 +526,11 @@ class SizeCondition(Condition):
     value: Any
 
     def encode(self, params: Parameters) -> str:
-        return f"size({params.encode_path(self.field.path)}) {self.operator} {params.encode_value(self.value)}"
+        if isinstance(self.value, F):
+            value = params.encode_path(self.value.path)
+        else:
+            value = params.encode_value(self.value)
+        return f"size({params.encode_path(self.field.path)}) {self.operator} {value}"
 
 
 class SetAction(metaclass=abc.ABCMeta):
