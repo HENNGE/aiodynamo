@@ -331,7 +331,7 @@ async def test_size_condition_expression(client: Client, table: TableName):
         table,
         key,
         update_expression=F("v").set("final"),
-        condition=F("s").size().gt(6),
+        condition=F("s").size().lt(6),
     )
     item = await client.get_item(table, key)
     assert item["v"] == "final"
