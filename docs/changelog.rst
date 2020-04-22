@@ -1,6 +1,13 @@
 Changelog
 =========
 
+20.4.3
+------
+
+Release Date: April 22nd, 2020
+
+* Fixed handling of missing credentials
+
 20.4.2
 ------
 
