@@ -5,7 +5,7 @@ class AIODynamoError(Exception):
     pass
 
 
-class NoCredentialsFound(Exception):
+class NoCredentialsFound(AIODynamoError):
     pass
 
 
