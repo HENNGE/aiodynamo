@@ -634,6 +634,10 @@ class Client:
         try:
             async for _ in self.throttle_config.attempts():
                 key = await self.credentials.get_key(self.http)
+                if key is None:
+                    logger.debug("no credentials found")
+                    failed = NoCredentialsFound()
+                    continue
                 request = signed_dynamo_request(
                     key=key,
                     payload=payload,

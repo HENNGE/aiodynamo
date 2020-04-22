@@ -5,6 +5,10 @@ class AIODynamoError(Exception):
     pass
 
 
+class NoCredentialsFound(Exception):
+    pass
+
+
 class EmptyItem(AIODynamoError):
     pass
 
