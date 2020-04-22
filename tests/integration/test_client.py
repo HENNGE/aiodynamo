@@ -3,9 +3,18 @@ import asyncio
 import pytest
 from aiodynamo import errors
 from aiodynamo.client import Client, TimeToLiveStatus
-from aiodynamo.errors import EmptyItem, ItemNotFound, TableNotFound, UnknownOperation
+from aiodynamo.credentials import ChainCredentials
+from aiodynamo.errors import (
+    EmptyItem,
+    ItemNotFound,
+    NoCredentialsFound,
+    TableNotFound,
+    UnknownOperation,
+)
 from aiodynamo.expressions import F, HashKey, RangeKey
+from aiodynamo.http.base import HTTP
 from aiodynamo.models import (
+    ExponentialBackoffThrottling,
     KeySchema,
     KeySpec,
     KeyType,
@@ -15,6 +24,7 @@ from aiodynamo.models import (
     WaitConfig,
 )
 from aiodynamo.types import TableName
+from yarl import URL
 
 pytestmark = pytest.mark.asyncio
 
@@ -363,3 +373,15 @@ async def test_comparison_condition_expression(client: Client, table: TableName)
     )
     item = await client.get_item(table, key)
     assert item["v"] == "final"
+
+
+async def test_no_credentials(http: HTTP, endpoint: URL, region: str):
+    client = Client(
+        http,
+        ChainCredentials([]),
+        region,
+        endpoint,
+        throttle_config=ExponentialBackoffThrottling(time_limit_secs=1),
+    )
+    with pytest.raises(NoCredentialsFound):
+        await client.get_item("no-table", {"key": "no-key"})
