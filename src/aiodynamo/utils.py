@@ -4,7 +4,7 @@ import decimal
 import logging
 from collections import abc as collections_abc
 from functools import reduce
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Mapping, Tuple, Union
 
 from .types import SIMPLE_TYPES, AttributeType, DynamoItem, Item
 
@@ -20,20 +20,6 @@ def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:
 
 def dy2py(data: DynamoItem, numeric_type: Callable[[str], Any]) -> Item:
     return {key: deserialize(value, numeric_type) for key, value in data.items()}
-
-
-def maybe_immutable(thing: Any):
-    if isinstance(thing, list):
-        return tuple(thing)
-
-    elif isinstance(thing, set):
-        return frozenset(thing)
-
-    elif isinstance(thing, dict):
-        return frozenset((key, value) for key, value in thing.items())
-
-    else:
-        return thing
 
 
 def deserialize(value: Dict[str, Any], numeric_type: Callable[[str], Any]) -> Any:
@@ -70,17 +56,15 @@ def deserialize(value: Dict[str, Any], numeric_type: Callable[[str], Any]) -> An
 NUMERIC_TYPES = int, float, decimal.Decimal
 
 
-def serialize(value: Any) -> Optional[Dict[str, Any]]:
+def serialize(value: Any) -> Dict[str, Any]:
     """
     Serialize a Python value to a Dynamo Value, removing empty strings.
     """
-    tag_and_value = low_level_serialize(value)
-    if tag_and_value is not None:
-        return {tag_and_value[0]: tag_and_value[1]}
-    return None
+    tag, value = low_level_serialize(value)
+    return {tag: value}
 
 
-def low_level_serialize(value: Any) -> Optional[Tuple[str, Any]]:
+def low_level_serialize(value: Any) -> Tuple[str, Any]:
     if value is None:
         return "NULL", True
     elif isinstance(value, bool):
@@ -88,12 +72,8 @@ def low_level_serialize(value: Any) -> Optional[Tuple[str, Any]]:
     elif isinstance(value, NUMERIC_TYPES):
         return "N", str(value)
     elif isinstance(value, str):
-        if not value:
-            return None
         return "S", value
     elif isinstance(value, bytes):
-        if not value:
-            return None
         return "B", base64.b64encode(value).decode("ascii")
     elif isinstance(value, collections_abc.Set):
         numeric_items, str_items, byte_items, total = reduce(
@@ -109,11 +89,11 @@ def low_level_serialize(value: Any) -> Optional[Tuple[str, Any]]:
         if numeric_items == total:
             return "NS", [str(item) for item in value]
         elif str_items == total:
-            return "SS", [item for item in value if item]
+            return "SS", [item for item in value]
         elif byte_items == total:
             return (
                 "BS",
-                [base64.b64encode(item).decode("ascii") for item in value if item],
+                [base64.b64encode(item).decode("ascii") for item in value],
             )
         else:
             raise TypeError(
@@ -122,20 +102,13 @@ def low_level_serialize(value: Any) -> Optional[Tuple[str, Any]]:
     elif isinstance(value, collections_abc.Mapping):
         return "M", serialize_dict(value)
     elif isinstance(value, collections_abc.Sequence):
-        return "L", [item for item in map(serialize, value) if item is not None]
+        return "L", [item for item in map(serialize, value)]
     else:
         raise TypeError(f"Unsupported type {type(value)}: {value!r}")
 
 
 def serialize_dict(value: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
-    return {
-        result_key: result_value
-        for result_key, result_value in (
-            (inner_key, serialize(inner_value))
-            for inner_key, inner_value in value.items()
-        )
-        if result_value is not None
-    }
+    return {key: serialize(value) for key, value in value.items()}
 
 
 def parse_amazon_timestamp(timestamp: str) -> datetime.datetime:

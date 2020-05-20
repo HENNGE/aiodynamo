@@ -304,18 +304,16 @@ class Parameters:
             "#n", name, self.names, self.names_gen, self.names_cache, name
         )
 
-    def encode_value(self, value: Any) -> Optional[str]:
-        value = low_level_serialize(value)
-        if value:
-            return self._encode(
-                ":v",
-                {value[0]: value[1]},
-                self.values,
-                self.values_gen,
-                self.values_cache,
-                value,
-            )
-        return None
+    def encode_value(self, value: Any) -> str:
+        tag, value = low_level_serialize(value)
+        return self._encode(
+            ":v",
+            {tag: value},
+            self.values,
+            self.values_gen,
+            self.values_cache,
+            (tag, value),
+        )
 
     def encode_path(self, path: KeyPath) -> str:
         bits = [self.encode_name(path[0])]

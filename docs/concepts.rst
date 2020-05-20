@@ -26,14 +26,6 @@ Autopagination
 DynamoDB APIs that return a paginated result, such as ``scan``, ``query`` or ``count`` are automatically de-paginated in
 aiodynamo and return asynchronous iterators over the whole result set instead.
 
-Empty String Safe
-~~~~~~~~~~~~~~~~~
-
-DynamoDB APIs will return an error if an item contains an empty string as a value anywhere. aiodynamo removes these
-values automatically wherever it can. This means that trying to set a field to an empty string in
-:py:meth:`aiodynamo.client.Client.update_item` will instead remove that field. In :py:meth:`aiodynamo.client.Client.put_item`
-that field is simply omitted.
-
 Numeric type handling
 ~~~~~~~~~~~~~~~~~~~~~
 
