@@ -663,6 +663,8 @@ class Client:
                     failed = exc
                 except ServiceUnavailable:
                     logger.debug("service unavailable")
+                except InternalDynamoError:
+                    logger.debug("internal dynamo error")
         except Throttled:
             if failed is not None:
                 raise failed
