@@ -17,8 +17,13 @@ def table_name_prefix() -> str:
 
 
 @pytest.fixture
-def endpoint() -> Optional[URL]:
-    if os.environ.get("TEST_ON_AWS", "false") == "true":
+def real_dynamo() -> bool:
+    return os.environ.get("TEST_ON_AWS", "false") == "true"
+
+
+@pytest.fixture
+def endpoint(real_dynamo) -> Optional[URL]:
+    if real_dynamo:
         return None
     if "DYNAMODB_URL" not in os.environ:
         raise pytest.skip("DYNAMODB_URL not defined in environment")

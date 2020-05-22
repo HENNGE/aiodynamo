@@ -10,6 +10,7 @@ from aiodynamo.errors import (
     NoCredentialsFound,
     TableNotFound,
     UnknownOperation,
+    ValidationException,
 )
 from aiodynamo.expressions import F, HashKey, RangeKey
 from aiodynamo.http.base import HTTP
@@ -204,20 +205,22 @@ async def test_exists(client: Client, table_factory):
         await client.describe_table(name)
 
 
-async def test_empty_string(client: Client, table: TableName):
+async def test_empty_string(client: Client, table: TableName, real_dynamo: bool):
+    if not real_dynamo:
+        pytest.xfail("empty strings not supported by dynalite yet")
     key = {"h": "h", "r": "r"}
     await client.put_item(table, {**key, "s": ""})
-    assert await client.get_item(table, key) == {"h": "h", "r": "r"}
+    assert await client.get_item(table, key) == {"h": "h", "r": "r", "s": ""}
     assert await client.update_item(
         table,
         key,
         F("foo").set("") & F("bar").set("baz"),
         return_values=ReturnValues.all_new,
-    ) == {"h": "h", "r": "r", "bar": "baz"}
+    ) == {"h": "h", "r": "r", "bar": "baz", "s": ""}
 
 
 async def test_empty_item(client: Client, table: TableName):
-    with pytest.raises(EmptyItem):
+    with pytest.raises(ValidationException):
         await client.put_item(table, {"h": "", "r": ""})
 
 
