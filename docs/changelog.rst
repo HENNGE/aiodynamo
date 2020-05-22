@@ -1,6 +1,16 @@
 Changelog
 =========
 
+20.5
+----
+
+Release Date: May 22nd, 2020
+
+* Removed special handling of empty strings, as DynamoDB `now supports`_ empty strings for non-key, non-index fields. Detection of empty strings is handled by the server now and will raise a :py:class:`aiodynamo.errors.ValidationError`.
+* Retry API calls on internal DynamoDB errors.
+
+.. _now supports: https://aws.amazon.com/about-aws/whats-new/2020/05/amazon-dynamodb-now-supports-empty-values-for-non-key-string-and-binary-attributes-in-dynamodb-tables/
+
 20.4.3
 ------
 
