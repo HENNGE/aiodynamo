@@ -7,7 +7,9 @@ Custom HTTP client adaptor
 If for some reason you want to use neither aiohttp nor httpx, you can adapt your
 own HTTP client for usage with aiodynamo. To do so, create a class that conforms
 to the :py:class:`aiodynamo.http.base.HTTP` interface. Errors should be wrapped in
-a :py:exc:`aiodynamo.http.base.RequestFailed`.
+a :py:exc:`aiodynamo.http.base.RequestFailed`. When raising a :py:exc:`aiodynamo.http.base.RequestFailed`
+due to an exception in the HTTP client, you **should explicitly chain the exceptions**
+using ``raise RequestFailed(reason) from client_exception``.
 
 .. autoclass:: aiodynamo.http.base.HTTP
     :members:

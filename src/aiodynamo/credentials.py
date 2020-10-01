@@ -60,6 +60,20 @@ class Credentials(metaclass=abc.ABCMeta):
         """
 
 
+@dataclass(frozen=True)
+class StaticCredentials(Credentials):
+    key: Optional[Key]
+
+    async def get_key(self, http: HTTP) -> Optional[Key]:
+        return self.key
+
+    def invalidate(self) -> bool:
+        return False
+
+    def is_disabled(self) -> bool:
+        return False
+
+
 class ChainCredentials(Credentials):
     """
     Chains multiple credentials providers together, trying them

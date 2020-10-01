@@ -16,8 +16,10 @@ def wrap_errors(coro):
     async def wrapper(*args, **kwargs):
         try:
             return await coro(*args, **kwargs)
-        except (ClientError, asyncio.TimeoutError):
-            raise RequestFailed()
+        except ClientError as exc:
+            raise RequestFailed(reason="aiohttp client error") from exc
+        except asyncio.TimeoutError as exc:
+            raise RequestFailed(reason="aiohttp client timeout") from exc
 
     return wrapper
 
@@ -34,7 +36,9 @@ class AIOHTTP(HTTP):
             method="GET", url=url, headers=headers, timeout=timeout
         ) as response:
             if response.status >= 400:
-                raise RequestFailed()
+                raise RequestFailed(
+                    f"aiohttp client status code > 400: {response.status}"
+                )
             return await response.read()
 
     @wrap_errors

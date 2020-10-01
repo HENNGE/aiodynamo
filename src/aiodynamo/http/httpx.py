@@ -16,8 +16,8 @@ def wrap_errors(coro):
     async def wrapper(*args, **kwargs):
         try:
             return await coro(*args, **kwargs)
-        except HTTPError:
-            raise RequestFailed()
+        except HTTPError as exc:
+            raise RequestFailed("httpx HTTPError") from exc
 
     return wrapper
 
@@ -32,7 +32,9 @@ class HTTPX(HTTP):
     ) -> bytes:
         response = await self.client.get(str(url), headers=headers, timeout=timeout)
         if response.status_code >= 400:
-            raise RequestFailed()
+            raise RequestFailed(
+                f"httpx client status code > 400: {response.status_code}"
+            )
         return await response.aread()
 
     @wrap_errors

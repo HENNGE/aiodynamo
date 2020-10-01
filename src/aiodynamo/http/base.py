@@ -8,7 +8,11 @@ Headers = Mapping[str, str]
 
 
 class RequestFailed(Exception):
-    pass
+    reason: Optional[str]
+
+    def __init__(self, *args, reason: Optional[str] = None):
+        self.reason = reason
+        super().__init__(*args)
 
 
 class HTTP(metaclass=abc.ABCMeta):
