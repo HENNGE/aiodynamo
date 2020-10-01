@@ -17,6 +17,26 @@ The :py:class:`aiodynamo.client.Client` class takes three required and three opt
 5. Which numeric type to use. This should be a callable which accepts a string as input and returns your numeric type as output. Defaults to ``float``.
 6. The throttling configuration to use. An instance of :py:class:`aiodynamo.models.ThrottleConfig`. By default, if the DynamoDB rate limit is exceeded, aiodynamo will retry up for up to one minute with increasing delays.
 
+
+Credentials
+-----------
+
+In most cases, ``Credentials.auto()`` will load the credentials as you'd expect. Specifically, it will try multiple
+credentials providers in this order: :py:class:`aiodynamo.credentials.EnvironmentCredentials`,
+:py:class:`aiodynamo.credentials.ContainerMetadataCredentials` and :py:class:`aiodynamo.credentials.InstanceMetadataCredentials`.
+
+In case you want to explicitly pass the credentials from Python, use :py:class:`aiodynamo.credentials.StaticCredentials`.
+
+.. automethod:: aiodynamo.credentials.Credentials.auto
+
+.. autoclass:: aiodynamo.credentials.EnvironmentCredentials
+.. autoclass:: aiodynamo.credentials.ContainerMetadataCredentials
+.. autoclass:: aiodynamo.credentials.InstanceMetadataCredentials
+.. autoclass:: aiodynamo.credentials.ChainCredentials
+.. autoclass:: aiodynamo.credentials.StaticCredentials
+.. autoclass:: aiodynamo.credentials.Key
+
+
 The ``F`` class
 ---------------
 
