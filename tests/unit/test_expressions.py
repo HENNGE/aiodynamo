@@ -1,5 +1,5 @@
 import pytest
-from aiodynamo.expressions import F, Parameters
+from aiodynamo.expressions import F, HashKey, Parameters
 
 
 @pytest.mark.parametrize(
@@ -47,6 +47,26 @@ def test_project(pe, expression, names):
 def test_update_expression(exp, ue, ean, eav):
     params = Parameters()
     assert exp.encode(params) == ue
+    payload = params.to_request_payload()
+    assert payload["ExpressionAttributeNames"] == ean
+    assert payload["ExpressionAttributeValues"] == eav
+
+
+@pytest.mark.parametrize(
+    "hash_key,encoded,ean,eav",
+    [
+        (HashKey("h", "v"), "#n0 = :v0", {"#n0": "h"}, {":v0": {"S": "v"}}),
+        (
+            HashKey("hash_key", "value"),
+            "#n0 = :v0",
+            {"#n0": "hash_key"},
+            {":v0": {"S": "value"}},
+        ),
+    ],
+)
+def test_hash_key_encoding(hash_key, encoded, ean, eav):
+    params = Parameters()
+    assert hash_key.encode(params) == encoded
     payload = params.to_request_payload()
     assert payload["ExpressionAttributeNames"] == ean
     assert payload["ExpressionAttributeValues"] == eav
