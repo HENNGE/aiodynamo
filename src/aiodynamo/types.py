@@ -1,6 +1,6 @@
 import decimal
 from enum import Enum
-from typing import Any, Callable, Dict, Sequence, TypeVar, Union
+from typing import Any, Callable, Dict, List, Tuple, TypeVar, Union
 
 Timeout = Union[float, int]
 Numeric = Union[float, int, decimal.Decimal]
@@ -8,7 +8,8 @@ Numeric = Union[float, int, decimal.Decimal]
 Item = TypeVar("Item", bound=Dict[str, Any])
 DynamoItem = TypeVar("DynamoItem", bound=Dict[str, Dict[str, Any]])
 TableName = TypeVar("TableName", bound=str)
-KeyPath = Sequence[Union[str, int]]
+KeyPathParts = Union[str, int]
+KeyPath = Union[List[KeyPathParts], Tuple[KeyPathParts]]
 PathEncoder = Callable[[KeyPath], str]
 EncoderFunc = Callable[[Any], str]
 NOTHING = object()
