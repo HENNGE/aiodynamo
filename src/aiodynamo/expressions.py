@@ -234,7 +234,7 @@ class HashKey(KeyCondition):
     value: Any
 
     def encode(self, params: Parameters) -> str:
-        return f"{params.encode_path(self.name)} = {params.encode_value(self.value)}"
+        return f"{params.encode_path([self.name])} = {params.encode_value(self.value)}"
 
     def __and__(self, other: Condition) -> KeyCondition:
         return HashAndRangeKeyCondition(self, other)
