@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aiodynamo"
-version = "20.5"
+version = "20.10"
 description = "Asyncio DynamoDB client"
 authors = ["Jonas Obrist <jonas.obrist@hennge.com>"]
 license = "Apache-2.0"
@@ -8,6 +8,8 @@ repository = "https://github.com/HENNGE/aiodynamo"
 documentation = "https://aiodynamo.readthedocs.io"
 classifiers = [
     "Framework :: AsyncIO",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3 :: Only",
     "License :: OSI Approved :: Apache Software License",

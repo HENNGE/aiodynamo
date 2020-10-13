@@ -1,6 +1,13 @@
 Changelog
 =========
 
+20.10
+-----
+
+Release Date: October 13th, 2020
+
+* Fixed name encoding of :py:class:`aiodynamo.expressions.HashKey`
+
 20.5
 ----
 
