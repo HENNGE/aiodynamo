@@ -1,14 +1,6 @@
-version: 2
-jobs:
-  build:
-    docker:
-      - image: python:3.7
-        environment:
-          DYNAMODB_URL: http://localhost:8000
-          AWS_ACCESS_KEY_ID: dummy
-          AWS_SECRET_ACCESS_KEY: dummy
-      - image: dimaqq/dynalite:latest
-    working_directory: /home/ubuntu/aiodynamo
+version: 2.1
+commands:
+  runtests:
     steps:
       - checkout
       - run: pip install poetry
@@ -21,3 +13,43 @@ jobs:
           destination: reports
       - store_test_results:
           path: reports/results/
+jobs:
+  py37:
+    docker:
+      - image: python:3.7
+        environment:
+          DYNAMODB_URL: http://localhost:8000
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+      - image: dimaqq/dynalite:latest
+    working_directory: /home/ubuntu/aiodynamo
+    steps:
+      - runtests
+  py38:
+    docker:
+      - image: python:3.8
+        environment:
+          DYNAMODB_URL: http://localhost:8000
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+      - image: dimaqq/dynalite:latest
+    working_directory: /home/ubuntu/aiodynamo
+    steps:
+      - runtests
+  py39:
+    docker:
+      - image: python:3.9
+        environment:
+          DYNAMODB_URL: http://localhost:8000
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+      - image: dimaqq/dynalite:latest
+    working_directory: /home/ubuntu/aiodynamo
+    steps:
+      - runtests
+workflows:
+  build:
+    jobs:
+      - py37
+      - py38
+      - py39
