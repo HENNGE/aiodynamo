@@ -62,7 +62,7 @@ async def instance_metadata_server():
     app.add_routes(
         [
             web.get(
-                "/latest/meta-data/iam/security-credentials/{role}",
+                "/latest/meta-data/iam/security-credentials/{role:.*}",
                 ims.credentials_handler,
             )
         ]
@@ -96,14 +96,15 @@ async def test_env_credentials(monkeypatch, http):
     assert key.token == "token"
 
 
-async def test_ec2_instance_metdata_credentials(http, instance_metadata_server):
+@pytest.mark.parametrize("role", ["role", "arn:aws:iam::1234567890:role/test-role"])
+async def test_ec2_instance_metdata_credentials(http, instance_metadata_server, role):
     imc = InstanceMetadataCredentials(
         timeout=0.1,
         base_url=URL("http://localhost").with_port(instance_metadata_server.port),
     )
     with pytest.raises(Exception):
         assert await imc.get_key(http)
-    instance_metadata_server.role = "hoge"
+    instance_metadata_server.role = role
     metadata = Metadata(
         Key("id", "secret", "token"),
         datetime.datetime.now() + datetime.timedelta(days=2),
