@@ -159,7 +159,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
         max_attempts: int,
         url: URL,
         timeout: Timeout,
-        headers: Optional[Headers] = None
+        headers: Optional[Headers] = None,
     ) -> bytes:
         for attempt in range(max_attempts):
             try:
@@ -307,7 +307,9 @@ class InstanceMetadataCredentials(MetadataCredentials):
                 timeout=self.timeout,
             )
         ).decode("utf-8")
-        credentials_url = role_url.join(URL(role))
+        credentials_url = self.base_url.with_path(
+            f"/latest/meta-data/iam/security-credentials/{role}"
+        )
         raw_credentials = await self.fetch_with_retry(
             http=http,
             max_attempts=self.max_attempts,
