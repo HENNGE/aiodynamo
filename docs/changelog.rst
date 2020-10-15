@@ -1,6 +1,17 @@
 Changelog
 =========
 
+20.10.1
+-------
+
+Release Date: October 15th, 2020
+
+* Fixed instance metadata credentials not supporting arn-based roles.
+* Added :py:class:`aiodynamo.credentials.StaticCredentials`
+* Added full `PEP-484`_ type hints.
+
+.. _PEP-484: https://www.python.org/dev/peps/pep-0484/
+
 20.10
 -----
 
