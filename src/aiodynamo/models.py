@@ -8,11 +8,20 @@ import time
 from dataclasses import dataclass
 from enum import Enum, unique
 from itertools import count
-from typing import AsyncIterable, Dict, Iterable, List, Optional, Union
+from typing import (
+    Any,
+    AsyncIterable,
+    AsyncIterator,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Union,
+)
 
 from .errors import Throttled
-
-ProjectionExpr = Union["ProjectionExpression", "F"]
+from .types import Timespan
 
 
 @unique
@@ -35,7 +44,7 @@ class Throughput:
     read: int
     write: int
 
-    def encode(self):
+    def encode(self) -> Dict[str, int]:
         return {"ReadCapacityUnits": self.read, "WriteCapacityUnits": self.write}
 
 
@@ -56,7 +65,7 @@ class KeySchema:
     hash_key: KeySpec
     range_key: Optional[KeySpec] = None
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[KeySpec]:
         yield self.hash_key
 
         if self.range_key:
@@ -83,7 +92,7 @@ class Projection:
     type: ProjectionType
     attrs: Optional[List[str]] = None
 
-    def encode(self):
+    def encode(self) -> Dict[str, Union[str, List[str]]]:
         encoded = {"ProjectionType": self.type.value}
         if self.attrs:
             encoded["NonKeyAttributes"] = self.attrs
@@ -96,7 +105,7 @@ class LocalSecondaryIndex:
     schema: KeySchema
     projection: Projection
 
-    def encode(self):
+    def encode(self) -> Dict[str, Any]:
         return {
             "IndexName": self.name,
             "KeySchema": self.schema.encode(),
@@ -108,7 +117,7 @@ class LocalSecondaryIndex:
 class GlobalSecondaryIndex(LocalSecondaryIndex):
     throughput: Throughput
 
-    def encode(self):
+    def encode(self) -> Dict[str, Any]:
         return {**super().encode(), "ProvisionedThroughput": self.throughput.encode()}
 
 
@@ -124,7 +133,7 @@ class StreamSpecification:
     enabled: bool = False
     view_type: StreamViewType = StreamViewType.new_and_old_images
 
-    def encode(self):
+    def encode(self) -> Dict[str, Any]:
         spec = {"StreamEnabled": self.enabled}
         if self.enabled:
             spec["StreamViewType"] = self.view_type.value
@@ -166,24 +175,26 @@ class Select(Enum):
 @dataclass(frozen=True)
 class WaitConfig:
     max_attempts: int
-    retry_delay: int
+    retry_delay: Timespan
 
     @classmethod
-    def default(cls):
+    def default(cls) -> WaitConfig:
         return WaitConfig(25, 20)
 
-    async def attempts(self):
+    async def attempts(self) -> AsyncIterator[None]:
         for _ in range(self.max_attempts):
             yield
             await asyncio.sleep(self.retry_delay)
 
 
 @dataclass(frozen=True)
-class ThrottleConfig(metaclass=abc.ABCMeta):
-    time_limit_secs: int = 60
+class MypyWorkaroundThrottleConfigBase:
+    time_limit_secs: Timespan = 60
 
+
+class ThrottleConfig(MypyWorkaroundThrottleConfigBase, metaclass=abc.ABCMeta):
     @classmethod
-    def default(cls):
+    def default(cls) -> ThrottleConfig:
         return ExponentialBackoffThrottling()
 
     @abc.abstractmethod
@@ -201,11 +212,11 @@ class ThrottleConfig(metaclass=abc.ABCMeta):
 
 @dataclass(frozen=True)
 class DecorelatedJitterThrottling(ThrottleConfig):
-    max_time_secs: int = 60
-    base_delay_secs: int = 0.05
-    max_delay_secs: int = 1
+    max_time_secs: Timespan = 60
+    base_delay_secs: Timespan = 0.05
+    max_delay_secs: Timespan = 1
 
-    def delays(self):
+    def delays(self) -> Iterator[Timespan]:
         current_delay_secs = self.base_delay_secs
         while True:
             current_delay_secs = min(
@@ -217,8 +228,8 @@ class DecorelatedJitterThrottling(ThrottleConfig):
 
 @dataclass(frozen=True)
 class ExponentialBackoffThrottling(ThrottleConfig):
-    base_delay_secs: int = 2
-    max_delay_secs: int = 20
+    base_delay_secs: Timespan = 2
+    max_delay_secs: Timespan = 20
 
     def delays(self) -> Iterable[float]:
         for attempt in count():

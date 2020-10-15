@@ -4,7 +4,7 @@ from typing import *
 from aiodynamo.types import Timeout
 from yarl import URL
 
-Headers = Mapping[str, str]
+Headers = Dict[str, str]
 
 
 class RequestFailed(Exception):

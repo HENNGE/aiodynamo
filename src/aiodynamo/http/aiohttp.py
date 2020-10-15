@@ -1,7 +1,7 @@
 import asyncio
+from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import wraps
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterator, Optional, TypeVar, cast
 
 from aiodynamo.types import Timeout
 from aiohttp import ClientError, ClientSession
@@ -10,42 +10,46 @@ from yarl import URL
 from ..errors import exception_from_response
 from .base import HTTP, Headers, RequestFailed
 
+T = TypeVar("T")
 
-def wrap_errors(coro):
-    @wraps(coro)
-    async def wrapper(*args, **kwargs):
-        try:
-            return await coro(*args, **kwargs)
-        except (ClientError, asyncio.TimeoutError):
-            raise RequestFailed()
 
-    return wrapper
+@contextmanager
+def wrap_errors() -> Iterator[None]:
+    try:
+        yield
+    except (ClientError, asyncio.TimeoutError):
+        raise RequestFailed()
 
 
 @dataclass(frozen=True)
 class AIOHTTP(HTTP):
     session: ClientSession
 
-    @wrap_errors
     async def get(
         self, *, url: URL, headers: Optional[Headers] = None, timeout: Timeout
     ) -> bytes:
-        async with self.session.request(
-            method="GET", url=url, headers=headers, timeout=timeout
-        ) as response:
-            if response.status >= 400:
-                raise RequestFailed()
-            return await response.read()
+        with wrap_errors():
+            async with self.session.request(
+                method="GET", url=url, headers=headers, timeout=timeout
+            ) as response:
+                if response.status >= 400:
+                    raise RequestFailed()
+                return await response.read()
 
-    @wrap_errors
     async def post(
         self, *, url: URL, body: bytes, headers: Optional[Headers] = None
     ) -> Dict[str, Any]:
-        async with self.session.request(
-            method="POST", url=url, headers=headers, data=body,
-        ) as response:
-            if response.status >= 400:
-                raise exception_from_response(response.status, await response.read())
-            return await response.json(
-                content_type="application/x-amz-json-1.0", encoding="utf-8"
-            )
+        with wrap_errors():
+            async with self.session.request(
+                method="POST", url=url, headers=headers, data=body,
+            ) as response:
+                if response.status >= 400:
+                    raise exception_from_response(
+                        response.status, await response.read()
+                    )
+                return cast(
+                    Dict[str, Any],
+                    await response.json(
+                        content_type="application/x-amz-json-1.0", encoding="utf-8"
+                    ),
+                )

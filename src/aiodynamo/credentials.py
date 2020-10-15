@@ -60,6 +60,10 @@ class Credentials(metaclass=abc.ABCMeta):
         """
 
 
+class Disabled(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class StaticCredentials(Credentials):
     """
@@ -86,7 +90,7 @@ class ChainCredentials(Credentials):
 
     candidates: Sequence[Credentials]
 
-    def __init__(self, candidates: Sequence[Credentials]):
+    def __init__(self, candidates: Sequence[Credentials]) -> None:
         self.candidates = [
             candidate for candidate in candidates if not candidate.is_disabled()
         ]
@@ -117,7 +121,9 @@ class EnvironmentCredentials(Credentials):
     Loads the credentials from the environment.
     """
 
-    def __init__(self):
+    key: Optional[Key]
+
+    def __init__(self) -> None:
         try:
             self.key = Key(
                 os.environ["AWS_ACCESS_KEY_ID"],
@@ -164,7 +170,6 @@ class Metadata:
         return Refresh.not_required
 
 
-@dataclass
 class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     async def fetch_metadata(self, http: HTTP) -> Metadata:
@@ -190,9 +195,9 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
                 return response
         raise TooManyRetries()
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self._metadata: Optional[Metadata] = None
-        self._refresher: Optional[asyncio.Task] = None
+        self._refresher: Optional[asyncio.Task[None]] = None
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
         if self.is_disabled():
@@ -216,7 +221,9 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
                 self._refresher = asyncio.create_task(self._refresh(http))
             else:
                 logger.debug("already refreshing")
-        return self._metadata and self._metadata.key
+        if self._metadata:
+            return self._metadata.key
+        return None
 
     def invalidate(self) -> bool:
         logger.debug("%r invalidated", self)
@@ -228,7 +235,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
             return Refresh.required
         return self._metadata.check_refresh()
 
-    async def _refresh(self, http: HTTP):
+    async def _refresh(self, http: HTTP) -> None:
         self._metadata = await self.fetch_metadata(http)
         logger.debug("fetched metadata %r", self._metadata)
 
@@ -253,12 +260,12 @@ class ContainerMetadataCredentials(MetadataCredentials):
     timeout: Timeout = 2
     max_attempts: int = 3
     base_url: URL = URL("http://169.254.170.2")
-    relative_uri: str = field(
+    relative_uri: Optional[str] = field(
         default_factory=lambda: os.environ.get(
             "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", None
         )
     )
-    full_uri: URL = field(
+    full_uri: Optional[URL] = field(
         default_factory=lambda: and_then(
             os.environ.get("AWS_CONTAINER_CREDENTIALS_FULL_URI", None), URL
         )
@@ -283,6 +290,8 @@ class ContainerMetadataCredentials(MetadataCredentials):
 
     async def fetch_metadata(self, http: HTTP) -> Metadata:
         headers = and_then(self.auth_token, lambda token: {"Authorization": token})
+        if self.url is None:
+            raise Disabled()
         response = await self.fetch_with_retry(
             http=http,
             max_attempts=self.max_attempts,
