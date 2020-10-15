@@ -8,6 +8,7 @@ commands:
       - run: find . -regex '.*__pycache__.*' -delete
       - run: poetry run pytest --verbose --cov=aiodynamo --cov-report html:reports/coverage/ --junitxml=reports/results/junit.xml
       - run: poetry run black --check src/ tests/
+      - run: poetry run mypy
       - store_artifacts:
           path: reports/coverage/
           destination: reports

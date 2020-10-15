@@ -3,14 +3,14 @@ from __future__ import annotations
 import abc
 import decimal
 from dataclasses import dataclass, field
-from itertools import count
+from itertools import chain, count
 from typing import *
 
 from .errors import CannotAddToNestedField
-from .types import AttributeType, KeyPath, Numeric
+from .types import AttributeType, Numeric, ParametersDict
 from .utils import low_level_serialize
 
-_ParametersCache = Dict[Tuple[Any, Any], Any]
+_ParametersCache = Dict[Tuple[Any, Any], str]
 
 Addable = Union[Numeric, Set[bytes], Set[str], Set[Numeric]]
 
@@ -21,8 +21,14 @@ class ProjectionExpression(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def __and__(self, other: ProjectionExpression) -> ProjectionExpression:
+    def __and__(self, other: F) -> ProjectionExpression:
         pass
+
+
+@dataclass(frozen=True)
+class KeyPath:
+    root: str
+    parts: Sequence[Union[str, int]] = ()
 
 
 class F(ProjectionExpression):
@@ -44,10 +50,12 @@ class F(ProjectionExpression):
     at the end of the class.
     """
 
-    def __init__(self, *path):
-        self.path: KeyPath = path
+    path: KeyPath
 
-    def __hash__(self):
+    def __init__(self, root: str, *path: Union[str, int]):
+        self.path = KeyPath(root, path)
+
+    def __hash__(self) -> int:
         return hash(self.path)
 
     # Projection Expressions
@@ -204,7 +212,7 @@ class F(ProjectionExpression):
         For set fields, this will set the field to the union of the existing
         set and the set provided.
         """
-        if len(self.path) > 1:
+        if self.path.parts:
             raise CannotAddToNestedField()
         return UpdateExpression(add={self: value})
 
@@ -234,7 +242,7 @@ class HashKey(KeyCondition):
     value: Any
 
     def encode(self, params: Parameters) -> str:
-        return f"{params.encode_path([self.name])} = {params.encode_value(self.value)}"
+        return f"{params.encode_path(KeyPath(self.name))} = {params.encode_value(self.value)}"
 
     def __and__(self, other: Condition) -> KeyCondition:
         return HashAndRangeKeyCondition(self, other)
@@ -291,7 +299,7 @@ class RangeKey:
 
 
 class Parameters:
-    def __init__(self):
+    def __init__(self) -> None:
         self.names: Dict[str, str] = {}
         self.values: Dict[str, Dict[str, Any]] = {}
         self.names_gen: Iterator[int] = count()
@@ -316,16 +324,20 @@ class Parameters:
         )
 
     def encode_path(self, path: KeyPath) -> str:
-        bits = [self.encode_name(path[0])]
-        for part in path[1:]:
-            if isinstance(part, int):
-                bits.append(f"[{part}]")
-            else:
-                bits.append(f".{self.encode_name(part)}")
-        return "".join(bits)
+        return "".join(
+            chain(
+                [self.encode_name(path.root)],
+                (
+                    f"[{part}]"
+                    if isinstance(part, int)
+                    else f".{self.encode_name(part)}"
+                    for part in path.parts
+                ),
+            )
+        )
 
-    def to_request_payload(self) -> Dict[str, Union[str, Dict[str, Any]]]:
-        payload = {}
+    def to_request_payload(self) -> ParametersDict:
+        payload: ParametersDict = {}
         if self.names:
             payload["ExpressionAttributeNames"] = self.names
         if self.values:

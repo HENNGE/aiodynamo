@@ -128,6 +128,10 @@ class Throttled(AIODynamoError):
     pass
 
 
+class BrokenThrottleConfig(Throttled):
+    pass
+
+
 class ValidationException(AIODynamoError):
     pass
 

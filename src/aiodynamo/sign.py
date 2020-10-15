@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import hashlib
 import hmac
@@ -25,7 +27,7 @@ class Instant:
     _dt: datetime.datetime
 
     @classmethod
-    def now(cls):
+    def now(cls) -> Instant:
         return cls(datetime.datetime.now(datetime.timezone.utc))
 
     @property
@@ -112,5 +114,5 @@ def signed_dynamo_request(
     return Request(url=endpoint, headers=headers, body=payload_bytes)
 
 
-def sha256_hmac(key, msg):
+def sha256_hmac(key: bytes, msg: str) -> bytes:
     return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()

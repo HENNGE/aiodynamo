@@ -51,14 +51,14 @@ class TimeToLive:
 
     async def enable(
         self, attribute: str, *, wait_for_enabled: Union[bool, WaitConfig] = False
-    ):
+    ) -> None:
         await self.table.client.enable_time_to_live(
             self.table.name, attribute, wait_for_enabled=wait_for_enabled
         )
 
     async def disable(
         self, attribute: str, *, wait_for_disabled: Union[bool, WaitConfig] = False
-    ):
+    ) -> None:
         await self.table.client.disable_time_to_live(
             self.table.name, attribute, wait_for_disabled=wait_for_disabled
         )
@@ -80,11 +80,11 @@ class Table:
         throughput: Throughput,
         keys: KeySchema,
         *,
-        lsis: List[LocalSecondaryIndex] = None,
-        gsis: List[GlobalSecondaryIndex] = None,
-        stream: StreamSpecification = None,
+        lsis: Optional[List[LocalSecondaryIndex]] = None,
+        gsis: Optional[List[GlobalSecondaryIndex]] = None,
+        stream: Optional[StreamSpecification] = None,
         wait_for_active: Union[bool, WaitConfig] = False,
-    ):
+    ) -> None:
         return await self.client.create_table(
             self.name,
             throughput,
@@ -96,13 +96,15 @@ class Table:
         )
 
     @property
-    def time_to_live(self):
+    def time_to_live(self) -> TimeToLive:
         return TimeToLive(self)
 
     async def describe(self) -> TableDescription:
         return await self.client.describe_table(self.name)
 
-    async def delete(self, *, wait_for_disabled: Union[bool, WaitConfig] = False):
+    async def delete(
+        self, *, wait_for_disabled: Union[bool, WaitConfig] = False
+    ) -> None:
         return await self.client.delete_table(
             self.name, wait_for_disabled=wait_for_disabled
         )
@@ -112,14 +114,14 @@ class Table:
         key: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: Condition = None,
+        condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
         return await self.client.delete_item(
             self.name, key, return_values=return_values, condition=condition
         )
 
     async def get_item(
-        self, key: Dict[str, Any], *, projection: ProjectionExpression = None
+        self, key: Dict[str, Any], *, projection: Optional[ProjectionExpression] = None
     ) -> Item:
         return await self.client.get_item(self.name, key, projection=projection)
 
@@ -161,11 +163,11 @@ class Table:
     def scan(
         self,
         *,
-        index: str = None,
-        limit: int = None,
-        start_key: Dict[str, Any] = None,
-        projection: ProjectionExpression = None,
-        filter_expression: Condition = None,
+        index: Optional[str] = None,
+        limit: Optional[int] = None,
+        start_key: Optional[Dict[str, Any]] = None,
+        projection: Optional[ProjectionExpression] = None,
+        filter_expression: Optional[Condition] = None,
     ) -> AsyncIterator[Item]:
         return self.client.scan(
             self.name,
@@ -180,9 +182,9 @@ class Table:
         self,
         key_condition: KeyCondition,
         *,
-        start_key: Dict[str, Any] = None,
-        filter_expression: Condition = None,
-        index: str = None,
+        start_key: Optional[Dict[str, Any]] = None,
+        filter_expression: Optional[Condition] = None,
+        index: Optional[str] = None,
     ) -> int:
         return await self.client.count(
             self.name,
@@ -198,7 +200,7 @@ class Table:
         update_expression: UpdateExpression,
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: Condition = None,
+        condition: Optional[Condition] = None,
     ) -> Union[Item, None]:
         return await self.client.update_item(
             self.name,
@@ -235,11 +237,11 @@ class Client:
         throughput: Throughput,
         keys: KeySchema,
         *,
-        lsis: List[LocalSecondaryIndex] = None,
-        gsis: List[GlobalSecondaryIndex] = None,
-        stream: StreamSpecification = None,
+        lsis: Optional[List[LocalSecondaryIndex]] = None,
+        gsis: Optional[List[GlobalSecondaryIndex]] = None,
+        stream: Optional[StreamSpecification] = None,
         wait_for_active: Union[bool, WaitConfig] = False,
-    ):
+    ) -> None:
         attributes = keys.to_attributes()
         if lsis is not None:
             for index in lsis:
@@ -266,9 +268,12 @@ class Client:
 
         await self.send_request(action="CreateTable", payload=payload)
         if wait_for_active:
-            if not isinstance(wait_for_active, WaitConfig):
-                wait_for_active = WaitConfig.default()
-            async for _ in wait_for_active.attempts():
+            wait_config = (
+                wait_for_active
+                if isinstance(wait_for_active, WaitConfig)
+                else WaitConfig.default()
+            )
+            async for _ in wait_config.attempts():
                 try:
                     description = await self.describe_table(name)
                     if description.status == TableStatus.active:
@@ -283,7 +288,7 @@ class Client:
         attribute: str,
         *,
         wait_for_enabled: Union[bool, WaitConfig] = False,
-    ):
+    ) -> None:
         await self.set_time_to_live(
             table, attribute, True, wait_for_change=wait_for_enabled
         )
@@ -306,7 +311,7 @@ class Client:
         attribute: str,
         *,
         wait_for_disabled: Union[bool, WaitConfig] = False,
-    ):
+    ) -> None:
         await self.set_time_to_live(
             table, attribute, False, wait_for_change=wait_for_disabled
         )
@@ -318,7 +323,7 @@ class Client:
         status: bool,
         *,
         wait_for_change: Union[bool, WaitConfig] = False,
-    ):
+    ) -> None:
         await self.send_request(
             action="UpdateTimeToLive",
             payload={
@@ -333,20 +338,24 @@ class Client:
             result_state = (
                 TimeToLiveStatus.enabled if status else TimeToLiveStatus.disabled
             )
-            if not isinstance(wait_for_change, WaitConfig):
-                wait_for_change = WaitConfig.default()
-            async for _ in wait_for_change.attempts():
+            wait_config = (
+                wait_for_change
+                if isinstance(wait_for_change, WaitConfig)
+                else WaitConfig.default()
+            )
+            async for _ in wait_config.attempts():
                 description = await self.describe_time_to_live(table)
                 if description.status == result_state:
                     return
             raise TimeToLiveStatusNotChanged()
 
-    async def describe_table(self, name: TableName):
+    async def describe_table(self, name: TableName) -> TableDescription:
         response = await self.send_request(
             action="DescribeTable", payload={"TableName": name}
         )
 
         description = response["Table"]
+        attributes: Optional[Dict[str, KeyType]]
         if "AttributeDefinitions" in description:
             attributes = {
                 attribute["AttributeName"]: KeyType(attribute["AttributeType"])
@@ -354,12 +363,14 @@ class Client:
             }
         else:
             attributes = None
+        creation_time: Optional[datetime.datetime]
         if "CreationDateTime" in description:
             creation_time = datetime.datetime.fromtimestamp(
                 description["CreationDateTime"], datetime.timezone.utc
             )
         else:
             creation_time = None
+        key_schema: Optional[KeySchema]
         if attributes and "KeySchema" in description:
             key_schema = KeySchema(
                 *[
@@ -371,6 +382,7 @@ class Client:
             )
         else:
             key_schema = None
+        throughput: Optional[Throughput]
         if "ProvisionedThroughput" in description:
             throughput = Throughput(
                 read=description["ProvisionedThroughput"]["ReadCapacityUnits"],
@@ -393,15 +405,15 @@ class Client:
         key: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: Condition = None,
+        condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
-        key = py2dy(key)
-        if not key:
+        dynamo_key = py2dy(key)
+        if not dynamo_key:
             raise EmptyItem()
 
         payload = {
             "TableName": table,
-            "Key": key,
+            "Key": dynamo_key,
             "ReturnValues": return_values.value,
         }
 
@@ -419,31 +431,35 @@ class Client:
 
     async def delete_table(
         self, table: TableName, *, wait_for_disabled: Union[bool, WaitConfig] = False
-    ):
+    ) -> None:
         await self.send_request(action="DeleteTable", payload={"TableName": table})
-        if not isinstance(wait_for_disabled, WaitConfig):
-            wait_for_disabled = WaitConfig.default()
-        async for _ in wait_for_disabled.attempts():
-            try:
-                await self.describe_table(table)
-            except TableNotFound:
-                return
-        raise TableDidNotBecomeDisabled()
+        if wait_for_disabled:
+            wait_config = (
+                wait_for_disabled
+                if isinstance(wait_for_disabled, WaitConfig)
+                else WaitConfig.default()
+            )
+            async for _ in wait_config.attempts():
+                try:
+                    await self.describe_table(table)
+                except TableNotFound:
+                    return
+            raise TableDidNotBecomeDisabled()
 
     async def get_item(
         self,
         table: TableName,
         key: Dict[str, Any],
         *,
-        projection: ProjectionExpression = None,
+        projection: Optional[ProjectionExpression] = None,
     ) -> Item:
-        key = py2dy(key)
-        if not key:
+        dynamo_key = py2dy(key)
+        if not dynamo_key:
             raise EmptyItem()
 
-        payload = {
+        payload: Dict[str, Any] = {
             "TableName": table,
-            "Key": key,
+            "Key": dynamo_key,
         }
         if projection:
             params = Parameters()
@@ -455,7 +471,7 @@ class Client:
             return dy2py(resp["Item"], self.numeric_type)
 
         else:
-            raise ItemNotFound(key)
+            raise ItemNotFound(dynamo_key)
 
     async def put_item(
         self,
@@ -463,14 +479,14 @@ class Client:
         item: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: Condition = None,
+        condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
-        item = py2dy(item)
-        if not item:
+        dynamo_item = py2dy(item)
+        if not dynamo_item:
             raise EmptyItem()
         payload = {
             "TableName": table,
-            "Item": item,
+            "Item": dynamo_item,
             "ReturnValues": return_values.value,
         }
         if condition:
@@ -491,12 +507,12 @@ class Client:
         table: TableName,
         key_condition: KeyCondition,
         *,
-        start_key: Dict[str, Any] = None,
-        filter_expression: Condition = None,
+        start_key: Optional[Dict[str, Any]] = None,
+        filter_expression: Optional[Condition] = None,
         scan_forward: bool = True,
-        index: str = None,
-        limit: int = None,
-        projection: ProjectionExpression = None,
+        index: Optional[str] = None,
+        limit: Optional[int] = None,
+        projection: Optional[ProjectionExpression] = None,
         select: Select = Select.all_attributes,
     ) -> AsyncIterator[Item]:
         if projection:
@@ -535,16 +551,16 @@ class Client:
         self,
         table: TableName,
         *,
-        index: str = None,
-        limit: int = None,
-        start_key: Dict[str, Any] = None,
-        projection: ProjectionExpression = None,
-        filter_expression: Condition = None,
+        index: Optional[str] = None,
+        limit: Optional[int] = None,
+        start_key: Optional[Dict[str, Any]] = None,
+        projection: Optional[ProjectionExpression] = None,
+        filter_expression: Optional[Condition] = None,
     ) -> AsyncIterator[Item]:
 
         params = Parameters()
 
-        payload = {
+        payload: Dict[str, Any] = {
             "TableName": table,
         }
 
@@ -568,13 +584,13 @@ class Client:
         table: TableName,
         key_condition: KeyCondition,
         *,
-        start_key: Dict[str, Any] = None,
-        filter_expression: Condition = None,
-        index: str = None,
+        start_key: Optional[Dict[str, Any]] = None,
+        filter_expression: Optional[Condition] = None,
+        index: Optional[str] = None,
     ) -> int:
         params = Parameters()
 
-        payload = {
+        payload: Dict[str, Any] = {
             "TableName": table,
             "KeyConditionExpression": key_condition.encode(params),
             "Select": Select.count.value,
@@ -601,7 +617,7 @@ class Client:
         update_expression: UpdateExpression,
         *,
         return_values: ReturnValues = ReturnValues.none,
-        condition: Condition = None,
+        condition: Optional[Condition] = None,
     ) -> Union[Item, None]:
         params = Parameters()
 
@@ -630,7 +646,7 @@ class Client:
     async def send_request(
         self, *, action: str, payload: Dict[str, Any],
     ) -> Dict[str, Any]:
-        failed = None
+        failed: Optional[Exception] = None
         try:
             async for _ in self.throttle_config.attempts():
                 key = await self.credentials.get_key(self.http)
@@ -669,6 +685,7 @@ class Client:
             if failed is not None:
                 raise failed
             raise
+        raise BrokenThrottleConfig()
 
     async def _depaginate(
         self, action: str, payload: Dict[str, Any], limit: Optional[int] = None
@@ -679,7 +696,9 @@ class Client:
         """
         if limit is not None:
             payload = {**payload, "Limit": limit}
-        task = asyncio.create_task(self.send_request(action=action, payload=payload))
+        task: Optional[asyncio.Task[Dict[str, Any]]] = asyncio.create_task(
+            self.send_request(action=action, payload=payload)
+        )
         try:
             while task:
                 result = await task
@@ -689,20 +708,18 @@ class Client:
                         "ExclusiveStartKey": result["LastEvaluatedKey"],
                     }
                 except KeyError:
-                    payload = None
+                    task = None
                 else:
                     if limit is not None:
                         limit -= len(result["Items"])
                         if limit > 0:
                             payload["Limit"] = limit
                         else:
-                            payload = None
-                if payload:
+                            task = None
+                if task:
                     task = asyncio.create_task(
                         self.send_request(action=action, payload=payload)
                     )
-                else:
-                    task = None
                 yield result
         except asyncio.CancelledError:
             if task:

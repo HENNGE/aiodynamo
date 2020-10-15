@@ -1,17 +1,28 @@
 import decimal
+import sys
 from enum import Enum
-from typing import Any, Callable, Dict, List, Tuple, TypeVar, Union
+from typing import Any, Dict, Union
+
+if sys.version_info >= (3, 8):
+    from typing import TypedDict
+else:
+    from typing_extensions import TypedDict
 
 Timeout = Union[float, int]
 Numeric = Union[float, int, decimal.Decimal]
 
-Item = TypeVar("Item", bound=Dict[str, Any])
-DynamoItem = TypeVar("DynamoItem", bound=Dict[str, Dict[str, Any]])
-TableName = TypeVar("TableName", bound=str)
-KeyPathParts = Union[str, int]
-KeyPath = Union[List[KeyPathParts], Tuple[KeyPathParts]]
-PathEncoder = Callable[[KeyPath], str]
-EncoderFunc = Callable[[Any], str]
+Item = Dict[str, Any]
+DynamoItem = Dict[str, Dict[str, Any]]
+TableName = str
+ParametersDict = TypedDict(
+    "ParametersDict",
+    {
+        "ExpressionAttributeNames": Dict[str, str],
+        "ExpressionAttributeValues": Dict[str, Dict[str, Any]],
+    },
+    total=False,
+)
+Timespan = Union[float, int]
 NOTHING = object()
 
 
