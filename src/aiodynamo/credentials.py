@@ -60,6 +60,24 @@ class Credentials(metaclass=abc.ABCMeta):
         """
 
 
+@dataclass(frozen=True)
+class StaticCredentials(Credentials):
+    """
+    Static credentials provided in Python.
+    """
+
+    key: Optional[Key]
+
+    async def get_key(self, http: HTTP) -> Optional[Key]:
+        return self.key
+
+    def invalidate(self) -> bool:
+        return False
+
+    def is_disabled(self) -> bool:
+        return False
+
+
 class ChainCredentials(Credentials):
     """
     Chains multiple credentials providers together, trying them
@@ -228,6 +246,10 @@ def and_then(thing: Optional[T], mapper: Callable[[T], U]) -> Optional[U]:
 # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint.html
 @dataclass
 class ContainerMetadataCredentials(MetadataCredentials):
+    """
+    Loads credentials from the ECS container metadata endpoint.
+    """
+
     timeout: Timeout = 2
     max_attempts: int = 3
     base_url: URL = URL("http://169.254.170.2")
@@ -282,6 +304,10 @@ class ContainerMetadataCredentials(MetadataCredentials):
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 @dataclass
 class InstanceMetadataCredentials(MetadataCredentials):
+    """
+    Loads credentials from the EC2 instance metadata endpoint.
+    """
+
     timeout: Timeout = 1
     max_attempts: int = 1
     base_url: URL = URL("http://169.254.169.254")
