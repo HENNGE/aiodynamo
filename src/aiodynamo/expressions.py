@@ -168,8 +168,7 @@ class F(ProjectionExpression):
 
     def set(self, value: Any) -> UpdateExpression:
         """
-        Set a field to a value. If the value is an empty string or an empty
-        bytes object, the field is instead removed.
+        Set a field to a value.
         """
         if isinstance(value, (bytes, str)) and not value:
             return UpdateExpression(remove={self})
@@ -178,8 +177,6 @@ class F(ProjectionExpression):
     def set_if_not_exists(self, value: Any) -> UpdateExpression:
         """
         Set a field to a value if the field does not exist in the item yet.
-        If the value is an empty string or an empty bytes object, this does
-        nothing.
         """
         if isinstance(value, (bytes, str)) and not value:
             return UpdateExpression()
