@@ -5,9 +5,11 @@ import asyncio
 import datetime
 import json
 import os
+import configparser
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import *
+
 
 from yarl import URL
 
@@ -131,6 +133,36 @@ class EnvironmentCredentials(Credentials):
                 os.environ.get("AWS_SESSION_TOKEN", None),
             )
         except KeyError:
+            self.key = None
+
+    async def get_key(self, http: HTTP) -> Optional[Key]:
+        return self.key
+
+    def invalidate(self) -> bool:
+        return False
+
+    def is_disabled(self) -> bool:
+        return self.key is None
+
+# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html
+class FileCredentials(Credentials):
+    """
+    Loads the credentials from  ~/.aws/credentials
+    """
+
+    key: Optional[Key]
+
+    def __init__(self) -> None:
+        config = configparser.ConfigParser()
+        home = os.path.expanduser("~")
+
+        try:
+            config.read(os.path.join(home,".aws","credentials"))
+            self.key = Key(
+                config['default']['aws_access_key_id'],
+                config['default']['aws_secret_access_key'],
+            )
+        except Exception:
             self.key = None
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
