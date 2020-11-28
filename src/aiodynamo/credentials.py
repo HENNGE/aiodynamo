@@ -34,6 +34,7 @@ class Credentials(metaclass=abc.ABCMeta):
         return ChainCredentials(
             candidates=[
                 EnvironmentCredentials(),
+                FileCredentials(),
                 ContainerMetadataCredentials(),
                 InstanceMetadataCredentials(),
             ]
