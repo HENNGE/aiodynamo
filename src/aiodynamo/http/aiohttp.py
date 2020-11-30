@@ -3,9 +3,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, Optional, TypeVar, cast
 
-from aiodynamo.types import Timeout
 from aiohttp import ClientError, ClientSession
 from yarl import URL
+
+from aiodynamo.types import Timeout
 
 from ..errors import exception_from_response
 from .base import HTTP, Headers, RequestFailed
@@ -41,7 +42,10 @@ class AIOHTTP(HTTP):
     ) -> Dict[str, Any]:
         with wrap_errors():
             async with self.session.request(
-                method="POST", url=url, headers=headers, data=body,
+                method="POST",
+                url=url,
+                headers=headers,
+                data=body,
             ) as response:
                 if response.status >= 400:
                     raise exception_from_response(

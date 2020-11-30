@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import configparser
 import datetime
 import json
 import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from pathlib import Path
 from typing import *
 
 from yarl import URL
@@ -32,6 +34,7 @@ class Credentials(metaclass=abc.ABCMeta):
         return ChainCredentials(
             candidates=[
                 EnvironmentCredentials(),
+                FileCredentials(),
                 ContainerMetadataCredentials(),
                 InstanceMetadataCredentials(),
             ]
@@ -132,6 +135,61 @@ class EnvironmentCredentials(Credentials):
             )
         except KeyError:
             self.key = None
+
+    async def get_key(self, http: HTTP) -> Optional[Key]:
+        return self.key
+
+    def invalidate(self) -> bool:
+        return False
+
+    def is_disabled(self) -> bool:
+        return self.key is None
+
+
+# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html
+class FileCredentials(Credentials):
+    """
+    Loads the credentials from an AWS credentials file
+    """
+
+    key: Optional[Key]
+
+    def __init__(
+        self,
+        *,
+        path: Optional[Path] = None,
+        profile_name: str = "default",
+    ) -> None:
+        if path is None:
+            path = Path.home().joinpath(".aws", "credentials")
+        self.key = None
+        if not path.is_file():
+            return
+
+        parser = configparser.RawConfigParser()
+        try:
+            parser.read(path)
+        except configparser.Error:
+            logger.exception("Found credentials file %r but parsing failed", path)
+            return
+
+        try:
+            profile = parser[profile_name]
+        except KeyError:
+            logger.exception(
+                "Profile %r not found in credentials file %r", profile_name, path
+            )
+            return
+
+        try:
+            self.key = Key(
+                id=profile["aws_access_key_id"],
+                secret=profile["aws_secret_access_key"],
+            )
+        except KeyError:
+            logger.exception(
+                "Profile %r in %r does not contain credentials", profile_name, path
+            )
 
     async def get_key(self, http: HTTP) -> Optional[Key]:
         return self.key

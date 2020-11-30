@@ -644,7 +644,10 @@ class Client:
             return None
 
     async def send_request(
-        self, *, action: str, payload: Dict[str, Any],
+        self,
+        *,
+        action: str,
+        payload: Dict[str, Any],
     ) -> Dict[str, Any]:
         failed: Optional[Exception] = None
         try:

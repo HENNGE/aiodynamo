@@ -3,7 +3,10 @@ Development
 
 aiodynamo uses `poetry`_ to manage dependencies, make sure you have it installed.
 
-After a git clone, run ``poetry install`` to install the dependencies, including the development dependencies.
+After a git clone, run ``poetry install --extras aiohttp --extras httpx`` to install the dependencies,
+including the development dependencies.
+
+Please ensure you have `pre-commit`_ set up so that code formatting is applied automatically.
 
 Tests
 -----
@@ -38,8 +41,9 @@ dependencies such as ``aiobotocore`` or ``botocore``. To run them, refer to thei
 Releasing
 ---------
 
-Run `poetry build -fwheel` to create a wheel, then `twine upload dist/aiodynamo-<version>-py3-none-any.whl`.
+Run ``poetry build -fwheel`` to create a wheel, then ``twine upload dist/aiodynamo-<version>-py3-none-any.whl``.
 
 .. _poetry: https://poetry.eustace.io/
 .. _repository: https://github.com/mhart/dynalite
 .. _container: https://hub.docker.com/r/dimaqq/dynalite/
+.. _pre-commit: https://pre-commit.com/

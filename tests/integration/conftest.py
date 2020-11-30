@@ -4,11 +4,12 @@ import uuid
 from typing import Awaitable, Callable, List, Optional
 
 import pytest
+from yarl import URL
+
 from aiodynamo.client import Client
 from aiodynamo.credentials import Credentials
 from aiodynamo.http.base import HTTP
 from aiodynamo.models import KeySchema, KeySpec, KeyType, Throughput, WaitConfig
-from yarl import URL
 
 
 @pytest.fixture
@@ -38,7 +39,10 @@ def region() -> str:
 @pytest.fixture
 def client(http: HTTP, endpoint: URL, region: str) -> Client:
     yield Client(
-        http, Credentials.auto(), region, endpoint,
+        http,
+        Credentials.auto(),
+        region,
+        endpoint,
     )
 
 
