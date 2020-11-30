@@ -23,6 +23,3 @@ which conforms to thee :py:class:`aiodynamo.credentials.Credentials` interface.
 
 .. autoclass:: aiodynamo.credentials.Credentials
     :members: get_key,invalidate,is_disabled
-
-
-.. autoclass:: aiodynamo.credentials.Key

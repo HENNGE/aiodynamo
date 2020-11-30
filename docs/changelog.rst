@@ -1,6 +1,15 @@
 Changelog
 =========
 
+20.11
+-----
+
+Release Date: November 30th, 2020
+
+* Added :py:class:`aiodynamo.credentials.FileCredentials`
+* :py:meth:`aiodynamo.credentials.Credentials.auto` will now also try :py:class:`aiodynamo.credentials.StaticCredentials`, after
+  environment variables but before instance metadata.
+
 20.10.1
 -------
 

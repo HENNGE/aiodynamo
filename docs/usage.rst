@@ -29,13 +29,36 @@ In case you want to explicitly pass the credentials from Python, use :py:class:`
 
 .. automethod:: aiodynamo.credentials.Credentials.auto
 
+|
+
 .. autoclass:: aiodynamo.credentials.EnvironmentCredentials
+
+|
+
 .. autoclass:: aiodynamo.credentials.ContainerMetadataCredentials
+
+|
+
 .. autoclass:: aiodynamo.credentials.InstanceMetadataCredentials
+
+|
+
 .. autoclass:: aiodynamo.credentials.ChainCredentials
+
+|
+
 .. autoclass:: aiodynamo.credentials.StaticCredentials
+
+|
+
 .. autoclass:: aiodynamo.credentials.FileCredentials
+
+|
+
 .. autoclass:: aiodynamo.credentials.Key
+    :members:
+    :undoc-members:
+
 
 The ``F`` class
 ---------------
@@ -104,5 +127,7 @@ Key conditions are created using the :py:class:`aiodynamo.expressions.HashKey` a
 :py:class:`aiodynamo.expressions.RangeKey` classes.
 
 .. autoclass:: aiodynamo.expressions.HashKey
+
+|
 
 .. autoclass:: aiodynamo.expressions.RangeKey
