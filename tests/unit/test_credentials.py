@@ -1,13 +1,15 @@
 import datetime
+from pathlib import Path
+from textwrap import dedent
 
 import pytest
 from aiodynamo.credentials import (
     EXPIRED_THRESHOLD,
     EXPIRES_SOON_THRESHOLD,
-    ChainCredentials,
     ContainerMetadataCredentials,
     Credentials,
     EnvironmentCredentials,
+    FileCredentials,
     InstanceMetadataCredentials,
     Key,
     Metadata,
@@ -16,7 +18,7 @@ from aiohttp import web
 from freezegun import freeze_time
 from yarl import URL
 
-pytestmark = [pytest.mark.asyncio]
+pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("fs")]
 
 
 class InstanceMetadataServer:
@@ -128,7 +130,10 @@ async def test_simultaneous_credentials_refresh(http, instance_metadata_server):
     )
     key1 = Key("id1", "secret1")
     key2 = Key("id2", "secret2")
-    imc._metadata = Metadata(key1, expires,)
+    imc._metadata = Metadata(
+        key1,
+        expires,
+    )
     instance_metadata_server.metadata = Metadata(key2, not_expired)
     assert instance_metadata_server.calls == 0
     with freeze_time(now):
@@ -160,3 +165,47 @@ async def test_disabled(monkeypatch):
     creds = Credentials.auto()
     assert len(creds.candidates) == 1
     assert not creds.is_disabled()
+
+
+async def test_file_credentials(fs, http):
+    assert FileCredentials().is_disabled()
+    fs.create_file(
+        Path.home().joinpath(".aws", "credentials"),
+        contents=dedent(
+            """
+            [default]
+            aws_access_key_id=foo
+            aws_secret_access_key=bar
+            [my-profile]
+            aws_access_key_id=baz
+            aws_secret_access_key=hoge
+            """
+        ),
+    )
+    credentials = FileCredentials()
+    assert not credentials.is_disabled()
+    assert await credentials.get_key(http) == Key(id="foo", secret="bar")
+    credentials = FileCredentials(profile_name="my-profile")
+    assert not credentials.is_disabled()
+    assert await credentials.get_key(http) == Key(id="baz", secret="hoge")
+    custom_path = Path("/custom/credentials/file")
+    assert FileCredentials(path=custom_path).is_disabled()
+    fs.create_file(
+        custom_path,
+        contents=dedent(
+            """
+            [default]
+            aws_access_key_id=custom-foo
+            aws_secret_access_key=custom-bar
+            [my-profile]
+            aws_access_key_id=custom-baz
+            aws_secret_access_key=custom-hoge
+            """
+        ),
+    )
+    credentials = FileCredentials(path=custom_path)
+    assert not credentials.is_disabled()
+    assert await credentials.get_key(http) == Key(id="custom-foo", secret="custom-bar")
+    credentials = FileCredentials(path=custom_path, profile_name="my-profile")
+    assert not credentials.is_disabled()
+    assert await credentials.get_key(http) == Key(id="custom-baz", secret="custom-hoge")

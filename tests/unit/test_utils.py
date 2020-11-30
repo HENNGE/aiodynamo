@@ -3,8 +3,9 @@ from decimal import Decimal
 from functools import partial
 
 import pytest
-from aiodynamo.utils import deserialize, dy2py
 from boto3.dynamodb.types import DYNAMODB_CONTEXT, TypeDeserializer
+
+from aiodynamo.utils import deserialize, dy2py
 
 
 def test_binary_decode():
@@ -16,7 +17,13 @@ def test_binary_decode():
 @pytest.mark.parametrize(
     "value,numeric_type,result",
     [
-        ({"N": "1.2",}, float, 1.2),
+        (
+            {
+                "N": "1.2",
+            },
+            float,
+            1.2,
+        ),
         ({"NS": ["1.2"]}, float, {1.2}),
         ({"N": "1.2"}, DYNAMODB_CONTEXT.create_decimal, Decimal("1.2")),
         ({"NS": ["1.2"]}, DYNAMODB_CONTEXT.create_decimal, {Decimal("1.2")}),
@@ -29,8 +36,12 @@ def test_numeric_decode(value, numeric_type, result):
 def test_serde_compatibility():
     def generate_item(nest):
         item = {
-            "hash": {"S": "string",},
-            "range": {"B": base64.b64encode(b"bytes"),},
+            "hash": {
+                "S": "string",
+            },
+            "range": {
+                "B": base64.b64encode(b"bytes"),
+            },
             "null": {"NULL": True},
             "true": {"BOOL": True},
             "false": {"BOOL": False},

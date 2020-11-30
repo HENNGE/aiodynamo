@@ -1,6 +1,8 @@
 import asyncio
 
 import pytest
+from yarl import URL
+
 from aiodynamo import errors
 from aiodynamo.client import Client, TimeToLiveStatus
 from aiodynamo.credentials import ChainCredentials
@@ -25,7 +27,6 @@ from aiodynamo.models import (
     WaitConfig,
 )
 from aiodynamo.types import TableName
-from yarl import URL
 
 pytestmark = pytest.mark.asyncio
 
@@ -211,12 +212,15 @@ async def test_empty_string(client: Client, table: TableName, real_dynamo: bool)
     key = {"h": "h", "r": "r"}
     await client.put_item(table, {**key, "s": ""})
     assert await client.get_item(table, key) == {"h": "h", "r": "r", "s": ""}
-    assert await client.update_item(
-        table,
-        key,
-        F("foo").set("") & F("bar").set("baz"),
-        return_values=ReturnValues.all_new,
-    ) == {"h": "h", "r": "r", "bar": "baz", "s": ""}
+    assert (
+        await client.update_item(
+            table,
+            key,
+            F("foo").set("") & F("bar").set("baz"),
+            return_values=ReturnValues.all_new,
+        )
+        == {"h": "h", "r": "r", "bar": "baz", "s": ""}
+    )
 
 
 async def test_empty_item(client: Client, table: TableName):
@@ -372,7 +376,10 @@ async def test_comparison_condition_expression(client: Client, table: TableName)
     item = await client.get_item(table, key)
     assert item["v"] == "changed"
     await client.update_item(
-        table, key, update_expression=F("v").set("final"), condition=F("n").gte(5),
+        table,
+        key,
+        update_expression=F("v").set("final"),
+        condition=F("n").gte(5),
     )
     item = await client.get_item(table, key)
     assert item["v"] == "final"
