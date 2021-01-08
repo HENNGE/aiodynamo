@@ -73,6 +73,9 @@ class Table:
     name: TableName
 
     async def exists(self) -> bool:
+        """
+        Checks that the table exist.
+        """
         return await self.client.table_exists(self.name)
 
     async def create(
@@ -85,6 +88,9 @@ class Table:
         stream: Optional[StreamSpecification] = None,
         wait_for_active: Union[bool, WaitConfig] = False,
     ) -> None:
+        """
+        Creates the table.
+        """
         return await self.client.create_table(
             self.name,
             throughput,
@@ -105,6 +111,9 @@ class Table:
     async def delete(
         self, *, wait_for_disabled: Union[bool, WaitConfig] = False
     ) -> None:
+        """
+        Deletes the table and all its items.
+        """
         return await self.client.delete_table(
             self.name, wait_for_disabled=wait_for_disabled
         )
@@ -116,6 +125,9 @@ class Table:
         return_values: ReturnValues = ReturnValues.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
+        """
+        Deletes a single item in the table by its key.
+        """
         return await self.client.delete_item(
             self.name, key, return_values=return_values, condition=condition
         )
@@ -123,6 +135,11 @@ class Table:
     async def get_item(
         self, key: Dict[str, Any], *, projection: Optional[ProjectionExpression] = None
     ) -> Item:
+        """
+        Returns the attributes of an item from table.
+        This will return all attributes by default.
+        To get only some attributes, use a projection expression. 
+        """
         return await self.client.get_item(self.name, key, projection=projection)
 
     async def put_item(
@@ -132,6 +149,10 @@ class Table:
         return_values: ReturnValues = ReturnValues.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
+        """
+        Create a new item or replace it if it already exists.
+        This will overwrite all attributes in an item.
+        """
         return await self.client.put_item(
             self.name, item, return_values=return_values, condition=condition
         )
@@ -148,6 +169,12 @@ class Table:
         projection: Optional[ProjectionExpression] = None,
         select: Select = Select.all_attributes,
     ) -> AsyncIterator[Item]:
+        """
+        Returns one or more items that match the provided key condition.
+        To filter the result, use a filter expression.
+        This will return all attributes by default.
+        To get only some attributes, use a projection expression. 
+        """
         return self.client.query(
             self.name,
             key_condition,
@@ -169,6 +196,12 @@ class Table:
         projection: Optional[ProjectionExpression] = None,
         filter_expression: Optional[Condition] = None,
     ) -> AsyncIterator[Item]:
+        """
+        Returns one or more items by accessing every item in the table.
+        To filter the result, use a filter expression.
+        This will return all attributes by default.
+        To get only some attributes, use a projection expression. 
+        """
         return self.client.scan(
             self.name,
             index=index,
@@ -202,6 +235,10 @@ class Table:
         return_values: ReturnValues = ReturnValues.none,
         condition: Optional[Condition] = None,
     ) -> Union[Item, None]:
+        """
+        Edit an item's attribute or create a new item if it does not exist.
+        This will edit only the passed attributes.
+        """
         return await self.client.update_item(
             self.name,
             key,
