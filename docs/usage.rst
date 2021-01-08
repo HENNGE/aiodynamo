@@ -59,6 +59,46 @@ In case you want to explicitly pass the credentials from Python, use :py:class:`
     :members:
     :undoc-members:
 
+The ``Table`` class
+-------------------
+
+After instantiating client, set the table to be used by calling the :py:meth:`aiodynamo.client.Client.table` method.
+The method takes the table name string as its only argument.
+
+.. automethod:: aiodynamo.client.Client.table
+
+Modify table
+~~~~~~~~~~~~
+
+These methods can be used to modify the table.
+
+.. automethod:: aiodynamo.client.Table.exists
+.. automethod:: aiodynamo.client.Table.create
+.. automethod:: aiodynamo.client.Table.delete
+
+Modify items
+~~~~~~~~~~~~
+
+These methods can be used to modify items in the table.
+
+.. automethod:: aiodynamo.client.Table.put_item
+.. automethod:: aiodynamo.client.Table.update_item
+.. automethod:: aiodynamo.client.Table.delete_item
+
+Read items
+~~~~~~~~~~
+
+These methods can be used to return items from the table.
+
+.. automethod:: aiodynamo.client.Table.get_item
+
+|
+
+.. automethod:: aiodynamo.client.Table.query
+
+|
+
+.. automethod:: aiodynamo.client.Table.scan
 
 The ``F`` class
 ---------------
