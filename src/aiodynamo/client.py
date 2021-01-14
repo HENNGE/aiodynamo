@@ -138,7 +138,7 @@ class Table:
         """
         Returns the attributes of an item from table.
         This will return all attributes by default.
-        To get only some attributes, use a projection expression. 
+        To get only some attributes, use a projection expression.
         """
         return await self.client.get_item(self.name, key, projection=projection)
 
@@ -173,7 +173,7 @@ class Table:
         Returns one or more items that match the provided key condition.
         To filter the result, use a filter expression.
         This will return all attributes by default.
-        To get only some attributes, use a projection expression. 
+        To get only some attributes, use a projection expression.
         """
         return self.client.query(
             self.name,
@@ -200,7 +200,7 @@ class Table:
         Returns one or more items by accessing every item in the table.
         To filter the result, use a filter expression.
         This will return all attributes by default.
-        To get only some attributes, use a projection expression. 
+        To get only some attributes, use a projection expression.
         """
         return self.client.scan(
             self.name,
