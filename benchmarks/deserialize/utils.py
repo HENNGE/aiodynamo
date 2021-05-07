@@ -1,7 +1,7 @@
 def generate_item(nest):
     item = {
-        "hash": {"S": "string",},
-        "range": {"B": b"bytes",},
+        "hash": {"S": "string"},
+        "range": {"B": b"bytes"},
         "null": {"NULL": True},
         "true": {"BOOL": True},
         "false": {"BOOL": False},

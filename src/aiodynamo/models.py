@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from itertools import count
 from typing import (
-    Any,
     AsyncIterable,
     AsyncIterator,
     Dict,
@@ -17,11 +16,19 @@ from typing import (
     Iterator,
     List,
     Optional,
-    Union,
+    cast,
 )
 
 from .errors import Throttled
-from .types import Timespan
+from .types import (
+    EncodedGlobalSecondaryIndex,
+    EncodedKeySchema,
+    EncodedLocalSecondaryIndex,
+    EncodedProjection,
+    EncodedStreamSpecification,
+    EncodedThroughput,
+    Timespan,
+)
 
 
 @unique
@@ -44,7 +51,7 @@ class Throughput:
     read: int
     write: int
 
-    def encode(self) -> Dict[str, int]:
+    def encode(self) -> EncodedThroughput:
         return {"ReadCapacityUnits": self.read, "WriteCapacityUnits": self.write}
 
 
@@ -74,7 +81,7 @@ class KeySchema:
     def to_attributes(self) -> Dict[str, str]:
         return {key.name: key.type.value for key in self}
 
-    def encode(self) -> List[Dict[str, str]]:
+    def encode(self) -> List[EncodedKeySchema]:
         return [
             {"AttributeName": key.name, "KeyType": key_type}
             for key, key_type in zip(self, ["HASH", "RANGE"])
@@ -92,8 +99,8 @@ class Projection:
     type: ProjectionType
     attrs: Optional[List[str]] = None
 
-    def encode(self) -> Dict[str, Union[str, List[str]]]:
-        encoded = {"ProjectionType": self.type.value}
+    def encode(self) -> EncodedProjection:
+        encoded: EncodedProjection = {"ProjectionType": self.type.value}
         if self.attrs:
             encoded["NonKeyAttributes"] = self.attrs
         return encoded
@@ -105,7 +112,7 @@ class LocalSecondaryIndex:
     schema: KeySchema
     projection: Projection
 
-    def encode(self) -> Dict[str, Any]:
+    def encode(self) -> EncodedLocalSecondaryIndex:
         return {
             "IndexName": self.name,
             "KeySchema": self.schema.encode(),
@@ -117,8 +124,12 @@ class LocalSecondaryIndex:
 class GlobalSecondaryIndex(LocalSecondaryIndex):
     throughput: Throughput
 
-    def encode(self) -> Dict[str, Any]:
-        return {**super().encode(), "ProvisionedThroughput": self.throughput.encode()}
+    def encode(self) -> EncodedGlobalSecondaryIndex:
+        # Cast due to https://github.com/python/mypy/issues/4122
+        return cast(
+            EncodedGlobalSecondaryIndex,
+            {**super().encode(), "ProvisionedThroughput": self.throughput.encode()},
+        )
 
 
 class StreamViewType(Enum):
@@ -133,8 +144,8 @@ class StreamSpecification:
     enabled: bool = False
     view_type: StreamViewType = StreamViewType.new_and_old_images
 
-    def encode(self) -> Dict[str, Any]:
-        spec = {"StreamEnabled": self.enabled}
+    def encode(self) -> EncodedStreamSpecification:
+        spec: EncodedStreamSpecification = {"StreamEnabled": self.enabled}
         if self.enabled:
             spec["StreamViewType"] = self.view_type.value
         return spec

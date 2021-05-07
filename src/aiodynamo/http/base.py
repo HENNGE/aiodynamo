@@ -1,8 +1,9 @@
 import abc
 from typing import *
 
-from aiodynamo.types import Timeout
 from yarl import URL
+
+from aiodynamo.types import Timeout
 
 Headers = Dict[str, str]
 

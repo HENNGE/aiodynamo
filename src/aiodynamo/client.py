@@ -411,7 +411,7 @@ class Client:
         if not dynamo_key:
             raise EmptyItem()
 
-        payload = {
+        payload: Dict[str, Any] = {
             "TableName": table,
             "Key": dynamo_key,
             "ReturnValues": return_values.value,
@@ -484,7 +484,7 @@ class Client:
         dynamo_item = py2dy(item)
         if not dynamo_item:
             raise EmptyItem()
-        payload = {
+        payload: Dict[str, Any] = {
             "TableName": table,
             "Item": dynamo_item,
             "ReturnValues": return_values.value,
@@ -522,7 +522,7 @@ class Client:
 
         params = Parameters()
 
-        payload = {
+        payload: Dict[str, Any] = {
             "TableName": table,
             "KeyConditionExpression": key_condition.encode(params),
             "ScanIndexForward": scan_forward,
@@ -625,7 +625,7 @@ class Client:
         if not expression:
             raise EmptyItem()
 
-        payload = {
+        payload: Dict[str, Any] = {
             "TableName": table,
             "Key": py2dy(key),
             "UpdateExpression": expression,
@@ -647,7 +647,7 @@ class Client:
         self,
         *,
         action: str,
-        payload: Dict[str, Any],
+        payload: Mapping[str, Any],
     ) -> Dict[str, Any]:
         failed: Optional[Exception] = None
         try:

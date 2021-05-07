@@ -56,7 +56,7 @@ def derive_signing_key(key: Key, instant: Instant, region: str) -> bytes:
 def signed_dynamo_request(
     *,
     key: Key,
-    payload: Dict[str, Any],
+    payload: Mapping[str, Any],
     action: str,
     region: str,
     endpoint: Optional[URL] = None,

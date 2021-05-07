@@ -3,9 +3,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, Optional, cast
 
-from aiodynamo.types import Timeout
 from httpx import AsyncClient, HTTPError
 from yarl import URL
+
+from aiodynamo.types import Timeout
 
 from ..errors import exception_from_response
 from .base import HTTP, Headers, RequestFailed
