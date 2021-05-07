@@ -34,13 +34,14 @@ aiohttp = ["aiohttp"]
 pytest = "^6.0"
 pytest-asyncio = "^0.14"
 pytest-cov = "^2.6"
-black = {version = "^20.8b1",allow-prereleases = true}
+black = {version = "^21.5b0",allow-prereleases = true}
 sphinx = "^3.3"
 pyperf = "^2.0"
 boto3 = "^1.12.18"
 freezegun = "^1.0"
-mypy = "^0.790"
+mypy = "^0.812"
 pyfakefs = "^4.3.2"
+isort = "^5.8.0"
 
 [tool.isort]
 line_length = "88"

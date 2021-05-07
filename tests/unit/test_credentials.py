@@ -3,6 +3,10 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
+from aiohttp import web
+from freezegun import freeze_time
+from yarl import URL
+
 from aiodynamo.credentials import (
     EXPIRED_THRESHOLD,
     EXPIRES_SOON_THRESHOLD,
@@ -14,9 +18,6 @@ from aiodynamo.credentials import (
     Key,
     Metadata,
 )
-from aiohttp import web
-from freezegun import freeze_time
-from yarl import URL
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("fs")]
 
