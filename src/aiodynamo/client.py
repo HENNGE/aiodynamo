@@ -73,9 +73,6 @@ class Table:
     name: TableName
 
     async def exists(self) -> bool:
-        """
-        Checks that the table exist.
-        """
         return await self.client.table_exists(self.name)
 
     async def create(
@@ -88,9 +85,6 @@ class Table:
         stream: Optional[StreamSpecification] = None,
         wait_for_active: Union[bool, WaitConfig] = False,
     ) -> None:
-        """
-        Creates the table.
-        """
         return await self.client.create_table(
             self.name,
             throughput,
@@ -111,9 +105,6 @@ class Table:
     async def delete(
         self, *, wait_for_disabled: Union[bool, WaitConfig] = False
     ) -> None:
-        """
-        Deletes the table and all its items.
-        """
         return await self.client.delete_table(
             self.name, wait_for_disabled=wait_for_disabled
         )
@@ -125,9 +116,6 @@ class Table:
         return_values: ReturnValues = ReturnValues.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
-        """
-        Deletes a single item in the table by its key.
-        """
         return await self.client.delete_item(
             self.name, key, return_values=return_values, condition=condition
         )

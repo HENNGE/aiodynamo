@@ -62,43 +62,56 @@ In case you want to explicitly pass the credentials from Python, use :py:class:`
 The ``Table`` class
 -------------------
 
-After instantiating client, set the table to be used by calling the :py:meth:`aiodynamo.client.Client.table` method.
-The method takes the table name string as its only argument.
+To set the DynamoDB table that you want to use, set it using the :py:meth:`aiodynamo.client.Client.table` method.
+The method takes the table name as its only argument.
+Table class should not be instantiated directly.
+It must always created via the ``Client.table`` method.
 
 .. automethod:: aiodynamo.client.Client.table
 
-Modify table
-~~~~~~~~~~~~
-
-These methods can be used to modify the table.
+Methods
+~~~~~~~
 
 .. automethod:: aiodynamo.client.Table.exists
 .. automethod:: aiodynamo.client.Table.create
+
+    If ``wait_for_active`` is set to ``True``, it will wait until the table status changed into ``Active``.
+    If after the defined wait time the table is not active, an exception will be raised.
+
+See also: `CreateTable - AWS API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html>`_.
+
 .. automethod:: aiodynamo.client.Table.delete
 
-Modify items
-~~~~~~~~~~~~
+    If ``wait_for_disabled`` is set to ``True``, it will wait until the table status changed into ``Disabled``.
+    If after the defined wait time the table is not disabled, an exception will be raised.
 
-These methods can be used to modify items in the table.
+See also: `DeleteTable - AWS API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteTable.html>`_.
 
 .. automethod:: aiodynamo.client.Table.put_item
+
+See also: `PutItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html>`_.
+
 .. automethod:: aiodynamo.client.Table.update_item
+
+See also: `UpdateItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html>`_.
+
 .. automethod:: aiodynamo.client.Table.delete_item
 
-Read items
-~~~~~~~~~~
-
-These methods can be used to return items from the table.
+See also: `DeleteItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html>`_.
 
 .. automethod:: aiodynamo.client.Table.get_item
 
-|
+See also: `GetItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_GetItem.html>`_.
 
 .. automethod:: aiodynamo.client.Table.query
 
-|
+The results of ``Query`` operations are automatically depaginated.
+See also: `Query - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html>`_.
 
 .. automethod:: aiodynamo.client.Table.scan
+
+The results of ``Scan`` operations are automatically depaginated.
+See also: `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html>`_.
 
 The ``F`` class
 ---------------
@@ -171,3 +184,25 @@ Key conditions are created using the :py:class:`aiodynamo.expressions.HashKey` a
 |
 
 .. autoclass:: aiodynamo.expressions.RangeKey
+
+
+Models
+------
+.. autoclass:: aiodynamo.models.Throughput
+    :members: read, write
+    :undoc-members:
+.. autoclass:: aiodynamo.models.KeySchema
+    :members: hash_key, range_key
+    :undoc-members:
+.. autoclass:: aiodynamo.models.LocalSecondaryIndex
+    :members: name, projection, schema
+    :undoc-members:
+.. autoclass:: aiodynamo.models.GlobalSecondaryIndex
+    :members: name, projection, schema, throughput
+    :undoc-members:
+.. autoclass:: aiodynamo.models.StreamSpecification
+    :members: enabled, view_type
+    :undoc-members:
+.. autoclass:: aiodynamo.models.WaitConfig
+    :members: max_attempts, retry_delay
+    :undoc-members:
