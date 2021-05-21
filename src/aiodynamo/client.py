@@ -29,6 +29,7 @@ from .models import (
     KeySpec,
     KeyType,
     LocalSecondaryIndex,
+    Page,
     ReturnValues,
     Select,
     StreamSpecification,
@@ -158,12 +159,45 @@ class Table:
         select: Select = Select.all_attributes,
     ) -> AsyncIterator[Item]:
         """
-        Returns one or more items that match the provided key condition.
+        Query the table.
+
+        Unlike the DynamoDB API, the results are automatically de-paginated
+        and a single stream of items is returned. For manual pagination, use
+        query_single_page(...) instead.
+
         To filter the result, use a filter expression.
         This will return all attributes by default.
         To get only some attributes, use a projection expression.
         """
         return self.client.query(
+            self.name,
+            key_condition,
+            start_key=start_key,
+            filter_expression=filter_expression,
+            scan_forward=scan_forward,
+            index=index,
+            limit=limit,
+            projection=projection,
+            select=select,
+        )
+
+    async def query_single_page(
+        self,
+        key_condition: KeyCondition,
+        *,
+        start_key: Optional[Dict[str, Any]] = None,
+        filter_expression: Optional[Condition] = None,
+        scan_forward: bool = True,
+        index: Optional[str] = None,
+        limit: Optional[int] = None,
+        projection: Optional[ProjectionExpression] = None,
+        select: Select = Select.all_attributes,
+    ) -> Page:
+        """
+        Query a single DynamoDB page.
+        To automatically handle pagination, uses query(...) instead.
+        """
+        return await self.client.query_single_page(
             self.name,
             key_condition,
             start_key=start_key,
@@ -185,13 +219,40 @@ class Table:
         filter_expression: Optional[Condition] = None,
     ) -> AsyncIterator[Item]:
         """
-        Returns one or more items by accessing every item in the table.
+        Scan the table.
+
+        Unlike the DynamoDB API, the results are automatically de-paginated
+        and a single stream of items is returned. For manual pagination, use
+        scan_single_page(...) instead.
+
         To filter the result, use a filter expression.
         This will return all attributes by default.
         To get only some attributes, use a projection expression.
         """
         return self.client.scan(
             self.name,
+            index=index,
+            limit=limit,
+            start_key=start_key,
+            projection=projection,
+            filter_expression=filter_expression,
+        )
+
+    async def scan_single_page(
+        self,
+        *,
+        index: Optional[str] = None,
+        limit: Optional[int] = None,
+        start_key: Optional[Dict[str, Any]] = None,
+        projection: Optional[ProjectionExpression] = None,
+        filter_expression: Optional[Condition] = None,
+    ) -> Page:
+        """
+        Scan a single DynamoDB page.
+        To automatically handle pagination, uses scan(...) instead.
+        """
+        return await self.client.scan_single_page(
+            table=self.name,
             index=index,
             limit=limit,
             start_key=start_key,
@@ -540,37 +601,69 @@ class Client:
         projection: Optional[ProjectionExpression] = None,
         select: Select = Select.all_attributes,
     ) -> AsyncIterator[Item]:
-        if projection:
-            select = Select.specific_attributes
-        if select is Select.count:
-            raise TypeError("Cannot use Select.count with query, use count instead")
-
-        params = Parameters()
-
-        payload: Dict[str, Any] = {
-            "TableName": table,
-            "KeyConditionExpression": key_condition.encode(params),
-            "ScanIndexForward": scan_forward,
-        }
-
-        if projection:
-            payload["ProjectionExpression"] = projection.encode(params)
-
-        if filter_expression:
-            payload["FilterExpression"] = filter_expression.encode(params)
-
-        if start_key:
-            payload["ExclusiveStartKey"] = py2dy(start_key)
-        if index:
-            payload["IndexName"] = index
-        if select:
-            payload["Select"] = select.value
-
-        payload.update(params.to_request_payload())
+        """
+        Query the table.
+        Unlike the DynamoDB API, the results are automatically de-paginated
+        and a single stream of items is returned. For manual pagination, use
+        query_single_page(...) instead.
+        """
+        payload = _query_payload(
+            table=table,
+            key_condition=key_condition,
+            start_key=start_key,
+            filter_expression=filter_expression,
+            scan_forward=scan_forward,
+            index=index,
+            projection=projection,
+            select=select,
+        )
 
         async for result in self._depaginate("Query", payload, limit):
             for item in result["Items"]:
                 yield dy2py(item, self.numeric_type)
+
+    async def query_single_page(
+        self,
+        table: TableName,
+        key_condition: KeyCondition,
+        *,
+        start_key: Optional[Dict[str, Any]] = None,
+        filter_expression: Optional[Condition] = None,
+        scan_forward: bool = True,
+        index: Optional[str] = None,
+        limit: Optional[int] = None,
+        projection: Optional[ProjectionExpression] = None,
+        select: Select = Select.all_attributes,
+    ) -> Page:
+        """
+        Query a single DynamoDB page.
+        To automatically handle pagination, uses query(...) instead.
+        """
+        payload = _query_payload(
+            table=table,
+            key_condition=key_condition,
+            start_key=start_key,
+            filter_expression=filter_expression,
+            scan_forward=scan_forward,
+            index=index,
+            projection=projection,
+            select=select,
+        )
+        if limit is not None:
+            payload["Limit"] = limit
+
+        response = await self.send_request(action="Query", payload=payload)
+
+        last_evaluated_key: Optional[Dict[str, Any]]
+        try:
+            last_evaluated_key = dy2py(response["LastEvaluatedKey"], self.numeric_type)
+        except KeyError:
+            last_evaluated_key = None
+
+        return Page(
+            items=[dy2py(item, self.numeric_type) for item in response["Items"]],
+            last_evaluated_key=last_evaluated_key,
+        )
 
     async def scan(
         self,
@@ -582,27 +675,63 @@ class Client:
         projection: Optional[ProjectionExpression] = None,
         filter_expression: Optional[Condition] = None,
     ) -> AsyncIterator[Item]:
+        """
+        Scan the table.
+        Unlike the DynamoDB API, the results are automatically de-paginated
+        and a single stream of items is returned. For manual pagination, use
+        scan_single_page(...) instead.
+        """
 
-        params = Parameters()
-
-        payload: Dict[str, Any] = {
-            "TableName": table,
-        }
-
-        if index:
-            payload["IndexName"] = index
-        if start_key:
-            payload["ExclusiveStartKey"] = py2dy(start_key)
-        if projection:
-            payload["ProjectionExpression"] = projection.encode(params)
-        if filter_expression:
-            payload["FilterExpression"] = filter_expression.encode(params)
-
-        payload.update(params.to_request_payload())
+        payload = _scan_payload(
+            table=table,
+            index=index,
+            start_key=start_key,
+            projection=projection,
+            filter_expression=filter_expression,
+        )
 
         async for result in self._depaginate("Scan", payload, limit):
             for item in result["Items"]:
                 yield dy2py(item, self.numeric_type)
+
+    async def scan_single_page(
+        self,
+        table: TableName,
+        *,
+        index: Optional[str] = None,
+        limit: Optional[int] = None,
+        start_key: Optional[Dict[str, Any]] = None,
+        projection: Optional[ProjectionExpression] = None,
+        filter_expression: Optional[Condition] = None,
+    ) -> Page:
+        """
+        Scan a single DynamoDB page.
+        To automatically handle pagination, uses scan(...) instead.
+        """
+
+        payload = _scan_payload(
+            table=table,
+            index=index,
+            start_key=start_key,
+            projection=projection,
+            filter_expression=filter_expression,
+        )
+
+        if limit is not None:
+            payload["Limit"] = limit
+
+        response = await self.send_request(action="Scan", payload=payload)
+
+        last_evaluated_key: Optional[Dict[str, Any]]
+        try:
+            last_evaluated_key = dy2py(response["LastEvaluatedKey"], self.numeric_type)
+        except KeyError:
+            last_evaluated_key = None
+
+        return Page(
+            items=[dy2py(item, self.numeric_type) for item in response["Items"]],
+            last_evaluated_key=last_evaluated_key,
+        )
 
     async def count(
         self,
@@ -753,3 +882,71 @@ class Client:
             if task:
                 task.cancel()
             raise
+
+
+def _query_payload(
+    *,
+    table: TableName,
+    key_condition: KeyCondition,
+    start_key: Optional[Dict[str, Any]],
+    filter_expression: Optional[Condition],
+    scan_forward: bool,
+    index: Optional[str],
+    projection: Optional[ProjectionExpression],
+    select: Select = Select.all_attributes,
+) -> Dict[str, Any]:
+    if projection:
+        select = Select.specific_attributes
+    if select is Select.count:
+        raise TypeError("Cannot use Select.count with query, use count instead")
+
+    params = Parameters()
+
+    payload: Dict[str, Any] = {
+        "TableName": table,
+        "KeyConditionExpression": key_condition.encode(params),
+        "ScanIndexForward": scan_forward,
+    }
+
+    if projection:
+        payload["ProjectionExpression"] = projection.encode(params)
+
+    if filter_expression:
+        payload["FilterExpression"] = filter_expression.encode(params)
+
+    if start_key:
+        payload["ExclusiveStartKey"] = py2dy(start_key)
+    if index:
+        payload["IndexName"] = index
+    if select:
+        payload["Select"] = select.value
+
+    payload.update(params.to_request_payload())
+    return payload
+
+
+def _scan_payload(
+    *,
+    table: TableName,
+    index: Optional[str],
+    start_key: Optional[Dict[str, Any]],
+    projection: Optional[ProjectionExpression],
+    filter_expression: Optional[Condition],
+) -> Dict[str, Any]:
+    params = Parameters()
+
+    payload: Dict[str, Any] = {
+        "TableName": table,
+    }
+
+    if index:
+        payload["IndexName"] = index
+    if start_key:
+        payload["ExclusiveStartKey"] = py2dy(start_key)
+    if projection:
+        payload["ProjectionExpression"] = projection.encode(params)
+    if filter_expression:
+        payload["FilterExpression"] = filter_expression.encode(params)
+
+    payload.update(params.to_request_payload())
+    return payload
