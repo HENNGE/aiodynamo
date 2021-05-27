@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from itertools import count
 from typing import (
+    Any,
     AsyncIterable,
     AsyncIterator,
     Dict,
@@ -27,6 +28,7 @@ from .types import (
     EncodedProjection,
     EncodedStreamSpecification,
     EncodedThroughput,
+    Item,
     Timespan,
 )
 
@@ -247,3 +249,13 @@ class ExponentialBackoffThrottling(ThrottleConfig):
             yield min(
                 random.random() * (self.base_delay_secs ** attempt), self.max_delay_secs
             )
+
+
+@dataclass(frozen=True)
+class Page:
+    items: List[Item]
+    last_evaluated_key: Optional[Dict[str, Any]]
+
+    @property
+    def is_last_page(self) -> bool:
+        return self.last_evaluated_key is None

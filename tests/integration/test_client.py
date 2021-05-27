@@ -1,4 +1,5 @@
 import asyncio
+from operator import itemgetter
 
 import pytest
 from yarl import URL
@@ -7,7 +8,6 @@ from aiodynamo import errors
 from aiodynamo.client import Client, TimeToLiveStatus
 from aiodynamo.credentials import ChainCredentials
 from aiodynamo.errors import (
-    EmptyItem,
     ItemNotFound,
     NoCredentialsFound,
     TableNotFound,
@@ -272,6 +272,47 @@ async def test_query_with_limit(client: Client, high_throughput_table: TableName
     ]
     assert len(items) == 1
     assert items[0]["r"] == "0"
+
+
+async def test_query_and_scan_single_page(
+    client: Client, high_throughput_table: TableName
+):
+    # query and scan are tested in the same method since creating all the items takes a long time
+    big = "x" * 20_000
+
+    await asyncio.gather(
+        *(
+            client.put_item(high_throughput_table, {"h": "h", "r": str(i), "big": big})
+            for i in range(100)
+        )
+    )
+
+    first_page = await client.query_single_page(
+        high_throughput_table, HashKey("h", "h")
+    )
+    assert first_page.items
+    assert first_page.last_evaluated_key
+    assert not first_page.is_last_page
+    second_page = await client.query_single_page(
+        high_throughput_table,
+        HashKey("h", "h"),
+        start_key=first_page.last_evaluated_key,
+    )
+    assert not set(map(itemgetter("r"), first_page.items)) & set(
+        map(itemgetter("r"), second_page.items)
+    )
+
+    first_page = await client.scan_single_page(high_throughput_table)
+    assert first_page.items
+    assert first_page.last_evaluated_key
+    assert not first_page.is_last_page
+    second_page = await client.scan_single_page(
+        high_throughput_table,
+        start_key=first_page.last_evaluated_key,
+    )
+    assert not set(map(itemgetter("r"), first_page.items)) & set(
+        map(itemgetter("r"), second_page.items)
+    )
 
 
 async def test_scan_with_limit(client: Client, table: TableName):

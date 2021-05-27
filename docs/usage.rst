@@ -108,12 +108,30 @@ The ``Client`` class
 
     Aiodynamo handles pagination automatically, so this method returns an asynchronous iterator of items.
 
+    To only retrieve a single page, use :py:meth:`aiodynamo.client.Client.query_single_page`
+
+    .. seealso::
+        `Query - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html>`_.
+
+.. automethod:: aiodynamo.client.Client.query_single_page
+
+    Queries a single page from DynamoDB. To automatically handle pagination, use :py:meth:`aiodynamo.client.Client.query`
+
     .. seealso::
         `Query - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html>`_.
 
 .. automethod:: aiodynamo.client.Client.scan
 
     Aiodynamo handles pagination automatically, so this method returns an asynchronous iterator of items.
+
+    To only retrieve a single page, use :py:meth:`aiodynamo.client.Client.scan_single_page`
+
+    .. seealso::
+        `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html>`_.
+
+.. automethod:: aiodynamo.client.Client.scan_single_page
+
+    Scans a single page from DynamoDB. To automatically handle pagination, use :py:meth:`aiodynamo.client.Client.scan`
 
     .. seealso::
         `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html>`_.
@@ -174,12 +192,30 @@ Methods
 
     Aiodynamo handles pagination automatically, so this method returns an asynchronous iterator of items.
 
+    To only retrieve a single page, use :py:meth:`aiodynamo.client.Table.query_single_page`
+
+    .. seealso::
+        `Query - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html>`_.
+
+.. automethod:: aiodynamo.client.Table.query_single_page
+
+    Queries a single page from DynamoDB. To automatically handle pagination, use :py:meth:`aiodynamo.client.Table.query`
+
     .. seealso::
         `Query - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html>`_.
 
 .. automethod:: aiodynamo.client.Table.scan
 
     Aiodynamo handles pagination automatically, so this method returns an asynchronous iterator of items.
+
+    To only retrieve a single page, use :py:meth:`aiodynamo.client.Table.scan_single_page`
+
+    .. seealso::
+        `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html>`_.
+
+.. automethod:: aiodynamo.client.Table.scan_single_page
+
+    Scans a single page from DynamoDB. To automatically handle pagination, use :py:meth:`aiodynamo.client.Table.scan`
 
     .. seealso::
         `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html>`_.
