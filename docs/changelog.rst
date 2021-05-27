@@ -1,6 +1,17 @@
 Changelog
 =========
 
+21.5
+----
+
+Release Date: May 27th, 2021
+
+* Added :py:class:`aiodynamo.client.Client.query_single_page`
+* Added :py:class:`aiodynamo.client.Client.scan_single_page`
+* Added :py:class:`aiodynamo.client.Table.query_single_page`
+* Added :py:class:`aiodynamo.client.Table.scan_single_page`
+* More documented APIs
+
 20.11
 -----
 
