@@ -59,18 +59,79 @@ In case you want to explicitly pass the credentials from Python, use :py:class:`
     :members:
     :undoc-members:
 
-The ``Table`` class
--------------------
 
-To set the DynamoDB table that you want to use, set it using the :py:meth:`aiodynamo.client.Client.table` method.
-The method takes the table name as its only argument.
-Table class should not be instantiated directly.
-It must always created via the ``Client.table`` method.
+The ``Client`` class
+--------------------
+
+.. py:class:: aiodynamo.client.Client
 
 .. automethod:: aiodynamo.client.Client.table
 
+.. automethod:: aiodynamo.client.Client.table_exists
+.. automethod:: aiodynamo.client.Client.create_table
+
+    If ``wait_for_active`` is set to ``True``, it will wait until the table status changed into ``Active``.
+    If after the defined wait time the table is not active, an exception will be raised.
+
+    .. seealso::
+        `CreateTable - AWS API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html>`_.
+
+.. automethod:: aiodynamo.client.Client.delete_table
+
+    If ``wait_for_disabled`` is set to ``True``, it will wait until the table status changed into ``Disabled``.
+    If after the defined wait time the table is not disabled, an exception will be raised.
+
+    .. seealso::
+        `DeleteTable - AWS API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteTable.html>`_.
+
+.. automethod:: aiodynamo.client.Client.put_item
+
+    .. seealso::
+        `PutItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html>`_.
+
+.. automethod:: aiodynamo.client.Client.update_item
+
+    .. seealso::
+        `UpdateItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html>`_.
+
+.. automethod:: aiodynamo.client.Client.delete_item
+
+    .. seealso::
+        `DeleteItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html>`_.
+
+.. automethod:: aiodynamo.client.Client.get_item
+
+    .. seealso::
+        `GetItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_GetItem.html>`_.
+
+.. automethod:: aiodynamo.client.Client.query
+
+    Aiodynamo handles pagination automatically, so this method returns an asynchronous iterator of items.
+
+    .. seealso::
+        `Query - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html>`_.
+
+.. automethod:: aiodynamo.client.Client.scan
+
+    Aiodynamo handles pagination automatically, so this method returns an asynchronous iterator of items.
+
+    .. seealso::
+        `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html>`_.
+
+
+The ``Table`` class
+-------------------
+
+The :py:class:`aiodynamo.client.Table` class wraps all methods on :py:class:`aiodynamo.client.Client`
+so you don't have to provide the table name each time.
+
+This class should not be instantiated directly. Instead, create it by calling :py:meth:`aiodynamo.client.Client.table`.
+
+
 Methods
 ~~~~~~~
+
+.. py:class:: aiodynamo.client.Table
 
 .. automethod:: aiodynamo.client.Table.exists
 .. automethod:: aiodynamo.client.Table.create
@@ -78,40 +139,50 @@ Methods
     If ``wait_for_active`` is set to ``True``, it will wait until the table status changed into ``Active``.
     If after the defined wait time the table is not active, an exception will be raised.
 
-See also: `CreateTable - AWS API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html>`_.
+    .. seealso::
+        `CreateTable - AWS API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html>`_.
 
 .. automethod:: aiodynamo.client.Table.delete
 
     If ``wait_for_disabled`` is set to ``True``, it will wait until the table status changed into ``Disabled``.
     If after the defined wait time the table is not disabled, an exception will be raised.
 
-See also: `DeleteTable - AWS API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteTable.html>`_.
+    .. seealso::
+        `DeleteTable - AWS API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteTable.html>`_.
 
 .. automethod:: aiodynamo.client.Table.put_item
 
-See also: `PutItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html>`_.
+    .. seealso::
+        `PutItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html>`_.
 
 .. automethod:: aiodynamo.client.Table.update_item
 
-See also: `UpdateItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html>`_.
+    .. seealso::
+        `UpdateItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateItem.html>`_.
 
 .. automethod:: aiodynamo.client.Table.delete_item
 
-See also: `DeleteItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html>`_.
+    .. seealso::
+        `DeleteItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteItem.html>`_.
 
 .. automethod:: aiodynamo.client.Table.get_item
 
-See also: `GetItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_GetItem.html>`_.
+    .. seealso::
+        `GetItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_GetItem.html>`_.
 
 .. automethod:: aiodynamo.client.Table.query
 
-The results of ``Query`` operations are automatically depaginated.
-See also: `Query - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html>`_.
+    Aiodynamo handles pagination automatically, so this method returns an asynchronous iterator of items.
+
+    .. seealso::
+        `Query - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html>`_.
 
 .. automethod:: aiodynamo.client.Table.scan
 
-The results of ``Scan`` operations are automatically depaginated.
-See also: `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html>`_.
+    Aiodynamo handles pagination automatically, so this method returns an asynchronous iterator of items.
+
+    .. seealso::
+        `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html>`_.
 
 The ``F`` class
 ---------------
@@ -126,16 +197,24 @@ For example, to refer to the ``bar`` field in the second element of the ``foo`` 
 Projection Expressions
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Projection expressions are built using the ``&`` operator. An instance of :py:class:`aiodynamo.expressions.F`
-is a valid Projection expression too.
 
-For example, to get the field ``foo`` and ``bar``, you would use ``F("foo") & F("bar")``.
+.. py:class:: aiodynamo.expressions.ProjectionExpression
+
+    Abstract base class to represent projection expresssions.
+
+    Projection expressions are built using the ``&`` operator. An instance of :py:class:`aiodynamo.expressions.F`
+    is a valid Projection expression too.
+
+    For example, to get the field ``foo`` and ``bar``, you would use ``F("foo") & F("bar")``.
+
 
 Update Expressions
 ~~~~~~~~~~~~~~~~~~
 
-Update expressions are created by calling methods on instances of :py:class:`aiodynamo.expressions.F` and
-combining the return values of those method calls with the ``&`` operator.
+.. py:class:: aiodynamo.expressions.UpdateExpression
+
+    Update expressions are created by calling methods on instances of :py:class:`aiodynamo.expressions.F` and
+    combining the return values of those method calls with the ``&`` operator.
 
 .. automethod:: aiodynamo.expressions.F.set
 .. automethod:: aiodynamo.expressions.F.set_if_not_exists
@@ -148,9 +227,15 @@ combining the return values of those method calls with the ``&`` operator.
 Filter Expression and Condition Expressions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Filter and Condition expressions have the same syntax and they are created by calling methods on instances
-of :py:class:`aiodynamo.expressions.F` and combining the return values of those method calls with the
-``&`` operator.
+
+.. py:class:: aiodynamo.expressions.Condition
+
+    Abstract base class of conditions and filters.
+
+    Filter and Condition expressions have the same syntax and they are created by calling methods on instances
+    of :py:class:`aiodynamo.expressions.F` and combining the return values of those method calls with the
+    ``&`` or ``|`` operators. To negate a condition, use the ``~`` infix operator.
+
 
 .. automethod:: aiodynamo.expressions.F.does_not_exist
 .. automethod:: aiodynamo.expressions.F.exists
@@ -172,7 +257,6 @@ of :py:class:`aiodynamo.expressions.F` and combining the return values of those 
     :undoc-members:
 
 
-
 Key conditions
 --------------
 
@@ -191,18 +275,39 @@ Models
 .. autoclass:: aiodynamo.models.Throughput
     :members: read, write
     :undoc-members:
+
 .. autoclass:: aiodynamo.models.KeySchema
     :members: hash_key, range_key
     :undoc-members:
+
 .. autoclass:: aiodynamo.models.LocalSecondaryIndex
     :members: name, projection, schema
     :undoc-members:
+
 .. autoclass:: aiodynamo.models.GlobalSecondaryIndex
     :members: name, projection, schema, throughput
     :undoc-members:
+
 .. autoclass:: aiodynamo.models.StreamSpecification
     :members: enabled, view_type
     :undoc-members:
+
+.. autoclass:: aiodynamo.models..StreamViewType
+    :members: keys_only, new_image, old_image, new_and_old_images
+    :undoc-members:
+
 .. autoclass:: aiodynamo.models.WaitConfig
     :members: max_attempts, retry_delay
+    :undoc-members:
+
+.. autoclass:: aiodynamo.models.ReturnValues
+    :members: none, all_old, updated_old, all_new, updated_new
+    :undoc-members:
+
+.. autoclass:: aiodynamo.models.Projection
+    :members: type, attrs
+    :undoc-members:
+
+.. autoclass:: aiodynamo.models.ProjectionType
+    :members: all, keys_only, include
     :undoc-members:
