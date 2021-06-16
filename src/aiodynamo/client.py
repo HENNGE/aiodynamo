@@ -24,6 +24,10 @@ from .expressions import (
 )
 from .http.base import HTTP, RequestFailed
 from .models import (
+    BatchGetRequest,
+    BatchGetResponse,
+    BatchWriteRequest,
+    BatchWriteResult,
     GlobalSecondaryIndex,
     KeySchema,
     KeySpec,
@@ -796,6 +800,53 @@ class Client:
             return dy2py(resp["Attributes"], self.numeric_type)
         else:
             return None
+
+    async def batch_get(
+        self, request: Dict[TableName, BatchGetRequest]
+    ) -> BatchGetResponse:
+        payload = {
+            "RequestItems": {
+                table: get_request.to_request_payload()
+                for table, get_request in request.items()
+            }
+        }
+        response = await self.send_request(action="BatchGetItem", payload=payload)
+        return BatchGetResponse(
+            items={
+                table: [dy2py(item, self.numeric_type) for item in items]
+                for table, items in response["Responses"].items()
+            },
+            unprocessed_keys={
+                table: [dy2py(key, self.numeric_type) for key in unprocessed["Keys"]]
+                for table, unprocessed in response["UnprocessedKeys"].items()
+            },
+        )
+
+    async def batch_write(
+        self, request: Dict[TableName, BatchWriteRequest]
+    ) -> Dict[TableName, BatchWriteResult]:
+        payload = {
+            "RequestItems": {
+                table_name: write_request.to_request_payload()
+                for table_name, write_request in request.items()
+            }
+        }
+        response = await self.send_request(action="BatchWriteItem", payload=payload)
+        result = {}
+        for table, items in response["UnprocessedItems"].items():
+            undeleted_keys = []
+            unput_items = []
+            for item in items:
+                try:
+                    undeleted_keys.append(
+                        dy2py(item["DeleteRequest"]["Key"], self.numeric_type)
+                    )
+                except KeyError:
+                    unput_items.append(
+                        dy2py(item["PutRequest"]["Item"], self.numeric_type)
+                    )
+            result[table] = BatchWriteResult(undeleted_keys, unput_items)
+        return result
 
     async def send_request(
         self,

@@ -21,6 +21,7 @@ from typing import (
 )
 
 from .errors import Throttled
+from .expressions import Parameters, ProjectionExpression
 from .types import (
     EncodedGlobalSecondaryIndex,
     EncodedKeySchema,
@@ -29,8 +30,10 @@ from .types import (
     EncodedStreamSpecification,
     EncodedThroughput,
     Item,
+    TableName,
     Timespan,
 )
+from .utils import py2dy
 
 
 @unique
@@ -259,3 +262,49 @@ class Page:
     @property
     def is_last_page(self) -> bool:
         return self.last_evaluated_key is None
+
+
+@dataclass(frozen=True)
+class BatchGetRequest:
+    keys: List[Item]
+    projection: Optional[ProjectionExpression] = None
+
+    def to_request_payload(self) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "Keys": [py2dy(key) for key in self.keys],
+        }
+        if self.projection:
+            params = Parameters()
+            payload["ProjectionExpression"] = self.projection.encode(params)
+            payload.update(params.to_request_payload())
+        return payload
+
+
+@dataclass(frozen=True)
+class BatchGetResponse:
+    items: Dict[TableName, List[Item]]
+    unprocessed_keys: Dict[TableName, List[Item]]
+
+
+@dataclass(frozen=True)
+class BatchWriteRequest:
+    keys_to_delete: Optional[List[Item]] = None
+    items_to_put: Optional[List[Item]] = None
+
+    def to_request_payload(self) -> List[Dict[str, Any]]:
+        payload: List[Dict[str, Any]] = []
+        if self.keys_to_delete:
+            payload.extend(
+                {"DeleteRequest": {"Key": py2dy(key)}} for key in self.keys_to_delete
+            )
+        if self.items_to_put:
+            payload.extend(
+                {"PutRequest": {"Item": py2dy(item)}} for item in self.items_to_put
+            )
+        return payload
+
+
+@dataclass(frozen=True)
+class BatchWriteResult:
+    undeleted_keys: List[Item]
+    unput_items: List[Item]
