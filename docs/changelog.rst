@@ -1,15 +1,23 @@
 Changelog
 =========
 
+21.6
+----
+
+Release Date: June 16th, 2021
+
+* Added :py:meth:`aiodynamo.client.Client.batch_get`
+* Added :py:meth:`aiodynamo.client.Client.batch_write`
+
 21.5
 ----
 
 Release Date: May 27th, 2021
 
-* Added :py:class:`aiodynamo.client.Client.query_single_page`
-* Added :py:class:`aiodynamo.client.Client.scan_single_page`
-* Added :py:class:`aiodynamo.client.Table.query_single_page`
-* Added :py:class:`aiodynamo.client.Table.scan_single_page`
+* Added :py:meth:`aiodynamo.client.Client.query_single_page`
+* Added :py:meth:`aiodynamo.client.Client.scan_single_page`
+* Added :py:meth:`aiodynamo.client.Table.query_single_page`
+* Added :py:meth:`aiodynamo.client.Table.scan_single_page`
 * More documented APIs
 
 20.11
