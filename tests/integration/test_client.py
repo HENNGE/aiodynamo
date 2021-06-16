@@ -17,6 +17,8 @@ from aiodynamo.errors import (
 from aiodynamo.expressions import F, HashKey, RangeKey
 from aiodynamo.http.base import HTTP
 from aiodynamo.models import (
+    BatchGetRequest,
+    BatchWriteRequest,
     ExponentialBackoffThrottling,
     KeySchema,
     KeySpec,
@@ -436,3 +438,43 @@ async def test_no_credentials(http: HTTP, endpoint: URL, region: str):
     )
     with pytest.raises(NoCredentialsFound):
         await client.get_item("no-table", {"key": "no-key"})
+
+
+async def test_batch(client: Client, table: TableName):
+    response = await client.batch_write(
+        {
+            table: BatchWriteRequest(
+                items_to_put=[{"h": "h", "r": "1"}, {"h": "h", "r": "2"}]
+            )
+        }
+    )
+    assert not response
+    assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 2
+
+    result = await client.batch_get(
+        {table: BatchGetRequest(keys=[{"h": "h", "r": "1"}, {"h": "h", "r": "2"}])}
+    )
+    assert sorted(result.items[table], key=itemgetter("r")) == sorted(
+        [{"h": "h", "r": "1"}, {"h": "h", "r": "2"}], key=itemgetter("r")
+    )
+    assert not result.unprocessed_keys
+
+    response = await client.batch_write(
+        {
+            table: BatchWriteRequest(
+                items_to_put=[{"h": "h", "r": "3"}],
+                keys_to_delete=[{"h": "h", "r": "1"}],
+            )
+        }
+    )
+    assert not response
+    assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 2
+    response = await client.batch_write(
+        {
+            table: BatchWriteRequest(
+                keys_to_delete=[{"h": "h", "r": "2"}, {"h": "h", "r": "3"}],
+            )
+        }
+    )
+    assert not response
+    assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 0

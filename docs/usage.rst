@@ -136,6 +136,16 @@ The ``Client`` class
     .. seealso::
         `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html>`_.
 
+.. automethod:: aiodynamo.client.Client.batch_get
+
+    .. seealso::
+        `BatchGetItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchGetItem.html>`_.
+
+.. automethod:: aiodynamo.client.Client.batch_write
+
+    .. seealso::
+        `BatchWriteItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html>`_.
+
 
 The ``Table`` class
 -------------------
@@ -347,3 +357,20 @@ Models
 .. autoclass:: aiodynamo.models.ProjectionType
     :members: all, keys_only, include
     :undoc-members:
+
+.. autoclass:: aiodynamo.models.BatchGetRequest
+    :members: keys, projection
+    :undoc-members:
+
+.. autoclass:: aiodynamo.models.BatchGetResponse
+    :members: items, unprocessed_keys
+    :undoc-members:
+
+.. autoclass:: aiodynamo.models.BatchWriteRequest
+    :members: keys_to_delete, items_to_put
+    :undoc-members:
+
+.. autoclass:: aiodynamo.models.BatchWriteResult
+    :members: undeleted_keys, unput_items
+    :undoc-members:
+
