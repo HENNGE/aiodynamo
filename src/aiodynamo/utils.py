@@ -4,9 +4,12 @@ import decimal
 import logging
 from collections import abc as collections_abc
 from functools import reduce
-from typing import Any, Callable, Dict, Mapping, Tuple, Union
+from typing import Any, Callable, Dict, List, Mapping, Set, Tuple, TypeVar, Union
 
-from .types import SIMPLE_TYPES, AttributeType, DynamoItem, Item
+from .types import DynamoItem, Item
+
+T = TypeVar("T")
+
 
 logger = logging.getLogger("aiodynamo")
 
@@ -22,6 +25,58 @@ def dy2py(data: DynamoItem, numeric_type: Callable[[str], Any]) -> Item:
     return {key: deserialize(value, numeric_type) for key, value in data.items()}
 
 
+def deserialize_simple_types(val: T, *_) -> T:
+    return val
+
+
+def deserialize_binary(val: bytes, *_) -> bytes:
+    return base64.b64decode(val)
+
+
+def deserialize_string_set(val: List[str], *_) -> Set[str]:
+    return set(val)
+
+
+def deserialize_binary_set(val: List[bytes], *_) -> Set[bytes]:
+    return {base64.b64decode(v) for v in val}
+
+
+def deserialize_null(*_) -> None:
+    return None
+
+
+def deserialize_number(val: str, numeric_type: Callable[[str], T]) -> T:
+    return numeric_type(val)
+
+
+def deserialize_number_set(val: List[str], numeric_type: Callable[[str], T]) -> Set[T]:
+    return {numeric_type(v) for v in val}
+
+
+def deserialize_list(val: List[Any], numeric_type: Callable[[str], Any]) -> List[Any]:
+    return [deserialize(v, numeric_type) for v in val]
+
+
+def deserialize_map(
+    val: Dict[str, Any], numeric_type: Callable[[str], Any]
+) -> Dict[str, Any]:
+    return {k: deserialize(v, numeric_type) for k, v in val.items()}
+
+
+TAG_DESERIALIZE_MAPPING: Dict[str, Callable[..., Any]] = {
+    "S": deserialize_simple_types,
+    "SS": deserialize_string_set,
+    "N": deserialize_number,
+    "NS": deserialize_number_set,
+    "B": deserialize_binary,
+    "BS": deserialize_binary_set,
+    "BOOL": deserialize_simple_types,
+    "NULL": deserialize_null,
+    "L": deserialize_list,
+    "M": deserialize_map,
+}
+
+
 def deserialize(value: Dict[str, Any], numeric_type: Callable[[str], Any]) -> Any:
     if not value:
         raise TypeError(
@@ -29,28 +84,9 @@ def deserialize(value: Dict[str, Any], numeric_type: Callable[[str], Any]) -> An
         )
     tag, val = next(iter(value.items()))
     try:
-        attr_type = AttributeType(tag)
-    except ValueError:
+        return TAG_DESERIALIZE_MAPPING[tag](val, numeric_type)
+    except KeyError:
         raise TypeError(f"Dynamodb type {tag} is not supported")
-    if attr_type in SIMPLE_TYPES:
-        return val
-    if attr_type is AttributeType.null:
-        return None
-    if attr_type is AttributeType.binary:
-        return base64.b64decode(val)
-    if attr_type is AttributeType.number:
-        return numeric_type(val)
-    if attr_type is AttributeType.string_set:
-        return set(val)
-    if attr_type is AttributeType.binary_set:
-        return {base64.b64decode(v) for v in val}
-    if attr_type is AttributeType.number_set:
-        return {numeric_type(v) for v in val}
-    if attr_type is AttributeType.list:
-        return [deserialize(v, numeric_type) for v in val]
-    if attr_type is AttributeType.map:
-        return {k: deserialize(v, numeric_type) for k, v in val.items()}
-    raise TypeError(f"Dynamodb type {attr_type} is not supported")
 
 
 NUMERIC_TYPES = int, float, decimal.Decimal
