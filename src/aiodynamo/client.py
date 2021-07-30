@@ -46,7 +46,7 @@ from .models import (
     WaitConfig,
 )
 from .sign import signed_dynamo_request
-from .types import Item, TableName
+from .types import Item, NumericTypeConverter, TableName
 from .utils import dy2py, logger, py2dy
 
 
@@ -307,7 +307,7 @@ class Client:
     credentials: Credentials
     region: str
     endpoint: Optional[URL] = None
-    numeric_type: Callable[[Any], Any] = float
+    numeric_type: NumericTypeConverter = float
     throttle_config: ThrottleConfig = ThrottleConfig.default()
 
     def table(self, name: str) -> Table:
