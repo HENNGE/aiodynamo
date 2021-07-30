@@ -1,7 +1,7 @@
 import decimal
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Union
+from typing import Any, Callable, Dict, List, Union
 
 if sys.version_info >= (3, 8):
     from typing import TypedDict
@@ -75,3 +75,6 @@ class EncodedStreamSpecification(EncodedStreamSpecificationRequired, total=False
 
 
 SIMPLE_TYPES = frozenset({AttributeType.boolean, AttributeType.string})
+
+
+NumericTypeConverter = Callable[[str], Any]

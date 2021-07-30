@@ -39,7 +39,8 @@ sphinx = "^3.3"
 pyperf = "^2.0"
 boto3 = "^1.12.18"
 freezegun = "^1.0"
-mypy = "^0.812"
+# using git version due to https://github.com/python/mypy/issues/10711
+mypy = { git = "https://github.com/python/mypy.git", rev = "84504b0"}
 pyfakefs = "^4.3.2"
 isort = "^5.8.0"
 

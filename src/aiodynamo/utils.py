@@ -6,7 +6,7 @@ from collections import abc as collections_abc
 from functools import reduce
 from typing import Any, Callable, Dict, List, Mapping, Set, Tuple, TypeVar, Union
 
-from .types import DynamoItem, Item
+from .types import DynamoItem, Item, NumericTypeConverter
 
 T = TypeVar("T")
 
@@ -21,49 +21,51 @@ def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:
     return serialize_dict(data)
 
 
-def dy2py(data: DynamoItem, numeric_type: Callable[[str], Any]) -> Item:
+def dy2py(data: DynamoItem, numeric_type: NumericTypeConverter) -> Item:
     return {key: deserialize(value, numeric_type) for key, value in data.items()}
 
 
-def deserialize_simple_types(val: T, *_) -> T:
+def deserialize_simple_types(val: T, _: NumericTypeConverter) -> T:
     return val
 
 
-def deserialize_binary(val: bytes, *_) -> bytes:
+def deserialize_binary(val: str, _: NumericTypeConverter) -> bytes:
     return base64.b64decode(val)
 
 
-def deserialize_string_set(val: List[str], *_) -> Set[str]:
+def deserialize_string_set(val: List[str], _: NumericTypeConverter) -> Set[str]:
     return set(val)
 
 
-def deserialize_binary_set(val: List[bytes], *_) -> Set[bytes]:
+def deserialize_binary_set(val: List[str], _: NumericTypeConverter) -> Set[bytes]:
     return {base64.b64decode(v) for v in val}
 
 
-def deserialize_null(*_) -> None:
+def deserialize_null(_: None, __: NumericTypeConverter) -> None:
     return None
 
 
-def deserialize_number(val: str, numeric_type: Callable[[str], T]) -> T:
+def deserialize_number(val: str, numeric_type: NumericTypeConverter) -> Any:
     return numeric_type(val)
 
 
-def deserialize_number_set(val: List[str], numeric_type: Callable[[str], T]) -> Set[T]:
+def deserialize_number_set(
+    val: List[str], numeric_type: NumericTypeConverter
+) -> Set[T]:
     return {numeric_type(v) for v in val}
 
 
-def deserialize_list(val: List[Any], numeric_type: Callable[[str], Any]) -> List[Any]:
+def deserialize_list(val: List[Any], numeric_type: NumericTypeConverter) -> List[Any]:
     return [deserialize(v, numeric_type) for v in val]
 
 
 def deserialize_map(
-    val: Dict[str, Any], numeric_type: Callable[[str], Any]
+    val: Dict[str, Any], numeric_type: NumericTypeConverter
 ) -> Dict[str, Any]:
     return {k: deserialize(v, numeric_type) for k, v in val.items()}
 
 
-TAG_DESERIALIZE_MAPPING: Dict[str, Callable[..., Any]] = {
+TAG_DESERIALIZE_MAPPING: Dict[str, Callable[[Any, NumericTypeConverter], Any]] = {
     "S": deserialize_simple_types,
     "SS": deserialize_string_set,
     "N": deserialize_number,
@@ -77,7 +79,7 @@ TAG_DESERIALIZE_MAPPING: Dict[str, Callable[..., Any]] = {
 }
 
 
-def deserialize(value: Dict[str, Any], numeric_type: Callable[[str], Any]) -> Any:
+def deserialize(value: Dict[str, Any], numeric_type: NumericTypeConverter) -> Any:
     if not value:
         raise TypeError(
             "Value must be a nonempty dictionary whose key " "is a valid dynamodb type."
