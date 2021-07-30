@@ -1,6 +1,13 @@
 Changelog
 =========
 
+21.7
+----
+
+Release Date: July 30th, 2021
+
+* Improved performance of DynamoDB Item deserialization
+
 21.6
 ----
 
