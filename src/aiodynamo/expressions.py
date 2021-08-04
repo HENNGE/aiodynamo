@@ -310,10 +310,11 @@ class Parameters:
         )
 
     def encode_value(self, value: Any) -> str:
-        tag, value = low_level_serialize(value)
+        serialized_value = low_level_serialize(value)
+        ((tag, value),) = serialized_value.items()
         return self._encode(
             ":v",
-            {tag: value},
+            serialized_value,
             self.values,
             self.values_gen,
             self.values_cache,

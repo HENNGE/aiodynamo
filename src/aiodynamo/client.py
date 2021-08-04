@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import *
 
+import ddbcereal
+from aiodynamo.types import DynamoItem
 from yarl import URL
 
 from .credentials import Credentials
@@ -47,7 +50,14 @@ from .models import (
 )
 from .sign import signed_dynamo_request
 from .types import Item, NumericTypeConverter, TableName
-from .utils import dy2py, logger, py2dy
+from .utils import logger, py2dy
+
+
+ddbcereal_numeric_types: Mapping[NumericTypeConverter, ddbcereal.PythonNumber] = {
+    int: ddbcereal.PythonNumber.INT_ONLY,
+    float: ddbcereal.PythonNumber.FLOAT_ONLY,
+    Decimal: ddbcereal.PythonNumber.DECIMAL_ONLY,
+}
 
 
 @dataclass(frozen=True)
@@ -310,6 +320,19 @@ class Client:
     numeric_type: NumericTypeConverter = float
     throttle_config: ThrottleConfig = ThrottleConfig.default()
 
+    _deserialize_item: Callable[[DynamoItem], Item] = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "_deserialize_item",
+            ddbcereal.Deserializer(
+                allow_inexact=True,
+                raw_transport=True,
+                number_type=ddbcereal_numeric_types[self.numeric_type],
+            ).deserialize_item,
+        )
+
     def table(self, name: str) -> Table:
         return Table(self, name)
 
@@ -514,7 +537,7 @@ class Client:
 
         resp = await self.send_request(action="DeleteItem", payload=payload)
         if "Attributes" in resp:
-            return dy2py(resp["Attributes"], self.numeric_type)
+            return self._deserialize_item(resp["Attributes"])
 
         else:
             return None
@@ -558,7 +581,7 @@ class Client:
 
         resp = await self.send_request(action="GetItem", payload=payload)
         if "Item" in resp:
-            return dy2py(resp["Item"], self.numeric_type)
+            return self._deserialize_item(resp["Item"])
 
         else:
             raise ItemNotFound(dynamo_key)
@@ -587,7 +610,7 @@ class Client:
         resp = await self.send_request(action="PutItem", payload=payload)
 
         if "Attributes" in resp:
-            return dy2py(resp["Attributes"], self.numeric_type)
+            return self._deserialize_item(resp["Attributes"])
 
         else:
             return None
@@ -624,7 +647,7 @@ class Client:
 
         async for result in self._depaginate("Query", payload, limit):
             for item in result["Items"]:
-                yield dy2py(item, self.numeric_type)
+                yield self._deserialize_item(item)
 
     async def query_single_page(
         self,
@@ -660,12 +683,12 @@ class Client:
 
         last_evaluated_key: Optional[Dict[str, Any]]
         try:
-            last_evaluated_key = dy2py(response["LastEvaluatedKey"], self.numeric_type)
+            last_evaluated_key = self._deserialize_item(response["LastEvaluatedKey"])
         except KeyError:
             last_evaluated_key = None
 
         return Page(
-            items=[dy2py(item, self.numeric_type) for item in response["Items"]],
+            items=[self._deserialize_item(item) for item in response["Items"]],
             last_evaluated_key=last_evaluated_key,
         )
 
@@ -696,7 +719,7 @@ class Client:
 
         async for result in self._depaginate("Scan", payload, limit):
             for item in result["Items"]:
-                yield dy2py(item, self.numeric_type)
+                yield self._deserialize_item(item)
 
     async def scan_single_page(
         self,
@@ -728,12 +751,12 @@ class Client:
 
         last_evaluated_key: Optional[Dict[str, Any]]
         try:
-            last_evaluated_key = dy2py(response["LastEvaluatedKey"], self.numeric_type)
+            last_evaluated_key = self._deserialize_item(response["LastEvaluatedKey"])
         except KeyError:
             last_evaluated_key = None
 
         return Page(
-            items=[dy2py(item, self.numeric_type) for item in response["Items"]],
+            items=[self._deserialize_item(item) for item in response["Items"]],
             last_evaluated_key=last_evaluated_key,
         )
 
@@ -797,7 +820,7 @@ class Client:
         resp = await self.send_request(action="UpdateItem", payload=payload)
 
         if "Attributes" in resp:
-            return dy2py(resp["Attributes"], self.numeric_type)
+            return self._deserialize_item(resp["Attributes"])
         else:
             return None
 
@@ -813,11 +836,11 @@ class Client:
         response = await self.send_request(action="BatchGetItem", payload=payload)
         return BatchGetResponse(
             items={
-                table: [dy2py(item, self.numeric_type) for item in items]
+                table: [self._deserialize_item(item) for item in items]
                 for table, items in response["Responses"].items()
             },
             unprocessed_keys={
-                table: [dy2py(key, self.numeric_type) for key in unprocessed["Keys"]]
+                table: [self._deserialize_item(key) for key in unprocessed["Keys"]]
                 for table, unprocessed in response["UnprocessedKeys"].items()
             },
         )
@@ -839,11 +862,11 @@ class Client:
             for item in items:
                 try:
                     undeleted_keys.append(
-                        dy2py(item["DeleteRequest"]["Key"], self.numeric_type)
+                        self._deserialize_item(item["DeleteRequest"]["Key"])
                     )
                 except KeyError:
                     unput_items.append(
-                        dy2py(item["PutRequest"]["Item"], self.numeric_type)
+                        self._deserialize_item(item["PutRequest"]["Item"])
                     )
             result[table] = BatchWriteResult(undeleted_keys, unput_items)
         return result
