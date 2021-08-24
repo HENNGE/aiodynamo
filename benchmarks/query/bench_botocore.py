@@ -1,11 +1,11 @@
 from botocore.session import get_session
 from pyperf import Runner
 
-from utils import TABLE_NAME, KEY_FIELD, KEY_VALUE, REGION_NAME
+from utils import TABLE_NAME, KEY_FIELD, KEY_VALUE, REGION_NAME, ENDPOINT_URL
 
 
 def query_botocore():
-    client = get_session().create_client("dynamodb", region_name=REGION_NAME)
+    client = get_session().create_client("dynamodb", region_name=REGION_NAME, endpoint_url=ENDPOINT_URL)
     items = []
     lek = None
     while True:
