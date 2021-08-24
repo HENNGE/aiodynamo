@@ -2,11 +2,13 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from pyperf import Runner
 
-from utils import TABLE_NAME, KEY_FIELD, KEY_VALUE, REGION_NAME
+from utils import TABLE_NAME, KEY_FIELD, KEY_VALUE, REGION_NAME, ENDPOINT_URL
 
 
 def query_boto3():
-    dynamodb = boto3.resource("dynamodb", region_name=REGION_NAME)
+    dynamodb = boto3.resource(
+        "dynamodb", region_name=REGION_NAME, endpoint_url=ENDPOINT_URL
+    )
     table = dynamodb.Table(TABLE_NAME)
 
     items = []

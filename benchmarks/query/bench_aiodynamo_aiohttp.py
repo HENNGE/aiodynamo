@@ -1,21 +1,29 @@
 import asyncio
 
 from aiohttp import ClientSession
-from boto3.dynamodb.conditions import Key
 from pyperf import Runner
 
-from aiodynamo.client import Client
+from aiodynamo.client import Client, URL
 from aiodynamo.credentials import Credentials
 from aiodynamo.http.aiohttp import AIOHTTP
-from utils import TABLE_NAME, KEY_FIELD, KEY_VALUE, REGION_NAME
+from aiodynamo.expressions import HashKey
+from utils import TABLE_NAME, KEY_FIELD, KEY_VALUE, REGION_NAME, ENDPOINT_URL
 
 
 async def inner():
     async with ClientSession() as session:
-        client = Client(AIOHTTP(session), Credentials.auto(), REGION_NAME)
+        client = Client(
+            AIOHTTP(session),
+            Credentials.auto(),
+            region=REGION_NAME,
+            endpoint=URL(ENDPOINT_URL) if ENDPOINT_URL else None,
+        )
         items = [
             item
-            async for item in client.query(TABLE_NAME, Key(KEY_FIELD).eq(KEY_VALUE))
+            async for item in client.query(
+                TABLE_NAME,
+                key_condition=HashKey(KEY_FIELD, KEY_VALUE),
+            )
         ]
 
 
