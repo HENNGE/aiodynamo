@@ -1,6 +1,13 @@
 Changelog
 =========
 
+UNRELEASED
+----------
+
+Release Date: UNRELEASED
+
+* Added the `limit` parameter to :py:meth:`aiodynamo.client.Client.count`
+
 21.8
 ----
 

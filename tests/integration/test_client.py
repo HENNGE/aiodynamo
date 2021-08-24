@@ -90,6 +90,7 @@ async def test_count(client: Client, table: TableName):
         await client.count(table, HashKey("h", "h1") & RangeKey("r").begins_with("x"))
         == 0
     )
+    await client.count(table, HashKey("h", "h2"), limit=1) == 1
 
 
 async def test_update_item(client: Client, table: TableName):
