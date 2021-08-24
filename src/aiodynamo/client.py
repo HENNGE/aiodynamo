@@ -923,7 +923,7 @@ class Client:
                     task = None
                 else:
                     if limit is not None:
-                        limit -= res["Count"] if is_count else len(res["Items"])
+                        limit = limit - res["Count"] if is_count else len(res["Items"])
                         if limit > 0:
                             payload["Limit"] = limit
                         else:
