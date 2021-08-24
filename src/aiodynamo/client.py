@@ -271,6 +271,7 @@ class Table:
         start_key: Optional[Dict[str, Any]] = None,
         filter_expression: Optional[Condition] = None,
         index: Optional[str] = None,
+        limit: Optional[int] = None,
     ) -> int:
         return await self.client.count(
             self.name,
@@ -278,6 +279,7 @@ class Table:
             start_key=start_key,
             filter_expression=filter_expression,
             index=index,
+            limit=limit,
         )
 
     async def update_item(
@@ -745,6 +747,7 @@ class Client:
         start_key: Optional[Dict[str, Any]] = None,
         filter_expression: Optional[Condition] = None,
         index: Optional[str] = None,
+        limit: Optional[int] = None,
     ) -> int:
         params = Parameters()
 
@@ -764,7 +767,7 @@ class Client:
         payload.update(params.to_request_payload())
 
         count_sum = 0
-        async for result in self._depaginate("Query", payload):
+        async for result in self._depaginate("Query", payload, limit):
             count_sum += result["Count"]
         return count_sum
 
@@ -907,19 +910,20 @@ class Client:
         task: Optional[asyncio.Task[Dict[str, Any]]] = asyncio.create_task(
             self.send_request(action=action, payload=payload)
         )
+        is_count = payload.get("Select") == "COUNT"
         try:
             while task:
-                result = await task
+                res = await task
                 try:
                     payload = {
                         **payload,
-                        "ExclusiveStartKey": result["LastEvaluatedKey"],
+                        "ExclusiveStartKey": res["LastEvaluatedKey"],
                     }
                 except KeyError:
                     task = None
                 else:
                     if limit is not None:
-                        limit -= len(result["Items"])
+                        limit -= res["Count"] if is_count else len(res["Items"])
                         if limit > 0:
                             payload["Limit"] = limit
                         else:
@@ -928,7 +932,7 @@ class Client:
                     task = asyncio.create_task(
                         self.send_request(action=action, payload=payload)
                     )
-                yield result
+                yield res
         except asyncio.CancelledError:
             if task:
                 task.cancel()
