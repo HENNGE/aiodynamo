@@ -90,7 +90,20 @@ async def test_count(client: Client, table: TableName):
         await client.count(table, HashKey("h", "h1") & RangeKey("r").begins_with("x"))
         == 0
     )
-    await client.count(table, HashKey("h", "h2"), limit=1) == 1
+
+
+async def test_count_with_limit(client: Client, table: TableName):
+    hk = HashKey("h", "k")
+    assert await client.count(table, hk, limit=1) == 0
+    await client.put_item(table, {"h": "k", "r": "0"})
+    for i in range(1, 20):
+        assert await client.count(table, hk, limit=30) == i
+        assert await client.count(table, hk, limit=i) == i
+
+        await client.put_item(table, {"h": "k", "r": str(i)})
+
+        assert await client.count(table, hk, limit=i) == i
+        assert await client.count(table, hk, limit=i + 1) == i + 1
 
 
 async def test_update_item(client: Client, table: TableName):
