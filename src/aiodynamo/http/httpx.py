@@ -42,7 +42,7 @@ class HTTPX(HTTP):
         with wrap_errors():
             # FIXME: the `or {}` is not needed but httpx type hints are wrong
             response = await self.client.post(
-                str(url), data=body, headers=headers or {}
+                str(url), content=body, headers=headers or {}
             )
             if response.status_code >= 400:
                 raise exception_from_response(
