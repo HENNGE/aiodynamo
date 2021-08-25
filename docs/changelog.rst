@@ -1,12 +1,19 @@
 Changelog
 =========
 
+21.8
+----
+
+Release Date: August 24th, 2021
+
+* Allow wider version range for `httpx` optional dependency
+
 21.7
 ----
 
 Release Date: July 30th, 2021
 
-* Improved performance of DynamoDB Item deserialization
+* Improved performance of DynamoDB Item deserialization, by @stupoid
 
 21.6
 ----
