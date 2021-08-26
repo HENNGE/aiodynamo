@@ -913,17 +913,19 @@ class Client:
         is_count = payload.get("Select") == "COUNT"
         try:
             while task:
-                res = await task
+                result = await task
                 try:
                     payload = {
                         **payload,
-                        "ExclusiveStartKey": res["LastEvaluatedKey"],
+                        "ExclusiveStartKey": result["LastEvaluatedKey"],
                     }
                 except KeyError:
                     task = None
                 else:
                     if limit is not None:
-                        consumed: int = res["Count"] if is_count else len(res["Items"])
+                        consumed: int = (
+                            result["Count"] if is_count else len(result["Items"])
+                        )
                         limit -= consumed
                         if limit > 0:
                             payload["Limit"] = limit
@@ -933,7 +935,7 @@ class Client:
                     task = asyncio.create_task(
                         self.send_request(action=action, payload=payload)
                     )
-                yield res
+                yield result
         except asyncio.CancelledError:
             if task:
                 task.cancel()
