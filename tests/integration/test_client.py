@@ -92,18 +92,28 @@ async def test_count(client: Client, table: TableName):
     )
 
 
-async def test_count_with_limit(client: Client, table: TableName):
-    hk = HashKey("h", "k")
-    assert await client.count(table, hk, limit=1) == 0
-    await client.put_item(table, {"h": "k", "r": "0"})
-    for i in range(1, 20):
-        assert await client.count(table, hk, limit=30) == i
-        assert await client.count(table, hk, limit=i) == i
+async def test_count_with_limit(client: Client, high_throughput_table: TableName):
+    big = "x" * 20_000
+    hk = HashKey("h", "h")
 
-        await client.put_item(table, {"h": "k", "r": str(i)})
+    assert await client.count(high_throughput_table, hk, limit=1) == 0
 
-        assert await client.count(table, hk, limit=i) == i
-        assert await client.count(table, hk, limit=i + 1) == i + 1
+    await client.put_item(high_throughput_table, {"h": "h", "r": "0", "big": big})
+
+    assert await client.count(high_throughput_table, hk, limit=1) == 1
+
+    await client.put_item(high_throughput_table, {"h": "h", "r": "1", "big": big})
+
+    assert await client.count(high_throughput_table, hk, limit=1) == 1
+
+    await asyncio.gather(
+        *(
+            client.put_item(high_throughput_table, {"h": "h", "r": str(i), "big": big})
+            for i in range(2, 100)
+        )
+    )
+
+    assert await client.count(high_throughput_table, hk, limit=90) == 90
 
 
 async def test_update_item(client: Client, table: TableName):
