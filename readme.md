@@ -65,6 +65,12 @@ from aiohttp import ClientSession
         )
 ```
 
+### orjson support
+
+Aiodynamo will make use of the `orjson` library if it's available to speed up JSON processing. You can install it independently or using:
+
+`pip install "aiodynamo[orjson]"` or, for poetry users `poetry add aiodynamo -E orjson`
+
 ## Why aiodynamo
 
 * boto3 and botocore are synchronous. aiodynamo is built for **asynchronous** apps.
