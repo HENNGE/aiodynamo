@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, Optional, TypeVar, cast
+from typing import Iterator, Optional, TypeVar
 
 from aiohttp import ClientError, ClientSession
 from yarl import URL
@@ -39,7 +39,7 @@ class AIOHTTP(HTTP):
 
     async def post(
         self, *, url: URL, body: bytes, headers: Optional[Headers] = None
-    ) -> Dict[str, Any]:
+    ) -> bytes:
         with wrap_errors():
             async with self.session.request(
                 method="POST",
@@ -51,9 +51,4 @@ class AIOHTTP(HTTP):
                     raise exception_from_response(
                         response.status, await response.read()
                     )
-                return cast(
-                    Dict[str, Any],
-                    await response.json(
-                        content_type="application/x-amz-json-1.0", encoding="utf-8"
-                    ),
-                )
+                return await response.read()

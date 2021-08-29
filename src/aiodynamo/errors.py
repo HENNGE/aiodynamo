@@ -1,4 +1,4 @@
-import json
+from .serde import loads
 
 
 class AIODynamoError(Exception):
@@ -182,7 +182,7 @@ def exception_from_response(status: int, body: bytes) -> Exception:
     elif status == 503:
         raise ServiceUnavailable()
     try:
-        data = json.loads(body)
+        data = loads(body)
         return ERRORS[data["__type"].split("#", 1)[1]](data)
     except Exception:
         return UnknownError(status, body)

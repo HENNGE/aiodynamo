@@ -1,5 +1,5 @@
 import abc
-from typing import *
+from typing import Dict, Optional
 
 from yarl import URL
 
@@ -27,9 +27,9 @@ class HTTP(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     async def post(
         self, *, url: URL, body: bytes, headers: Optional[Headers] = None
-    ) -> Dict[str, Any]:
+    ) -> bytes:
         """
-        Make a POST request and return the parsed JSON object.
+        Make a POST request and return the body bytes.
 
         Raise a RequestFailed exception if the request was not successful.
         """

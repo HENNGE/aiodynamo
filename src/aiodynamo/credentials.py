@@ -4,7 +4,6 @@ import abc
 import asyncio
 import configparser
 import datetime
-import json
 import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -14,6 +13,7 @@ from typing import *
 from yarl import URL
 
 from .http.base import HTTP, Headers
+from .serde import loads
 from .types import Timeout
 from .utils import logger, parse_amazon_timestamp
 
@@ -357,7 +357,7 @@ class ContainerMetadataCredentials(MetadataCredentials):
             headers=headers,
             timeout=self.timeout,
         )
-        data = json.loads(response)
+        data = loads(response)
         return Metadata(
             key=Key(
                 id=data["AccessKeyId"],
@@ -409,7 +409,7 @@ class InstanceMetadataCredentials(MetadataCredentials):
             url=credentials_url,
             timeout=self.timeout,
         )
-        credentials = json.loads(raw_credentials)
+        credentials = loads(raw_credentials)
         return Metadata(
             key=Key(
                 credentials["AccessKeyId"],

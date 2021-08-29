@@ -3,13 +3,13 @@ from __future__ import annotations
 import datetime
 import hashlib
 import hmac
-import json
 from dataclasses import dataclass, field
-from typing import *
+from typing import Any, Dict, Mapping, Optional
 
 from yarl import URL
 
 from .credentials import Key
+from .serde import dumps
 
 SERVICE = "dynamodb"
 CONTENT_TYPE = "application/x-amz-json-1.0"
@@ -75,7 +75,7 @@ def signed_dynamo_request(
         f"x-amz-target:{amz_target}\n"
     )
 
-    payload_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    payload_bytes = dumps(payload)
 
     signed_headers = "content-type;host;x-amz-date;x-amz-target"
     payload_hash = hashlib.sha256(payload_bytes).hexdigest()

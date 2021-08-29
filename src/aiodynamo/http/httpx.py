@@ -1,7 +1,6 @@
-import json
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, Optional, cast
+from typing import Iterator, Optional
 
 from httpx import AsyncClient, HTTPError
 from yarl import URL
@@ -38,7 +37,7 @@ class HTTPX(HTTP):
 
     async def post(
         self, *, url: URL, body: bytes, headers: Optional[Headers] = None
-    ) -> Dict[str, Any]:
+    ) -> bytes:
         with wrap_errors():
             # FIXME: the `or {}` is not needed but httpx type hints are wrong
             response = await self.client.post(
@@ -48,4 +47,4 @@ class HTTPX(HTTP):
                 raise exception_from_response(
                     response.status_code, await response.aread()
                 )
-            return cast(Dict[str, Any], json.loads(await response.aread()))
+            return await response.aread()

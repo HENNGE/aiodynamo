@@ -45,6 +45,7 @@ from .models import (
     TimeToLiveStatus,
     WaitConfig,
 )
+from .serde import loads
 from .sign import signed_dynamo_request
 from .types import Item, NumericTypeConverter, TableName
 from .utils import dy2py, logger, py2dy
@@ -874,8 +875,10 @@ class Client:
                 )
                 try:
                     logger.debug("sending request %r", request)
-                    return await self.http.post(
-                        url=request.url, headers=request.headers, body=request.body
+                    return loads(  # type: ignore
+                        await self.http.post(
+                            url=request.url, headers=request.headers, body=request.body
+                        )
                     )
                 except Throttled:
                     logger.debug("request throttled")
