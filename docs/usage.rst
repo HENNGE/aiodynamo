@@ -136,6 +136,15 @@ The ``Client`` class
     .. seealso::
         `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html>`_.
 
+.. automethod:: aiodynamo.client.Client.count
+
+    Aiodynamo handles pagination automatically, so this method returns the number of items.
+
+    Queries DynamoDB and returns number of matching items, optionally bounded by ``limit`` keyword argument.
+
+    .. seealso::
+        `Scan - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Query.html>`_.
+
 .. automethod:: aiodynamo.client.Client.batch_get
 
     .. seealso::
