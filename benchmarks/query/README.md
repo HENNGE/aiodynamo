@@ -38,6 +38,12 @@ You'll also need to make sure that the environment has valid credentials set up.
 
 `python bench_aiodynamo_httpx.py -o aiodynamo_httpx.json --rigorous --inherit-env BENCH_ENDPOINT_URL,BENCH_TABLE_NAME,BENCH_KEY_FIELD,BENCH_KEY_VALUE,BENCH_REGION_NAME,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN`
 
+### aiodynamo with mock http client
+
+Use to benchmark `aiodynamo` code without a server, for example to compare feature branch performance.
+
+`python bench_aiodynamo_mock.py -o aiodynamo_mock.json --rigorous --inherit-env AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY`
+
 ## Compare
 
 `pyperf compare_to boto3.json botocore.json aiobotocore.json aiodynamo_aiohttp.json aiodynamo_httpx.json`
