@@ -7,7 +7,7 @@ UNRELEASED
 21.9
 ----
 
-Release Date: September 1st, 2021 (to do)
+Release Date: September 1st, 2021
 
 * Added the `limit` parameter to :py:meth:`aiodynamo.client.Client.count`
 * Require (somewhat) newer `httpx>=0.15.0`
