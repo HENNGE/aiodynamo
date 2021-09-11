@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import json
 from dataclasses import dataclass, field
-from typing import *
+from typing import Any, Dict, Mapping, Optional
 
 from yarl import URL
 

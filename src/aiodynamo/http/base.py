@@ -1,5 +1,5 @@
 import abc
-from typing import *
+from typing import Any, Dict, Optional
 
 from yarl import URL
 

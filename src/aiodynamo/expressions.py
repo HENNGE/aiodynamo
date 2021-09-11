@@ -4,7 +4,7 @@ import abc
 import decimal
 from dataclasses import dataclass, field
 from itertools import chain, count
-from typing import *
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
 
 from .errors import CannotAddToNestedField
 from .types import AttributeType, Numeric, ParametersDict

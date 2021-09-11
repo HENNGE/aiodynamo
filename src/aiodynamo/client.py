@@ -3,15 +3,23 @@ from __future__ import annotations
 import asyncio
 import datetime
 from dataclasses import dataclass
-from typing import *
+from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Union
 
 from yarl import URL
 
 from .credentials import Credentials
-from .errors import *
 from .errors import (
+    BrokenThrottleConfig,
+    EmptyItem,
+    ExpiredToken,
+    InternalDynamoError,
+    ItemNotFound,
+    NoCredentialsFound,
+    ProvisionedThroughputExceeded,
+    ServiceUnavailable,
     TableDidNotBecomeActive,
     TableDidNotBecomeDisabled,
+    TableNotFound,
     Throttled,
     TimeToLiveStatusNotChanged,
 )
