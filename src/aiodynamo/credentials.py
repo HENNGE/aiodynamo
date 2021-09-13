@@ -9,7 +9,7 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import *
+from typing import Callable, Optional, Sequence, TypeVar
 
 from yarl import URL
 
