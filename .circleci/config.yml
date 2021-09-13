@@ -9,6 +9,7 @@ commands:
       - run: poetry run pytest --verbose --cov=aiodynamo --cov-report html:reports/coverage/ --junitxml=reports/results/junit.xml
       - run: poetry run black --check src/ tests/
       - run: poetry run mypy
+      - run: poetry run isort --check --diff src tests
       - store_artifacts:
           path: reports/coverage/
           destination: reports
