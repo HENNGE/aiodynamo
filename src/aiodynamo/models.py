@@ -228,7 +228,6 @@ class ThrottleConfig(MypyWorkaroundThrottleConfigBase, metaclass=abc.ABCMeta):
 
 @dataclass(frozen=True)
 class DecorrelatedJitterThrottling(ThrottleConfig):
-    max_time_secs: Timespan = 60
     base_delay_secs: Timespan = 0.05
     max_delay_secs: Timespan = 1
 
