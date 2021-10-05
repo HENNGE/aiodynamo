@@ -1,7 +1,12 @@
-import asyncio
 import os
+import sys
 import uuid
-from typing import Awaitable, Callable, List, Optional
+from typing import AsyncGenerator, Awaitable, Generator, Optional, Union
+
+if sys.version_info >= (3, 8):
+    from typing import Protocol
+else:
+    from typing_extensions import Protocol
 
 import pytest
 from yarl import URL
@@ -9,7 +14,20 @@ from yarl import URL
 from aiodynamo.client import Client
 from aiodynamo.credentials import Credentials
 from aiodynamo.http.base import HTTP
-from aiodynamo.models import KeySchema, KeySpec, KeyType, Throughput, WaitConfig
+from aiodynamo.models import (
+    KeySchema,
+    KeySpec,
+    KeyType,
+    PayPerRequest,
+    Throughput,
+    WaitConfig,
+)
+
+
+class TableFactory(Protocol):
+    @staticmethod
+    def __call__(throughput: Union[Throughput, PayPerRequest] = ...) -> Awaitable[str]:
+        ...
 
 
 @pytest.fixture
@@ -23,7 +41,7 @@ def real_dynamo() -> bool:
 
 
 @pytest.fixture
-def endpoint(real_dynamo) -> Optional[URL]:
+def endpoint(real_dynamo: bool) -> Optional[URL]:
     if real_dynamo:
         return None
     if "DYNAMODB_URL" not in os.environ:
@@ -37,7 +55,7 @@ def region() -> str:
 
 
 @pytest.fixture
-def client(http: HTTP, endpoint: URL, region: str) -> Client:
+def client(http: HTTP, endpoint: URL, region: str) -> Generator[Client, None, None]:
     yield Client(
         http,
         Credentials.auto(),
@@ -47,10 +65,10 @@ def client(http: HTTP, endpoint: URL, region: str) -> Client:
 
 
 @pytest.fixture
-async def table_factory(
-    client: Client, table_name_prefix: str
-) -> Callable[[Optional[Throughput]], Awaitable[str]]:
-    async def factory(throughput: Throughput = Throughput(5, 5)) -> str:
+async def table_factory(client: Client, table_name_prefix: str) -> TableFactory:
+    async def factory(
+        throughput: Union[Throughput, PayPerRequest] = Throughput(5, 5)
+    ) -> str:
         name = table_name_prefix + str(uuid.uuid4())
         await client.create_table(
             name,
@@ -65,8 +83,8 @@ async def table_factory(
 
 @pytest.fixture
 async def table(
-    client: Client, table_factory: Callable[[Optional[Throughput]], Awaitable[str]]
-) -> str:
+    client: Client, table_factory: TableFactory
+) -> AsyncGenerator[str, None]:
     name = await table_factory()
     try:
         yield name
@@ -76,9 +94,20 @@ async def table(
 
 @pytest.fixture
 async def high_throughput_table(
-    client: Client, table_factory: Callable[[Optional[Throughput]], Awaitable[str]]
-):
+    client: Client, table_factory: TableFactory
+) -> AsyncGenerator[str, None]:
     name = await table_factory(Throughput(1000, 2500))
+    try:
+        yield name
+    finally:
+        await client.delete_table(name)
+
+
+@pytest.fixture
+async def pay_per_request_table(
+    client: Client, table_factory: TableFactory
+) -> AsyncGenerator[str, None]:
+    name = await table_factory(PayPerRequest())
     try:
         yield name
     finally:

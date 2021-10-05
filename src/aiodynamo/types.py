@@ -38,9 +38,17 @@ class AttributeType(Enum):
     map = "M"
 
 
-class EncodedThroughput(TypedDict):
+class EncodedThroughputData(TypedDict):
     ReadCapacityUnits: int
     WriteCapacityUnits: int
+
+
+class EncodedThroughput(TypedDict):
+    ProvisionedThroughput: EncodedThroughputData
+
+
+class EncodedPayPerRequest(TypedDict):
+    BillingMode: str
 
 
 class EncodedKeySchema(TypedDict):
