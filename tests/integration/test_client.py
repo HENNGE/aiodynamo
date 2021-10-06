@@ -5,7 +5,7 @@ import pytest
 from yarl import URL
 
 from aiodynamo import errors
-from aiodynamo.client import Client, TimeToLiveStatus
+from aiodynamo.client import Client
 from aiodynamo.credentials import ChainCredentials
 from aiodynamo.errors import (
     ItemNotFound,
@@ -26,14 +26,16 @@ from aiodynamo.models import (
     ReturnValues,
     TableStatus,
     Throughput,
+    TimeToLiveStatus,
     WaitConfig,
 )
 from aiodynamo.types import TableName
+from tests.integration.conftest import TableFactory
 
 pytestmark = pytest.mark.asyncio
 
 
-async def test_put_get_item(client: Client, table: TableName):
+async def test_put_get_item(client: Client, table: TableName) -> None:
     item = {
         "h": "hash key value",
         "r": "range key value",
@@ -54,7 +56,7 @@ async def test_put_get_item(client: Client, table: TableName):
     assert item == db_item
 
 
-async def test_get_item_with_projection(client: Client, table: TableName):
+async def test_get_item_with_projection(client: Client, table: TableName) -> None:
     item = {
         "h": "hkv",
         "r": "rkv",
@@ -74,7 +76,7 @@ async def test_get_item_with_projection(client: Client, table: TableName):
     assert db_item == {"string-key": "this is a string"}
 
 
-async def test_count(client: Client, table: TableName):
+async def test_count(client: Client, table: TableName) -> None:
     assert await client.count(table, HashKey("h", "h1")) == 0
     assert await client.count(table, HashKey("h", "h2")) == 0
     await client.put_item(table, {"h": "h1", "r": "r1"})
@@ -92,7 +94,9 @@ async def test_count(client: Client, table: TableName):
     )
 
 
-async def test_count_with_limit(client: Client, high_throughput_table: TableName):
+async def test_count_with_limit(
+    client: Client, high_throughput_table: TableName
+) -> None:
     big = "x" * 20_000
     hk = HashKey("h", "h")
 
@@ -116,7 +120,7 @@ async def test_count_with_limit(client: Client, high_throughput_table: TableName
     assert await client.count(high_throughput_table, hk, limit=90) == 90
 
 
-async def test_update_item(client: Client, table: TableName):
+async def test_update_item(client: Client, table: TableName) -> None:
     item = {
         "h": "hkv",
         "r": "rkv",
@@ -150,7 +154,7 @@ async def test_update_item(client: Client, table: TableName):
     }
 
 
-async def test_delete_item(client: Client, table: TableName):
+async def test_delete_item(client: Client, table: TableName) -> None:
     item = {"h": "h", "r": "r"}
     await client.put_item(table, item)
     assert await client.get_item(table, item) == item
@@ -162,7 +166,7 @@ async def test_delete_item(client: Client, table: TableName):
         await client.get_item(table, item)
 
 
-async def test_delete_table(client: Client, table_factory):
+async def test_delete_table(client: Client, table_factory: TableFactory) -> None:
     name = await table_factory()
     # no error
     await client.put_item(name, {"h": "h", "r": "r"})
@@ -173,7 +177,7 @@ async def test_delete_table(client: Client, table_factory):
         await client.put_item(name, {"h": "h", "r": "r"})
 
 
-async def test_query(client: Client, table: TableName):
+async def test_query(client: Client, table: TableName) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
     items = [item1, item2]
@@ -186,7 +190,7 @@ async def test_query(client: Client, table: TableName):
     assert index == 2
 
 
-async def test_query_descending(client: Client, table: TableName):
+async def test_query_descending(client: Client, table: TableName) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
     items = [item1, item2]
@@ -199,7 +203,7 @@ async def test_query_descending(client: Client, table: TableName):
     assert rv == list(reversed(items))
 
 
-async def test_scan(client: Client, table: TableName):
+async def test_scan(client: Client, table: TableName) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
     items = [item1, item2]
@@ -212,7 +216,7 @@ async def test_scan(client: Client, table: TableName):
     assert index == 2
 
 
-async def test_exists(client: Client, table_factory):
+async def test_exists(client: Client, table_factory: TableFactory) -> None:
     throughput = Throughput(5, 5)
     key_schema = KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string))
     attrs = {"h": KeyType.string, "r": KeyType.string}
@@ -227,12 +231,14 @@ async def test_exists(client: Client, table_factory):
         assert desc.item_count == 0
     finally:
         await client.delete_table(name)
-    assert await client.table_exists(name) == False
+    assert await client.table_exists(name) is False
     with pytest.raises(TableNotFound):
         await client.describe_table(name)
 
 
-async def test_empty_string(client: Client, table: TableName, real_dynamo: bool):
+async def test_empty_string(
+    client: Client, table: TableName, real_dynamo: bool
+) -> None:
     if not real_dynamo:
         pytest.xfail("empty strings not supported by dynalite yet")
     key = {"h": "h", "r": "r"}
@@ -249,25 +255,25 @@ async def test_empty_string(client: Client, table: TableName, real_dynamo: bool)
     )
 
 
-async def test_empty_item(client: Client, table: TableName):
+async def test_empty_item(client: Client, table: TableName) -> None:
     with pytest.raises(ValidationException):
         await client.put_item(table, {"h": "", "r": ""})
 
 
-async def test_empty_list(client: Client, table: TableName):
+async def test_empty_list(client: Client, table: TableName) -> None:
     key = {"h": "h", "r": "r"}
     await client.put_item(table, {**key, "l": [1]})
     await client.update_item(table, key, F("l").set([]))
     assert await client.get_item(table, key) == {"h": "h", "r": "r", "l": []}
 
 
-async def test_ttl(client: Client, table: TableName):
+async def test_ttl(client: Client, table: TableName) -> None:
     try:
         desc = await client.describe_time_to_live(table)
     except UnknownOperation:
         raise pytest.skip("TTL not supported by database")
     assert desc.status == TimeToLiveStatus.disabled
-    assert desc.attribute == None
+    assert desc.attribute is None
     try:
         await client.enable_time_to_live(table, "ttl")
     except UnknownOperation:
@@ -280,7 +286,9 @@ async def test_ttl(client: Client, table: TableName):
     # See: https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTimeToLive.html
 
 
-async def test_query_with_limit(client: Client, high_throughput_table: TableName):
+async def test_query_with_limit(
+    client: Client, high_throughput_table: TableName
+) -> None:
     big = "x" * 20_000
 
     await asyncio.gather(
@@ -302,7 +310,7 @@ async def test_query_with_limit(client: Client, high_throughput_table: TableName
 
 async def test_query_and_scan_single_page(
     client: Client, high_throughput_table: TableName
-):
+) -> None:
     # query and scan are tested in the same method since creating all the items takes a long time
     big = "x" * 20_000
 
@@ -341,7 +349,7 @@ async def test_query_and_scan_single_page(
     )
 
 
-async def test_scan_with_limit(client: Client, table: TableName):
+async def test_scan_with_limit(client: Client, table: TableName) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
     await client.put_item(table, item1)
@@ -353,7 +361,7 @@ async def test_scan_with_limit(client: Client, table: TableName):
 
 async def test_update_item_with_broken_update_expression(
     client: Client, table: TableName
-):
+) -> None:
     item = {"h": "h", "r": "r", "f": 1}
     await client.put_item(table, item)
     with pytest.raises(errors.ValidationException):
@@ -362,7 +370,7 @@ async def test_update_item_with_broken_update_expression(
         )
 
 
-async def test_scan_with_projection_only(client: Client, table: TableName):
+async def test_scan_with_projection_only(client: Client, table: TableName) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
     await client.put_item(table, item1)
@@ -371,7 +379,9 @@ async def test_scan_with_projection_only(client: Client, table: TableName):
     assert items == [{"d": "x"}, {"d": "y"}]
 
 
-async def test_put_item_with_condition_with_no_values(client: Client, table: TableName):
+async def test_put_item_with_condition_with_no_values(
+    client: Client, table: TableName
+) -> None:
     await client.put_item(
         table, {"h": "h", "r": "1"}, condition=F("h").does_not_exist()
     )
@@ -381,7 +391,7 @@ async def test_put_item_with_condition_with_no_values(client: Client, table: Tab
         )
 
 
-async def test_delete_item_with_conditions(client: Client, table: TableName):
+async def test_delete_item_with_conditions(client: Client, table: TableName) -> None:
     await client.put_item(table, {"h": "h", "r": "1", "d": "x"})
     with pytest.raises(errors.ConditionalCheckFailed):
         await client.delete_item(
@@ -390,7 +400,7 @@ async def test_delete_item_with_conditions(client: Client, table: TableName):
     assert await client.get_item(table, {"h": "h", "r": "1"})
 
 
-async def test_size_condition_expression(client: Client, table: TableName):
+async def test_size_condition_expression(client: Client, table: TableName) -> None:
     key = {"h": "h", "r": "r"}
 
     await client.put_item(table, {**key, "s": "hello", "v": "initial", "n": 5})
@@ -421,7 +431,9 @@ async def test_size_condition_expression(client: Client, table: TableName):
     assert item["v"] == "final"
 
 
-async def test_comparison_condition_expression(client: Client, table: TableName):
+async def test_comparison_condition_expression(
+    client: Client, table: TableName
+) -> None:
     key = {"h": "h", "r": "r"}
 
     await client.put_item(table, {**key, "v": "initial", "n": 5, "c": 6})
@@ -452,7 +464,7 @@ async def test_comparison_condition_expression(client: Client, table: TableName)
     assert item["v"] == "final"
 
 
-async def test_no_credentials(http: HTTP, endpoint: URL, region: str):
+async def test_no_credentials(http: HTTP, endpoint: URL, region: str) -> None:
     client = Client(
         http,
         ChainCredentials([]),
@@ -464,7 +476,7 @@ async def test_no_credentials(http: HTTP, endpoint: URL, region: str):
         await client.get_item("no-table", {"key": "no-key"})
 
 
-async def test_batch(client: Client, table: TableName):
+async def test_batch(client: Client, table: TableName) -> None:
     response = await client.batch_write(
         {
             table: BatchWriteRequest(
@@ -502,3 +514,44 @@ async def test_batch(client: Client, table: TableName):
     )
     assert not response
     assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 0
+
+
+async def test_pay_per_request_table(
+    client: Client, pay_per_request_table: TableName
+) -> None:
+    # query and scan are tested in the same method since creating all the items takes a long time
+    big = "x" * 20_000
+
+    await asyncio.gather(
+        *(
+            client.put_item(pay_per_request_table, {"h": "h", "r": str(i), "big": big})
+            for i in range(100)
+        )
+    )
+
+    first_page = await client.query_single_page(
+        pay_per_request_table, HashKey("h", "h")
+    )
+    assert first_page.items
+    assert first_page.last_evaluated_key
+    assert not first_page.is_last_page
+    second_page = await client.query_single_page(
+        pay_per_request_table,
+        HashKey("h", "h"),
+        start_key=first_page.last_evaluated_key,
+    )
+    assert not set(map(itemgetter("r"), first_page.items)) & set(
+        map(itemgetter("r"), second_page.items)
+    )
+
+    first_page = await client.scan_single_page(pay_per_request_table)
+    assert first_page.items
+    assert first_page.last_evaluated_key
+    assert not first_page.is_last_page
+    second_page = await client.scan_single_page(
+        pay_per_request_table,
+        start_key=first_page.last_evaluated_key,
+    )
+    assert not set(map(itemgetter("r"), first_page.items)) & set(
+        map(itemgetter("r"), second_page.items)
+    )

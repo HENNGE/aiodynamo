@@ -26,6 +26,7 @@ from .types import (
     EncodedGlobalSecondaryIndex,
     EncodedKeySchema,
     EncodedLocalSecondaryIndex,
+    EncodedPayPerRequest,
     EncodedProjection,
     EncodedStreamSpecification,
     EncodedThroughput,
@@ -57,7 +58,19 @@ class Throughput:
     write: int
 
     def encode(self) -> EncodedThroughput:
-        return {"ReadCapacityUnits": self.read, "WriteCapacityUnits": self.write}
+        return {
+            "ProvisionedThroughput": {
+                "ReadCapacityUnits": self.read,
+                "WriteCapacityUnits": self.write,
+            }
+        }
+
+
+class PayPerRequest:
+    MODE: str = "PAY_PER_REQUEST"
+
+    def encode(self) -> EncodedPayPerRequest:
+        return {"BillingMode": self.MODE}
 
 
 class KeyType(Enum):

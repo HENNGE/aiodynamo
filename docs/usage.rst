@@ -72,6 +72,8 @@ The ``Client`` class
 
     If ``wait_for_active`` is set to ``True``, it will wait until the table status changed into ``Active``.
     If after the defined wait time the table is not active, an exception will be raised.
+    Passing a :py:class:`aiodynamo.models.PayPerRequest` object in place of a :py:class:`aiodynamo.models.Throughput`
+    configuration will create a ``PAY_PER_REQUEST`` BillingMode table.
 
     .. seealso::
         `CreateTable - AWS API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_CreateTable.html>`_.
@@ -327,6 +329,9 @@ Key conditions are created using the :py:class:`aiodynamo.expressions.HashKey` a
 
 Models
 ------
+.. autoclass:: aiodynamo.models.PayPerRequest
+    :undoc-members:
+
 .. autoclass:: aiodynamo.models.Throughput
     :members: read, write
     :undoc-members:

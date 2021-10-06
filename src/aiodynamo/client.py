@@ -42,6 +42,7 @@ from .models import (
     KeyType,
     LocalSecondaryIndex,
     Page,
+    PayPerRequest,
     ReturnValues,
     Select,
     StreamSpecification,
@@ -90,7 +91,7 @@ class Table:
 
     async def create(
         self,
-        throughput: Throughput,
+        throughput: Union[Throughput, PayPerRequest],
         keys: KeySchema,
         *,
         lsis: Optional[List[LocalSecondaryIndex]] = None,
@@ -334,7 +335,7 @@ class Client:
     async def create_table(
         self,
         name: TableName,
-        throughput: Throughput,
+        throughput: Union[Throughput, PayPerRequest],
         keys: KeySchema,
         *,
         lsis: Optional[List[LocalSecondaryIndex]] = None,
@@ -353,11 +354,11 @@ class Client:
             {"AttributeName": key, "AttributeType": value}
             for key, value in attributes.items()
         ]
-        payload = {
+        payload: Dict[str, Any] = {
             "AttributeDefinitions": attribute_definitions,
             "TableName": name,
             "KeySchema": keys.encode(),
-            "ProvisionedThroughput": throughput.encode(),
+            **throughput.encode(),
         }
         if lsis:
             payload["LocalSecondaryIndexes"] = [index.encode() for index in lsis]
