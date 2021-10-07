@@ -1,4 +1,5 @@
 import asyncio
+import secrets
 from operator import itemgetter
 
 import pytest
@@ -20,9 +21,13 @@ from aiodynamo.models import (
     BatchGetRequest,
     BatchWriteRequest,
     ExponentialBackoffThrottling,
+    GlobalSecondaryIndex,
     KeySchema,
     KeySpec,
     KeyType,
+    LocalSecondaryIndex,
+    Projection,
+    ProjectionType,
     ReturnValues,
     TableStatus,
     Throughput,
@@ -33,6 +38,35 @@ from aiodynamo.types import TableName
 from tests.integration.conftest import TableFactory
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_create_table_with_indices(client: Client, table_name_prefix):
+    name = table_name_prefix + secrets.token_hex(4)
+    await client.create_table(
+        name,
+        Throughput(5, 5),
+        KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
+        gsis=[
+            GlobalSecondaryIndex(
+                name="global",
+                schema=KeySchema(
+                    KeySpec("h", KeyType.string), KeySpec("g", KeyType.string)
+                ),
+                projection=Projection(ProjectionType.all),
+                throughput=Throughput(5, 5),
+            )
+        ],
+        lsis=[
+            LocalSecondaryIndex(
+                name="local",
+                schema=KeySchema(
+                    KeySpec("h", KeyType.string), KeySpec("l", KeyType.string)
+                ),
+                projection=Projection(ProjectionType.all),
+            )
+        ],
+        wait_for_active=WaitConfig(max_attempts=25, retry_delay=5),
+    )
 
 
 async def test_put_get_item(client: Client, table: TableName) -> None:
