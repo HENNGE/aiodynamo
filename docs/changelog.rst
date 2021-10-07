@@ -4,6 +4,15 @@ Changelog
 UNRELEASED
 ----------
 
+21.10
+-----
+
+Release Date: October 7th, 2021
+
+* Added support for `PAY_PER_REQUEST` billing mode
+* Explicit typing imports to support static type checkers
+
+
 21.9
 ----
 
