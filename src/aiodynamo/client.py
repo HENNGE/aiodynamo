@@ -291,6 +291,22 @@ class Table:
             limit=limit,
         )
 
+    async def scan_count(
+        self,
+        *,
+        index: Optional[str] = None,
+        limit: Optional[int] = None,
+        start_key: Optional[Dict[str, Any]] = None,
+        filter_expression: Optional[Condition] = None,
+    ) -> int:
+        return await self.client.scan_count(
+            self.name,
+            index=index,
+            limit=limit,
+            start_key=start_key,
+            filter_expression=filter_expression,
+        )
+
     async def update_item(
         self,
         key: Item,
@@ -777,6 +793,33 @@ class Client:
 
         count_sum = 0
         async for result in self._depaginate("Query", payload, limit):
+            count_sum += result["Count"]
+        return count_sum
+
+    async def scan_count(
+        self,
+        table: TableName,
+        *,
+        index: Optional[str] = None,
+        limit: Optional[int] = None,
+        start_key: Optional[Dict[str, Any]] = None,
+        filter_expression: Optional[Condition] = None,
+    ) -> int:
+        """
+        Count the number of items returned by a scan operation.
+        """
+
+        payload = _scan_payload(
+            table=table,
+            index=index,
+            start_key=start_key,
+            filter_expression=filter_expression,
+            projection=None,
+        )
+        payload["Select"] = Select.count.value
+
+        count_sum = 0
+        async for result in self._depaginate("Scan", payload, limit):
             count_sum += result["Count"]
         return count_sum
 

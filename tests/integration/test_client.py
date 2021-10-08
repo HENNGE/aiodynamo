@@ -154,6 +154,38 @@ async def test_count_with_limit(
     assert await client.count(high_throughput_table, hk, limit=90) == 90
 
 
+async def test_scan_count(client: Client, table: TableName) -> None:
+    assert await client.scan_count(table) == 0
+    await client.put_item(table, {"h": "h1", "r": "r1"})
+    assert await client.scan_count(table) == 1
+    await client.put_item(table, {"h": "h2", "r": "r2"})
+    assert await client.scan_count(table) == 2
+
+    assert (
+        await client.scan_count(table, filter_expression=F("r").begins_with("x")) == 0
+    )
+
+
+async def test_scan_count_with_limit(
+    client: Client, high_throughput_table: TableName
+) -> None:
+    big = "x" * 20_000
+
+    assert await client.scan_count(high_throughput_table, limit=1) == 0
+    await client.put_item(high_throughput_table, {"h": "h", "r": "0", "big": big})
+    assert await client.scan_count(high_throughput_table, limit=1) == 1
+    await client.put_item(high_throughput_table, {"h": "h", "r": "1", "big": big})
+    assert await client.scan_count(high_throughput_table, limit=1) == 1
+
+    await asyncio.gather(
+        *(
+            client.put_item(high_throughput_table, {"h": "h", "r": str(i), "big": big})
+            for i in range(2, 100)
+        )
+    )
+    assert await client.scan_count(high_throughput_table, limit=90) == 90
+
+
 async def test_update_item(client: Client, table: TableName) -> None:
     item = {
         "h": "hkv",
