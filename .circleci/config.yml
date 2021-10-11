@@ -1,4 +1,17 @@
 version: 2.1
+executors:
+  python:
+    parameters:
+      version:
+        type: string
+    docker:
+      - image: python:<< parameters.version >>
+        environment:
+          DYNAMODB_URL: http://localhost:8000
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+      - image: dimaqq/dynalite:latest
+    working_directory: /home/ubuntu/aiodynamo
 commands:
   runtests:
     steps:
@@ -17,36 +30,27 @@ commands:
           path: reports/results/
 jobs:
   py37:
-    docker:
-      - image: python:3.7
-        environment:
-          DYNAMODB_URL: http://localhost:8000
-          AWS_ACCESS_KEY_ID: dummy
-          AWS_SECRET_ACCESS_KEY: dummy
-      - image: dimaqq/dynalite:latest
-    working_directory: /home/ubuntu/aiodynamo
+    executor:
+      name: python
+      version: "3.7"
     steps:
       - runtests
   py38:
-    docker:
-      - image: python:3.8
-        environment:
-          DYNAMODB_URL: http://localhost:8000
-          AWS_ACCESS_KEY_ID: dummy
-          AWS_SECRET_ACCESS_KEY: dummy
-      - image: dimaqq/dynalite:latest
-    working_directory: /home/ubuntu/aiodynamo
+    executor:
+      name: python
+      version: "3.8"
     steps:
       - runtests
   py39:
-    docker:
-      - image: python:3.9
-        environment:
-          DYNAMODB_URL: http://localhost:8000
-          AWS_ACCESS_KEY_ID: dummy
-          AWS_SECRET_ACCESS_KEY: dummy
-      - image: dimaqq/dynalite:latest
-    working_directory: /home/ubuntu/aiodynamo
+    executor:
+      name: python
+      version: "3.9"
+    steps:
+      - runtests
+  py310:
+    executor:
+      name: python
+      version: "3.10"
     steps:
       - runtests
 workflows:
@@ -55,3 +59,4 @@ workflows:
       - py37
       - py38
       - py39
+      - py310
