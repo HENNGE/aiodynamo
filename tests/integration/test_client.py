@@ -113,53 +113,42 @@ async def test_get_item_with_projection(client: Client, table: TableName) -> Non
 async def test_count(client: Client, table: TableName) -> None:
     assert await client.count(table, HashKey("h", "h1")) == 0
     assert await client.count(table, HashKey("h", "h2")) == 0
+    assert await client.count(table, HashKey("h", "h1"), limit=1) == 0
+    assert await client.count(table, HashKey("h", "h2"), limit=1) == 0
     await client.put_item(table, {"h": "h1", "r": "r1"})
     assert await client.count(table, HashKey("h", "h1")) == 1
     assert await client.count(table, HashKey("h", "h2")) == 0
+    assert await client.count(table, HashKey("h", "h1"), limit=1) == 1
+    assert await client.count(table, HashKey("h", "h2"), limit=1) == 0
     await client.put_item(table, {"h": "h2", "r": "r2"})
     assert await client.count(table, HashKey("h", "h1")) == 1
     assert await client.count(table, HashKey("h", "h2")) == 1
+    assert await client.count(table, HashKey("h", "h1"), limit=1) == 1
+    assert await client.count(table, HashKey("h", "h2"), limit=1) == 1
     await client.put_item(table, {"h": "h2", "r": "r1"})
     assert await client.count(table, HashKey("h", "h2")) == 2
     assert await client.count(table, HashKey("h", "h1")) == 1
+    assert await client.count(table, HashKey("h", "h1"), limit=1) == 1
+    assert await client.count(table, HashKey("h", "h2"), limit=1) == 1
     assert (
         await client.count(table, HashKey("h", "h1") & RangeKey("r").begins_with("x"))
         == 0
     )
 
 
-async def test_count_with_limit(
-    client: Client, high_throughput_table: TableName
-) -> None:
-    big = "x" * 20_000
-    hk = HashKey("h", "h")
-
-    assert await client.count(high_throughput_table, hk, limit=1) == 0
-
-    await client.put_item(high_throughput_table, {"h": "h", "r": "0", "big": big})
-
-    assert await client.count(high_throughput_table, hk, limit=1) == 1
-
-    await client.put_item(high_throughput_table, {"h": "h", "r": "1", "big": big})
-
-    assert await client.count(high_throughput_table, hk, limit=1) == 1
-
-    await asyncio.gather(
-        *(
-            client.put_item(high_throughput_table, {"h": "h", "r": str(i), "big": big})
-            for i in range(2, 100)
-        )
-    )
-
-    assert await client.count(high_throughput_table, hk, limit=90) == 90
+async def test_count_with_limit(client: Client, prefilled_table: TableName) -> None:
+    assert await client.count(prefilled_table, HashKey("h", "h"), limit=90) == 90
 
 
 async def test_scan_count(client: Client, table: TableName) -> None:
     assert await client.scan_count(table) == 0
+    assert await client.scan_count(table, limit=1) == 0
     await client.put_item(table, {"h": "h1", "r": "r1"})
     assert await client.scan_count(table) == 1
+    assert await client.scan_count(table, limit=1) == 1
     await client.put_item(table, {"h": "h2", "r": "r2"})
     assert await client.scan_count(table) == 2
+    assert await client.scan_count(table, limit=1) == 1
 
     assert (
         await client.scan_count(table, filter_expression=F("r").begins_with("x")) == 0
@@ -167,23 +156,9 @@ async def test_scan_count(client: Client, table: TableName) -> None:
 
 
 async def test_scan_count_with_limit(
-    client: Client, high_throughput_table: TableName
+    client: Client, prefilled_table: TableName
 ) -> None:
-    big = "x" * 20_000
-
-    assert await client.scan_count(high_throughput_table, limit=1) == 0
-    await client.put_item(high_throughput_table, {"h": "h", "r": "0", "big": big})
-    assert await client.scan_count(high_throughput_table, limit=1) == 1
-    await client.put_item(high_throughput_table, {"h": "h", "r": "1", "big": big})
-    assert await client.scan_count(high_throughput_table, limit=1) == 1
-
-    await asyncio.gather(
-        *(
-            client.put_item(high_throughput_table, {"h": "h", "r": str(i), "big": big})
-            for i in range(2, 100)
-        )
-    )
-    assert await client.scan_count(high_throughput_table, limit=90) == 90
+    assert await client.scan_count(prefilled_table, limit=90) == 90
 
 
 async def test_update_item(client: Client, table: TableName) -> None:
@@ -352,49 +327,21 @@ async def test_ttl(client: Client, table: TableName) -> None:
     # See: https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTimeToLive.html
 
 
-async def test_query_with_limit(
-    client: Client, high_throughput_table: TableName
-) -> None:
-    big = "x" * 20_000
-
-    await asyncio.gather(
-        *(
-            client.put_item(high_throughput_table, {"h": "h", "r": str(i), "big": big})
-            for i in range(100)
-        )
-    )
-
+async def test_query_with_limit(client: Client, prefilled_table: TableName) -> None:
     items = [
-        item
-        async for item in client.query(
-            high_throughput_table, HashKey("h", "h"), limit=1
-        )
+        item async for item in client.query(prefilled_table, HashKey("h", "h"), limit=1)
     ]
     assert len(items) == 1
     assert items[0]["r"] == "0"
 
 
-async def test_query_and_scan_single_page(
-    client: Client, high_throughput_table: TableName
-) -> None:
-    # query and scan are tested in the same method since creating all the items takes a long time
-    big = "x" * 20_000
-
-    await asyncio.gather(
-        *(
-            client.put_item(high_throughput_table, {"h": "h", "r": str(i), "big": big})
-            for i in range(100)
-        )
-    )
-
-    first_page = await client.query_single_page(
-        high_throughput_table, HashKey("h", "h")
-    )
+async def test_query_single_page(client: Client, prefilled_table: TableName) -> None:
+    first_page = await client.query_single_page(prefilled_table, HashKey("h", "h"))
     assert first_page.items
     assert first_page.last_evaluated_key
     assert not first_page.is_last_page
     second_page = await client.query_single_page(
-        high_throughput_table,
+        prefilled_table,
         HashKey("h", "h"),
         start_key=first_page.last_evaluated_key,
     )
@@ -402,12 +349,14 @@ async def test_query_and_scan_single_page(
         map(itemgetter("r"), second_page.items)
     )
 
-    first_page = await client.scan_single_page(high_throughput_table)
+
+async def test_scan_single_page(client: Client, prefilled_table: TableName) -> None:
+    first_page = await client.scan_single_page(prefilled_table)
     assert first_page.items
     assert first_page.last_evaluated_key
     assert not first_page.is_last_page
     second_page = await client.scan_single_page(
-        high_throughput_table,
+        prefilled_table,
         start_key=first_page.last_evaluated_key,
     )
     assert not set(map(itemgetter("r"), first_page.items)) & set(
