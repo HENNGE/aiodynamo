@@ -1,6 +1,7 @@
 import asyncio
 import secrets
 from operator import itemgetter
+from typing import Optional
 
 import pytest
 from yarl import URL
@@ -69,7 +70,10 @@ async def test_create_table_with_indices(client: Client, table_name_prefix):
     )
 
 
-async def test_put_get_item(client: Client, table: TableName) -> None:
+@pytest.mark.parametrize("consistent_read", [True, False])
+async def test_put_get_item(
+    client: Client, table: TableName, consistent_read: Optional[bool]
+) -> None:
     item = {
         "h": "hash key value",
         "r": "range key value",
@@ -85,8 +89,11 @@ async def test_put_get_item(client: Client, table: TableName) -> None:
     }
     await client.put_item(table, item)
     db_item = await client.get_item(
-        table, {"h": "hash key value", "r": "range key value"}
+        table,
+        {"h": "hash key value", "r": "range key value"},
+        consistent_read=consistent_read,
     )
+
     assert item == db_item
 
 
@@ -136,8 +143,19 @@ async def test_count(client: Client, table: TableName) -> None:
     )
 
 
-async def test_count_with_limit(client: Client, prefilled_table: TableName) -> None:
-    assert await client.count(prefilled_table, HashKey("h", "h"), limit=90) == 90
+@pytest.mark.parametrize("consistent_read", [True, False])
+async def test_count_with_limit(
+    client: Client, prefilled_table: TableName, consistent_read: Optional[bool]
+) -> None:
+    assert (
+        await client.count(
+            prefilled_table,
+            HashKey("h", "h"),
+            limit=90,
+            consistent_read=consistent_read,
+        )
+        == 90
+    )
 
 
 async def test_scan_count(client: Client, table: TableName) -> None:
@@ -155,10 +173,16 @@ async def test_scan_count(client: Client, table: TableName) -> None:
     )
 
 
+@pytest.mark.parametrize("consistent_read", [True, False])
 async def test_scan_count_with_limit(
-    client: Client, prefilled_table: TableName
+    client: Client, prefilled_table: TableName, consistent_read: Optional[bool]
 ) -> None:
-    assert await client.scan_count(prefilled_table, limit=90) == 90
+    assert (
+        await client.scan_count(
+            prefilled_table, limit=90, consistent_read=consistent_read
+        )
+        == 90
+    )
 
 
 async def test_update_item(client: Client, table: TableName) -> None:
@@ -218,14 +242,19 @@ async def test_delete_table(client: Client, table_factory: TableFactory) -> None
         await client.put_item(name, {"h": "h", "r": "r"})
 
 
-async def test_query(client: Client, table: TableName) -> None:
+@pytest.mark.parametrize("consistent_read", [True, False])
+async def test_query(
+    client: Client, table: TableName, consistent_read: Optional[bool]
+) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
     items = [item1, item2]
     await client.put_item(table, item1)
     await client.put_item(table, item2)
     index = 0
-    async for item in client.query(table, HashKey("h", "h")):
+    async for item in client.query(
+        table, HashKey("h", "h"), consistent_read=consistent_read
+    ):
         assert item == items[index]
         index += 1
     assert index == 2
@@ -244,14 +273,17 @@ async def test_query_descending(client: Client, table: TableName) -> None:
     assert rv == list(reversed(items))
 
 
-async def test_scan(client: Client, table: TableName) -> None:
+@pytest.mark.parametrize("consistent_read", [True, False])
+async def test_scan(
+    client: Client, table: TableName, consistent_read: Optional[bool]
+) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
     items = [item1, item2]
     await client.put_item(table, item1)
     await client.put_item(table, item2)
     index = 0
-    async for item in client.scan(table):
+    async for item in client.scan(table, consistent_read=consistent_read):
         assert item == items[index]
         index += 1
     assert index == 2
@@ -335,8 +367,13 @@ async def test_query_with_limit(client: Client, prefilled_table: TableName) -> N
     assert items[0]["r"] == "0"
 
 
-async def test_query_single_page(client: Client, prefilled_table: TableName) -> None:
-    first_page = await client.query_single_page(prefilled_table, HashKey("h", "h"))
+@pytest.mark.parametrize("consistent_read", [True, False])
+async def test_query_single_page(
+    client: Client, prefilled_table: TableName, consistent_read: Optional[bool]
+) -> None:
+    first_page = await client.query_single_page(
+        prefilled_table, HashKey("h", "h"), consistent_read=consistent_read
+    )
     assert first_page.items
     assert first_page.last_evaluated_key
     assert not first_page.is_last_page
@@ -350,8 +387,13 @@ async def test_query_single_page(client: Client, prefilled_table: TableName) -> 
     )
 
 
-async def test_scan_single_page(client: Client, prefilled_table: TableName) -> None:
-    first_page = await client.scan_single_page(prefilled_table)
+@pytest.mark.parametrize("consistent_read", [True, False])
+async def test_scan_single_page(
+    client: Client, prefilled_table: TableName, consistent_read: Optional[bool]
+) -> None:
+    first_page = await client.scan_single_page(
+        prefilled_table, consistent_read=consistent_read
+    )
     assert first_page.items
     assert first_page.last_evaluated_key
     assert not first_page.is_last_page

@@ -135,14 +135,20 @@ class Table:
         )
 
     async def get_item(
-        self, key: Dict[str, Any], *, projection: Optional[ProjectionExpression] = None
+        self,
+        key: Dict[str, Any],
+        *,
+        projection: Optional[ProjectionExpression] = None,
+        consistent_read: bool = False,
     ) -> Item:
         """
         Returns the attributes of an item from table.
         This will return all attributes by default.
         To get only some attributes, use a projection expression.
         """
-        return await self.client.get_item(self.name, key, projection=projection)
+        return await self.client.get_item(
+            self.name, key, projection=projection, consistent_read=consistent_read
+        )
 
     async def put_item(
         self,
@@ -170,6 +176,7 @@ class Table:
         limit: Optional[int] = None,
         projection: Optional[ProjectionExpression] = None,
         select: Select = Select.all_attributes,
+        consistent_read: bool = False,
     ) -> AsyncIterator[Item]:
         """
         Query the table.
@@ -192,6 +199,7 @@ class Table:
             limit=limit,
             projection=projection,
             select=select,
+            consistent_read=consistent_read,
         )
 
     async def query_single_page(
@@ -205,6 +213,7 @@ class Table:
         limit: Optional[int] = None,
         projection: Optional[ProjectionExpression] = None,
         select: Select = Select.all_attributes,
+        consistent_read: bool = False,
     ) -> Page:
         """
         Query a single DynamoDB page.
@@ -220,6 +229,7 @@ class Table:
             limit=limit,
             projection=projection,
             select=select,
+            consistent_read=consistent_read,
         )
 
     def scan(
@@ -230,6 +240,7 @@ class Table:
         start_key: Optional[Dict[str, Any]] = None,
         projection: Optional[ProjectionExpression] = None,
         filter_expression: Optional[Condition] = None,
+        consistent_read: bool = False,
     ) -> AsyncIterator[Item]:
         """
         Scan the table.
@@ -249,6 +260,7 @@ class Table:
             start_key=start_key,
             projection=projection,
             filter_expression=filter_expression,
+            consistent_read=consistent_read,
         )
 
     async def scan_single_page(
@@ -259,6 +271,7 @@ class Table:
         start_key: Optional[Dict[str, Any]] = None,
         projection: Optional[ProjectionExpression] = None,
         filter_expression: Optional[Condition] = None,
+        consistent_read: bool = False,
     ) -> Page:
         """
         Scan a single DynamoDB page.
@@ -271,6 +284,7 @@ class Table:
             start_key=start_key,
             projection=projection,
             filter_expression=filter_expression,
+            consistent_read=consistent_read,
         )
 
     async def count(
@@ -281,6 +295,7 @@ class Table:
         filter_expression: Optional[Condition] = None,
         index: Optional[str] = None,
         limit: Optional[int] = None,
+        consistent_read: bool = False,
     ) -> int:
         return await self.client.count(
             self.name,
@@ -289,6 +304,7 @@ class Table:
             filter_expression=filter_expression,
             index=index,
             limit=limit,
+            consistent_read=consistent_read,
         )
 
     async def scan_count(
@@ -298,6 +314,7 @@ class Table:
         limit: Optional[int] = None,
         start_key: Optional[Dict[str, Any]] = None,
         filter_expression: Optional[Condition] = None,
+        consistent_read: bool = False,
     ) -> int:
         return await self.client.scan_count(
             self.name,
@@ -305,6 +322,7 @@ class Table:
             limit=limit,
             start_key=start_key,
             filter_expression=filter_expression,
+            consistent_read=consistent_read,
         )
 
     async def update_item(
@@ -569,6 +587,7 @@ class Client:
         key: Dict[str, Any],
         *,
         projection: Optional[ProjectionExpression] = None,
+        consistent_read: bool = False,
     ) -> Item:
         dynamo_key = py2dy(key)
         if not dynamo_key:
@@ -577,6 +596,7 @@ class Client:
         payload: Dict[str, Any] = {
             "TableName": table,
             "Key": dynamo_key,
+            "ConsistentRead": consistent_read,
         }
         if projection:
             params = Parameters()
@@ -631,6 +651,7 @@ class Client:
         limit: Optional[int] = None,
         projection: Optional[ProjectionExpression] = None,
         select: Select = Select.all_attributes,
+        consistent_read: bool = False,
     ) -> AsyncIterator[Item]:
         """
         Query the table.
@@ -647,6 +668,7 @@ class Client:
             index=index,
             projection=projection,
             select=select,
+            consistent_read=consistent_read,
         )
 
         async for result in self._depaginate("Query", payload, limit):
@@ -665,6 +687,7 @@ class Client:
         limit: Optional[int] = None,
         projection: Optional[ProjectionExpression] = None,
         select: Select = Select.all_attributes,
+        consistent_read: bool = False,
     ) -> Page:
         """
         Query a single DynamoDB page.
@@ -679,6 +702,7 @@ class Client:
             index=index,
             projection=projection,
             select=select,
+            consistent_read=consistent_read,
         )
         if limit is not None:
             payload["Limit"] = limit
@@ -705,6 +729,7 @@ class Client:
         start_key: Optional[Dict[str, Any]] = None,
         projection: Optional[ProjectionExpression] = None,
         filter_expression: Optional[Condition] = None,
+        consistent_read: bool = False,
     ) -> AsyncIterator[Item]:
         """
         Scan the table.
@@ -719,6 +744,7 @@ class Client:
             start_key=start_key,
             projection=projection,
             filter_expression=filter_expression,
+            consistent_read=consistent_read,
         )
 
         async for result in self._depaginate("Scan", payload, limit):
@@ -734,6 +760,7 @@ class Client:
         start_key: Optional[Dict[str, Any]] = None,
         projection: Optional[ProjectionExpression] = None,
         filter_expression: Optional[Condition] = None,
+        consistent_read: bool = False,
     ) -> Page:
         """
         Scan a single DynamoDB page.
@@ -746,6 +773,7 @@ class Client:
             start_key=start_key,
             projection=projection,
             filter_expression=filter_expression,
+            consistent_read=consistent_read,
         )
 
         if limit is not None:
@@ -773,6 +801,7 @@ class Client:
         filter_expression: Optional[Condition] = None,
         index: Optional[str] = None,
         limit: Optional[int] = None,
+        consistent_read: bool = False,
     ) -> int:
         params = Parameters()
 
@@ -780,6 +809,7 @@ class Client:
             "TableName": table,
             "KeyConditionExpression": key_condition.encode(params),
             "Select": Select.count.value,
+            "ConsistentRead": consistent_read,
         }
 
         if start_key:
@@ -788,7 +818,6 @@ class Client:
             payload["FilterExpression"] = filter_expression.encode(params)
         if index:
             payload["IndexName"] = index
-
         payload.update(params.to_request_payload())
 
         count_sum = 0
@@ -804,6 +833,7 @@ class Client:
         limit: Optional[int] = None,
         start_key: Optional[Dict[str, Any]] = None,
         filter_expression: Optional[Condition] = None,
+        consistent_read: bool = False,
     ) -> int:
         """
         Count the number of items returned by a scan operation.
@@ -815,6 +845,7 @@ class Client:
             start_key=start_key,
             filter_expression=filter_expression,
             projection=None,
+            consistent_read=consistent_read,
         )
         payload["Select"] = Select.count.value
 
@@ -1004,6 +1035,7 @@ def _query_payload(
     index: Optional[str],
     projection: Optional[ProjectionExpression],
     select: Select = Select.all_attributes,
+    consistent_read: bool = False,
 ) -> Dict[str, Any]:
     if projection:
         select = Select.specific_attributes
@@ -1016,6 +1048,7 @@ def _query_payload(
         "TableName": table,
         "KeyConditionExpression": key_condition.encode(params),
         "ScanIndexForward": scan_forward,
+        "ConsistentRead": consistent_read,
     }
 
     if projection:
@@ -1042,11 +1075,13 @@ def _scan_payload(
     start_key: Optional[Dict[str, Any]],
     projection: Optional[ProjectionExpression],
     filter_expression: Optional[Condition],
+    consistent_read: bool = False,
 ) -> Dict[str, Any]:
     params = Parameters()
 
     payload: Dict[str, Any] = {
         "TableName": table,
+        "ConsistentRead": consistent_read,
     }
 
     if index:

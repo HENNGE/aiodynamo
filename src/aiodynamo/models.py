@@ -280,15 +280,18 @@ class Page:
 class BatchGetRequest:
     keys: List[Item]
     projection: Optional[ProjectionExpression] = None
+    consistent_read: bool = False
 
     def to_request_payload(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "Keys": [py2dy(key) for key in self.keys],
+            "ConsistentRead": self.consistent_read,
         }
         if self.projection:
             params = Parameters()
             payload["ProjectionExpression"] = self.projection.encode(params)
             payload.update(params.to_request_payload())
+
         return payload
 
 
