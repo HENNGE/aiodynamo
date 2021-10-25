@@ -3,3 +3,7 @@ poetry.lock
 __pycache__
 /dist
 *.swp
+.*
+*.egg-info
+build/
+docs/_build/

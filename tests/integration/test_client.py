@@ -1,7 +1,6 @@
 import asyncio
 import secrets
 from operator import itemgetter
-from typing import Optional
 
 import pytest
 from yarl import URL
@@ -72,7 +71,7 @@ async def test_create_table_with_indices(client: Client, table_name_prefix):
 
 @pytest.mark.parametrize("consistent_read", [True, False])
 async def test_put_get_item(
-    client: Client, table: TableName, consistent_read: Optional[bool]
+    client: Client, table: TableName, consistent_read: bool
 ) -> None:
     item = {
         "h": "hash key value",
@@ -145,7 +144,7 @@ async def test_count(client: Client, table: TableName) -> None:
 
 @pytest.mark.parametrize("consistent_read", [True, False])
 async def test_count_with_limit(
-    client: Client, prefilled_table: TableName, consistent_read: Optional[bool]
+    client: Client, prefilled_table: TableName, consistent_read: bool
 ) -> None:
     assert (
         await client.count(
@@ -175,7 +174,7 @@ async def test_scan_count(client: Client, table: TableName) -> None:
 
 @pytest.mark.parametrize("consistent_read", [True, False])
 async def test_scan_count_with_limit(
-    client: Client, prefilled_table: TableName, consistent_read: Optional[bool]
+    client: Client, prefilled_table: TableName, consistent_read: bool
 ) -> None:
     assert (
         await client.scan_count(
@@ -243,9 +242,7 @@ async def test_delete_table(client: Client, table_factory: TableFactory) -> None
 
 
 @pytest.mark.parametrize("consistent_read", [True, False])
-async def test_query(
-    client: Client, table: TableName, consistent_read: Optional[bool]
-) -> None:
+async def test_query(client: Client, table: TableName, consistent_read: bool) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
     items = [item1, item2]
@@ -274,9 +271,7 @@ async def test_query_descending(client: Client, table: TableName) -> None:
 
 
 @pytest.mark.parametrize("consistent_read", [True, False])
-async def test_scan(
-    client: Client, table: TableName, consistent_read: Optional[bool]
-) -> None:
+async def test_scan(client: Client, table: TableName, consistent_read: bool) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
     items = [item1, item2]
@@ -369,7 +364,7 @@ async def test_query_with_limit(client: Client, prefilled_table: TableName) -> N
 
 @pytest.mark.parametrize("consistent_read", [True, False])
 async def test_query_single_page(
-    client: Client, prefilled_table: TableName, consistent_read: Optional[bool]
+    client: Client, prefilled_table: TableName, consistent_read: bool
 ) -> None:
     first_page = await client.query_single_page(
         prefilled_table, HashKey("h", "h"), consistent_read=consistent_read
@@ -389,7 +384,7 @@ async def test_query_single_page(
 
 @pytest.mark.parametrize("consistent_read", [True, False])
 async def test_scan_single_page(
-    client: Client, prefilled_table: TableName, consistent_read: Optional[bool]
+    client: Client, prefilled_table: TableName, consistent_read: bool
 ) -> None:
     first_page = await client.scan_single_page(
         prefilled_table, consistent_read=consistent_read
