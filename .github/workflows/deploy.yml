@@ -30,4 +30,4 @@ jobs:
     - name: pypi deployments
       run: |
         python setup.py sdist
-        twine upload --repository testpypi --skip-existing dist/ted_chou12-*.tar.gz -u __token__ -p ${{ secrets.PYPI_TOKEN }}
+        twine upload --repository testpypi --skip-existing dist/aiodynamo-*.tar.gz -u __token__ -p ${{ secrets.PYPI_TOKEN }}
