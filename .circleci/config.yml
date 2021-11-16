@@ -37,25 +37,25 @@ commands:
       - run: poetry publish
 
 jobs:
-  test_py37:
+  py37:
     executor:
       name: python
       version: "3.7"
     steps:
       - runtests
-  test_py38:
+  py38:
     executor:
       name: python
       version: "3.8"
     steps:
       - runtests
-  test_py39:
+  py39:
     executor:
       name: python
       version: "3.9"
     steps:
       - runtests
-  test_py310:
+  py310:
     executor:
       name: python
       version: "3.10"
@@ -77,16 +77,16 @@ jobs:
 workflows:
   build_and_deploy:
     jobs:
-      - test_py37
-      - test_py38
-      - test_py39
-      - test_py310
+      - py37
+      - py38
+      - py39
+      - py310
       - deploy:
           requires:
-            - test_py37
-            - test_py38
-            - test_py39
-            - test_py310
+            - py37
+            - py38
+            - py39
+            - py310
           filters:
             branches:
               only:
