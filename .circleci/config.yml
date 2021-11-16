@@ -28,6 +28,14 @@ commands:
           destination: reports
       - store_test_results:
           path: reports/results/
+  deploy:
+    steps:
+      - checkout
+      - run: pip install poetry
+      - run: poetry build
+      - run: poetry config pypi-token.pypi ${PYPI_TOKEN}
+      - run: poetry publish
+
 jobs:
   py37:
     executor:
@@ -53,10 +61,27 @@ jobs:
       version: "3.10"
     steps:
       - runtests
+  deploy:
+    executor:
+      name: python
+      version: "3.8"
+    steps:
+      - deploy
+
 workflows:
-  build:
+  build_and_deploy:
     jobs:
       - py37
       - py38
       - py39
       - py310
+      - deploy:
+          requires:
+            - py37
+            - py38
+            - py39
+            - py310
+          filters:
+            branches:
+              only:
+                - master
