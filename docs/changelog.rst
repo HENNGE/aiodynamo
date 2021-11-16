@@ -1,8 +1,14 @@
 Changelog
 =========
 
-UNRELEASED
-----------
+21.11
+-----
+
+Release Date: November 16th, 2021
+
+* Added support for Python 3.10
+* Added :py:meth:`aiodynamo.client.Client.scan_count`
+* Added support for consistent reads
 
 21.10
 -----
