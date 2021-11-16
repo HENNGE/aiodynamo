@@ -29,7 +29,7 @@ jobs:
 
     - name: Configure poetry
       run: |
-        poetry config repositories.aiodynamo https://test.pypi.org/legacy/
+        poetry config repositories.test-pypi https://test.pypi.org/legacy/
         poetry config pypi-token.test-pypi ${{ secrets.PYPI_TOKEN }}
 
 
