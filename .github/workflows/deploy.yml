@@ -29,11 +29,10 @@ jobs:
 
     - name: Configure poetry
       run: |
-        poetry config repositories.test-pypi https://test.pypi.org/legacy/
-        poetry config pypi-token.test-pypi ${{ secrets.PYPI_TOKEN }}
+        poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
 
 
     - name: pypi deployments
       run: |
         poetry build
-        poetry publish -r test-pypi
+        poetry publish
