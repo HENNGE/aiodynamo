@@ -25,9 +25,15 @@ jobs:
     - name: Install packages
       run: |
         sudo apt-get install libpq-dev -y
-        python3 -m pip install wheel twine setuptools
+        python3 -m pip install wheel twine setuptools poetry
+
+    - name: Configure poetry
+      run: |
+        poetry config repositories.aiodynamo https://test.pypi.org/legacy/
+        poetry config pypi-token.test-pypi ${{ secrets.PYPI_TOKEN }}
+
 
     - name: pypi deployments
       run: |
-        python setup.py sdist
-        twine upload --repository testpypi --skip-existing dist/aiodynamo-*.tar.gz -u __token__ -p ${{ secrets.PYPI_TOKEN }}
+        poetry build
+        poetry publish -r test-pypi
