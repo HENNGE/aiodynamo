@@ -64,6 +64,10 @@ class TableInUse(AIODynamoError):
     pass
 
 
+class ResourceInUse(AIODynamoError):
+    pass
+
+
 class GlobalTableAlreadyExists(AIODynamoError):
     pass
 
@@ -173,6 +177,7 @@ ERRORS = {
     "ThrottlingException": Throttled,
     "ValidationException": ValidationException,
     "ExpiredTokenException": ExpiredToken,
+    "ResourceInUseException": ResourceInUse,
 }
 
 
