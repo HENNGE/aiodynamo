@@ -71,3 +71,25 @@ def test_hash_key_encoding(hash_key, encoded, ean, eav):
     payload = params.to_request_payload()
     assert payload["ExpressionAttributeNames"] == ean
     assert payload["ExpressionAttributeValues"] == eav
+
+
+@pytest.mark.parametrize(
+    "lhs,rhs,eq",
+    [
+        (F("foo"), F("foo"), True),
+        (F("foo"), F("bar"), False),
+        (F("foo"), True, False),
+        (F("foo", 1, "bar"), F("foo", 1, "bar"), True),
+        (F("foo", 1, "bar"), F("foo", 2, "bar"), False),
+        (F("foo", 1, "bar"), F("foo", 1, "baz"), False),
+    ],
+)
+def test_f_eq(lhs, rhs, eq):
+    assert (lhs == rhs) is eq
+
+
+@pytest.mark.parametrize(
+    "f,r", [(F("foo"), "F(foo)"), (F("foo", 1, "bar"), "F(foo.1.bar)")]
+)
+def test_f_repr(f, r):
+    assert repr(f) == r

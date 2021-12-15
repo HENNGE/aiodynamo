@@ -55,6 +55,13 @@ class F(ProjectionExpression):
     def __init__(self, root: str, *path: Union[str, int]):
         self.path = KeyPath(root, path)
 
+    def __repr__(self) -> str:
+        bits = ".".join(map(str, (self.path.root, *self.path.parts)))
+        return f"F({bits})"
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, F) and self.path == other.path
+
     def __hash__(self) -> int:
         return hash(self.path)
 
@@ -170,30 +177,26 @@ class F(ProjectionExpression):
         """
         Set a field to a value.
         """
-        if isinstance(value, (bytes, str)) and not value:
-            return UpdateExpression(remove={self})
-        return UpdateExpression(set_updates={self: Value(value)})
+        return UpdateExpression(set_updates=[(self, Value(value))])
 
     def set_if_not_exists(self, value: Any) -> UpdateExpression:
         """
         Set a field to a value if the field does not exist in the item yet.
         """
-        if isinstance(value, (bytes, str)) and not value:
-            return UpdateExpression()
-        return UpdateExpression(set_updates={self: IfNotExists(value)})
+        return UpdateExpression(set_updates=[(self, IfNotExists(value))])
 
     def change(self, diff: Numeric) -> UpdateExpression:
         """
         Change a numeric field by a given value.
         """
-        return UpdateExpression(set_updates={self: Modify(diff)})
+        return UpdateExpression(set_updates=[(self, Modify(diff))])
 
     def append(self, value: List[Any]) -> UpdateExpression:
         """
         Add items to a list field. Note that the value passed in should be a
         list, not an individual item.
         """
-        return UpdateExpression(set_updates={self: Append(list(value))})
+        return UpdateExpression(set_updates=[(self, Append(list(value)))])
 
     def remove(self) -> UpdateExpression:
         """
@@ -211,13 +214,13 @@ class F(ProjectionExpression):
         """
         if self.path.parts:
             raise CannotAddToNestedField()
-        return UpdateExpression(add={self: value})
+        return UpdateExpression(add=[(self, value)])
 
     def delete(self, value: Set[Any]) -> UpdateExpression:
         """
         Deletes all items in the set provided from the set stored in this field.
         """
-        return UpdateExpression(delete={self: value})
+        return UpdateExpression(delete=[(self, value)])
 
 
 class KeyCondition(metaclass=abc.ABCMeta):
@@ -587,19 +590,19 @@ class Append(SetAction):
 
 @dataclass(frozen=True)
 class UpdateExpression:
-    set_updates: Dict[F, SetAction] = field(default_factory=dict)
+    set_updates: List[Tuple[F, SetAction]] = field(default_factory=list)
     remove: Set[F] = field(default_factory=set)
-    add: Dict[F, Addable] = field(default_factory=dict)
-    delete: Dict[F, Union[Set[bytes], Set[Numeric], Set[str]]] = field(
-        default_factory=dict
+    add: List[Tuple[F, Addable]] = field(default_factory=list)
+    delete: List[Tuple[F, Union[Set[bytes], Set[Numeric], Set[str]]]] = field(
+        default_factory=list
     )
 
     def __and__(self, other: UpdateExpression) -> UpdateExpression:
         return UpdateExpression(
-            set_updates={**self.set_updates, **other.set_updates},
+            set_updates=[*self.set_updates, *other.set_updates],
             remove=self.remove.union(other.remove),
-            add={**self.add, **other.add},
-            delete={**self.delete, **other.delete},
+            add=[*self.add, *other.add],
+            delete=[*self.delete, *other.delete],
         )
 
     def encode(self, params: Parameters) -> Optional[str]:
@@ -607,7 +610,7 @@ class UpdateExpression:
         if self.set_updates:
             set_expr = ", ".join(
                 f"{params.encode_path(field.path)} = {action.encode(params, field)}"
-                for field, action in self.set_updates.items()
+                for field, action in self.set_updates
             )
             bits.append(f"SET {set_expr}")
         if self.remove:
@@ -618,13 +621,13 @@ class UpdateExpression:
         if self.add:
             add_expr = ", ".join(
                 f"{params.encode_path(field.path)} {params.encode_value(value)}"
-                for field, value in self.add.items()
+                for field, value in self.add
             )
             bits.append(f"ADD {add_expr}")
         if self.delete:
             del_expr = ", ".join(
                 f"{params.encode_path(field.path)} {params.encode_value(value)}"
-                for field, value in self.delete.items()
+                for field, value in self.delete
             )
             bits.append(f"DELETE {del_expr}")
         if bits:
