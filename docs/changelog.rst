@@ -6,6 +6,7 @@ Changelog
 
 Release Date: December 20th, 2021
 
+* **Breaking Change** :py:meth:`aiodynamo.expressions.F.set` no longer treats empty strings or empty bytes are removes.
 * :py:class:`aiodynamo.expressions.F` now supports ``__eq__`` and `__repr__``
 * Added :py:class:`aiodynamo.errors.ResourceInUse`
 
