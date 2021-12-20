@@ -1,6 +1,14 @@
 Changelog
 =========
 
+21.12
+-----
+
+Release Date: December 20th, 2021
+
+* :py:class:`aiodynamo.expressions.F` now supports ``__eq__`` and `__repr__``
+* Added :py:class:`aiodynamo.errors.ResourceInUse`
+
 21.11
 -----
 
