@@ -13,7 +13,7 @@ from typing import Callable, Optional, Sequence, TypeVar
 
 from yarl import URL
 
-from .http.base import HTTP, Headers
+from .http.types import HttpImplementation, Request, RequestFailed
 from .types import Timeout
 from .utils import logger, parse_amazon_timestamp
 
@@ -41,7 +41,7 @@ class Credentials(metaclass=abc.ABCMeta):
         )
 
     @abc.abstractmethod
-    async def get_key(self, http: HTTP) -> Optional[Key]:
+    async def get_key(self, http: HttpImplementation) -> Optional[Key]:
         """
         Return a Key if one could be found.
         """
@@ -75,7 +75,7 @@ class StaticCredentials(Credentials):
 
     key: Optional[Key]
 
-    async def get_key(self, http: HTTP) -> Optional[Key]:
+    async def get_key(self, http: HttpImplementation) -> Optional[Key]:
         return self.key
 
     def invalidate(self) -> bool:
@@ -98,7 +98,7 @@ class ChainCredentials(Credentials):
             candidate for candidate in candidates if not candidate.is_disabled()
         ]
 
-    async def get_key(self, http: HTTP) -> Optional[Key]:
+    async def get_key(self, http: HttpImplementation) -> Optional[Key]:
         for candidate in self.candidates:
             try:
                 key = await candidate.get_key(http)
@@ -136,7 +136,7 @@ class EnvironmentCredentials(Credentials):
         except KeyError:
             self.key = None
 
-    async def get_key(self, http: HTTP) -> Optional[Key]:
+    async def get_key(self, http: HttpImplementation) -> Optional[Key]:
         return self.key
 
     def invalidate(self) -> bool:
@@ -191,7 +191,7 @@ class FileCredentials(Credentials):
                 "Profile %r in %r does not contain credentials", profile_name, path
             )
 
-    async def get_key(self, http: HTTP) -> Optional[Key]:
+    async def get_key(self, http: HttpImplementation) -> Optional[Key]:
         return self.key
 
     def invalidate(self) -> bool:
@@ -230,34 +230,14 @@ class Metadata:
 
 class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    async def fetch_metadata(self, http: HTTP) -> Metadata:
+    async def fetch_metadata(self, http: HttpImplementation) -> Metadata:
         pass
-
-    async def fetch_with_retry(
-        self,
-        *,
-        http: HTTP,
-        max_attempts: int,
-        url: URL,
-        timeout: Timeout,
-        headers: Optional[Headers] = None,
-    ) -> bytes:
-        for attempt in range(max_attempts):
-            try:
-                response = await http.get(url=url, headers=headers, timeout=timeout)
-            except Exception:
-                logger.exception("GET failed")
-                continue
-            if response:
-                logger.debug("fetched metadata %s bytes", len(response))
-                return response
-        raise TooManyRetries()
 
     def __post_init__(self) -> None:
         self._metadata: Optional[Metadata] = None
         self._refresher: Optional[asyncio.Task[None]] = None
 
-    async def get_key(self, http: HTTP) -> Optional[Key]:
+    async def get_key(self, http: HttpImplementation) -> Optional[Key]:
         if self.is_disabled():
             logger.debug("%r is disabled", self)
             return None
@@ -293,7 +273,7 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
             return Refresh.required
         return self._metadata.check_refresh()
 
-    async def _refresh(self, http: HTTP) -> None:
+    async def _refresh(self, http: HttpImplementation) -> None:
         self._metadata = await self.fetch_metadata(http)
         logger.debug("fetched metadata %r", self._metadata)
 
@@ -346,16 +326,17 @@ class ContainerMetadataCredentials(MetadataCredentials):
     def is_disabled(self) -> bool:
         return self.url is None
 
-    async def fetch_metadata(self, http: HTTP) -> Metadata:
+    async def fetch_metadata(self, http: HttpImplementation) -> Metadata:
         headers = and_then(self.auth_token, lambda token: {"Authorization": token})
         if self.url is None:
             raise Disabled()
-        response = await self.fetch_with_retry(
+        response = await fetch_with_retry_and_timeout(
             http=http,
             max_attempts=self.max_attempts,
-            url=self.url,
-            headers=headers,
             timeout=self.timeout,
+            request=Request(
+                method="GET", url=str(self.url), headers=headers, body=None
+            ),
         )
         data = json.loads(response)
         return Metadata(
@@ -388,26 +369,30 @@ class InstanceMetadataCredentials(MetadataCredentials):
     def is_disabled(self) -> bool:
         return self.disabled
 
-    async def fetch_metadata(self, http: HTTP) -> Metadata:
+    async def fetch_metadata(self, http: HttpImplementation) -> Metadata:
         role_url = self.base_url.with_path(
             "/latest/meta-data/iam/security-credentials/"
         )
         role = (
-            await self.fetch_with_retry(
+            await fetch_with_retry_and_timeout(
                 http=http,
                 max_attempts=self.max_attempts,
-                url=role_url,
                 timeout=self.timeout,
+                request=Request(
+                    method="GET", url=str(role_url), headers=None, body=None
+                ),
             )
         ).decode("utf-8")
         credentials_url = self.base_url.with_path(
             f"/latest/meta-data/iam/security-credentials/{role}"
         )
-        raw_credentials = await self.fetch_with_retry(
+        raw_credentials = await fetch_with_retry_and_timeout(
             http=http,
             max_attempts=self.max_attempts,
-            url=credentials_url,
             timeout=self.timeout,
+            request=Request(
+                method="GET", url=str(credentials_url), headers=None, body=None
+            ),
         )
         credentials = json.loads(raw_credentials)
         return Metadata(
@@ -422,3 +407,31 @@ class InstanceMetadataCredentials(MetadataCredentials):
 
 class TooManyRetries(Exception):
     pass
+
+
+async def fetch_with_retry_and_timeout(
+    *,
+    http: HttpImplementation,
+    max_attempts: int,
+    timeout: Timeout,
+    request: Request,
+) -> bytes:
+    exception: Optional[Exception] = None
+    for _ in range(max_attempts):
+        try:
+            response = await asyncio.wait_for(http(request), timeout)
+        except asyncio.TimeoutError:
+            logger.debug("timed out talking to metadata service")
+            continue
+        except RequestFailed as exc:
+            logger.debug("request to metadata service failed")
+            exception = exc.inner
+            continue
+        logger.debug(
+            "fetched metadata %s (%s bytes)", response.status, len(response.body)
+        )
+        if response.status == 200:
+            return response.body
+    if exception is not None:
+        raise exception
+    raise TooManyRetries()

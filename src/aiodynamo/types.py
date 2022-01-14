@@ -1,12 +1,9 @@
 import decimal
-import sys
 from enum import Enum
-from typing import Any, Callable, Dict, List, Union
+from typing import Any, Dict, List, Union
 
-if sys.version_info >= (3, 8):
-    from typing import TypedDict
-else:
-    from typing_extensions import TypedDict
+from ._compat import TypedDict
+from ._mypy_hacks import FixedCallable
 
 Timeout = Union[float, int]
 Numeric = Union[float, int, decimal.Decimal]
@@ -21,8 +18,9 @@ class ParametersDict(TypedDict, total=False):
     ExpressionAttributeValues: Dict[str, Dict[str, Any]]
 
 
-Timespan = Union[float, int]
 NOTHING = object()
+
+Seconds = Union[float, int]
 
 
 class AttributeType(Enum):
@@ -85,4 +83,4 @@ class EncodedStreamSpecification(EncodedStreamSpecificationRequired, total=False
 SIMPLE_TYPES = frozenset({AttributeType.boolean, AttributeType.string})
 
 
-NumericTypeConverter = Callable[[str], Any]
+NumericTypeConverter = FixedCallable[str, Any]

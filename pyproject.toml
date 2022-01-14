@@ -33,17 +33,20 @@ aiohttp = ["aiohttp"]
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.0"
-pytest-asyncio = "^0.14"
+pytest-asyncio = "^0.17"
 pytest-cov = "^2.6"
 black = {version = "^21.5b0",allow-prereleases = true}
-sphinx = "^3.3"
+sphinx = "^4.3"
 pyperf = "^2.0"
 boto3 = "^1.12.18"
 freezegun = "^1.0"
-# using git version due to https://github.com/python/mypy/issues/10711
-mypy = { git = "https://github.com/python/mypy.git", rev = "84504b0"}
+mypy = "0.931"
 pyfakefs = "^4.3.2"
 isort = "^5.8.0"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = "tests"
 
 [tool.isort]
 line_length = "88"

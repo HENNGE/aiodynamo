@@ -1,51 +1,24 @@
-import json
-from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, Optional, cast
+from typing import Dict, cast
 
-from httpx import AsyncClient, HTTPError
-from yarl import URL
+import httpx
 
-from aiodynamo.types import Timeout
-
-from ..errors import exception_from_response
-from .base import HTTP, Headers, RequestFailed
-
-
-@contextmanager
-def wrap_errors() -> Iterator[None]:
-    try:
-        yield
-    except HTTPError:
-        raise RequestFailed()
+from .types import Request, RequestFailed, Response
 
 
 @dataclass(frozen=True)
-class HTTPX(HTTP):
-    client: AsyncClient
+class HTTPX:
+    client: httpx.AsyncClient
 
-    async def get(
-        self, *, url: URL, headers: Optional[Headers] = None, timeout: Timeout
-    ) -> bytes:
-        with wrap_errors():
-            # FIXME: the `or {}` is not needed but httpx type hints are wrong
-            response = await self.client.get(
-                str(url), headers=headers or {}, timeout=timeout
+    async def __call__(self, request: Request) -> Response:
+        try:
+            response = await self.client.request(
+                method=request.method,
+                url=request.url,
+                # httpx is coded with no_implicit_optionals=false, we use strict=true
+                headers=cast(Dict[str, str], request.headers),
+                content=cast(bytes, request.body),
             )
-            if response.status_code >= 400:
-                raise RequestFailed()
-            return await response.aread()
-
-    async def post(
-        self, *, url: URL, body: bytes, headers: Optional[Headers] = None
-    ) -> Dict[str, Any]:
-        with wrap_errors():
-            # FIXME: the `or {}` is not needed but httpx type hints are wrong
-            response = await self.client.post(
-                str(url), content=body, headers=headers or {}
-            )
-            if response.status_code >= 400:
-                raise exception_from_response(
-                    response.status_code, await response.aread()
-                )
-            return cast(Dict[str, Any], json.loads(await response.aread()))
+            return Response(response.status_code, await response.aread())
+        except httpx.HTTPError as exc:
+            raise RequestFailed(exc)

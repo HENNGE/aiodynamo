@@ -1,16 +1,31 @@
+from __future__ import annotations
+
 import base64
 import datetime
 import decimal
 import logging
 from collections import abc as collections_abc
 from functools import reduce
-from typing import Any, Callable, Dict, List, Mapping, Set, Tuple, TypeVar, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from .types import DynamoItem, Item, NumericTypeConverter
 
+if TYPE_CHECKING:
+    from .models import RetryConfig
+
 T = TypeVar("T")
-
-
 logger = logging.getLogger("aiodynamo")
 
 
@@ -153,3 +168,21 @@ def parse_amazon_timestamp(timestamp: str) -> datetime.datetime:
     return datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
         tzinfo=datetime.timezone.utc
     )
+
+
+async def wait(
+    config: Union[bool, RetryConfig], check: Callable[[], Awaitable[bool]]
+) -> bool:
+    from .models import RetryConfig, RetryTimeout
+
+    if not config:
+        return True
+    if not isinstance(config, RetryConfig):
+        config = RetryConfig.default_wait_config()
+    try:
+        async for _ in config.attempts():
+            if await check():
+                return True
+    except RetryTimeout:
+        return False
+    return False
