@@ -56,7 +56,6 @@ export BENCH_TABLE_NAME="foobar"
 export BENCH_KEY_FIELD="foobar"
 export BENCH_KEY_VALUE="foobar"
 export BENCH_REGION_NAME="us-east-1"
-export BENCH_RANGE_KEY_NAME="quux"
 ```
 
 A script `fill_db.py` is provided to fill up one shard in this table.

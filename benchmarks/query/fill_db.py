@@ -7,13 +7,12 @@ from pyperf import Runner
 from aiodynamo.client import Client, URL
 from aiodynamo.credentials import Credentials
 from aiodynamo.http.aiohttp import AIOHTTP
-from utils import TABLE_NAME, KEY_FIELD, KEY_VALUE, REGION_NAME, ENDPOINT_URL, RANGE_KEY_NAME
+from utils import TABLE_NAME, KEY_FIELD, KEY_VALUE, REGION_NAME, ENDPOINT_URL
 
 
 DUMP = {f"field-%i": f"value-%i" for i in range(100)}
 
 async def inner():
-    assert RANGE_KEY_NAME, "Please provide `BENCH_RANGE_KEY_NAME` environment variable"
     async with ClientSession() as session:
         client = Client(
             AIOHTTP(session),
