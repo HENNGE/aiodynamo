@@ -47,6 +47,11 @@ Credentials Loader Changes
 The internal, undocumented method ``fetch_with_retry`` in :py:class:`aiodynamo.credentials.Credentials` has
 been removed.
 
+Fixes
+~~~~~
+
+* :py:class:`aiodynamo.credentials.FileCredentials` now supports session tokens
+
 21.12
 -----
 

@@ -201,6 +201,7 @@ async def test_file_credentials(fs, http):
             [my-profile]
             aws_access_key_id=custom-baz
             aws_secret_access_key=custom-hoge
+            aws_session_token=custom-token
             """
         ),
     )
@@ -209,4 +210,6 @@ async def test_file_credentials(fs, http):
     assert await credentials.get_key(http) == Key(id="custom-foo", secret="custom-bar")
     credentials = FileCredentials(path=custom_path, profile_name="my-profile")
     assert not credentials.is_disabled()
-    assert await credentials.get_key(http) == Key(id="custom-baz", secret="custom-hoge")
+    assert await credentials.get_key(http) == Key(
+        id="custom-baz", secret="custom-hoge", token="custom-token"
+    )
