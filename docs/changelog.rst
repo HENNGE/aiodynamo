@@ -1,10 +1,10 @@
 Changelog
 =========
 
-22.02
------
+22.2
+----
 
-Unreleased
+Release Date: February 3rd, 2022
 
 Breaking Changes
 ~~~~~~~~~~~~~~~~
