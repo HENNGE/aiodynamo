@@ -185,6 +185,7 @@ class FileCredentials(Credentials):
             self.key = Key(
                 id=profile["aws_access_key_id"],
                 secret=profile["aws_secret_access_key"],
+                token=profile.get("aws_session_token", None),
             )
         except KeyError:
             logger.exception(
