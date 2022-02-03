@@ -86,7 +86,7 @@ Compare the following two calls::
         )
     )
 
-HTTP Client Library independence
+HTTP Client Library Independence
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 While aiodynamo has built in support for some versions of aiohttp and httpx, you can use any async HTTP client

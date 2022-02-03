@@ -15,7 +15,7 @@ class HTTPX:
             response = await self.client.request(
                 method=request.method,
                 url=request.url,
-                # httpx is coded with no_implicit_optionals=false, we use strict=true
+                # httpx is coded with no_implicit_optional=False, we use strict=True
                 headers=cast(Dict[str, str], request.headers),
                 content=cast(bytes, request.body),
             )
