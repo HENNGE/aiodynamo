@@ -3,7 +3,7 @@ Advanced
 
 .. _http_adaptor:
 
-Custom HTTP client adaptor
+Custom HTTP Client Adaptor
 --------------------------
 
 Aiodynamo is not strongly tied to any HTTP client library or version thereof. Default
@@ -47,11 +47,11 @@ argument. If the HTTP client library handles timeouts, those timeouts should rai
 
 .. _credentials_loader:
 
-Custom Credentials loader
+Custom Credentials Loader
 -------------------------
 
 If the methods to load credentials provided by aiodynamo are not sufficient for
-your use case, you can tell aiodynamo how to load credetnials by creating a class
+your use case, you can tell aiodynamo how to load credentials by creating a class
 which conforms to the :py:class:`aiodynamo.credentials.Credentials` interface.
 
 .. autoclass:: aiodynamo.credentials.Credentials

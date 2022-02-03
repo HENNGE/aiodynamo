@@ -15,7 +15,7 @@ The :py:class:`aiodynamo.client.Client` class takes three required and three opt
 3. The region your DynamoDB is in.
 4. An optional endpoint URL of your DynamoDB, as a :py:class:`yarl.URL` instance. Useful when using a local DynamoDB implementation such as dynalite or dynamodb-local.
 5. Which numeric type to use. This should be a callable which accepts a string as input and returns your numeric type as output. Defaults to ``float``.
-6. The throttling configuration to use. An instance of :py:class:`aiodynamo.models.ThrottleConfig`. By default, if the DynamoDB rate limit is exceeded, aiodynamo will retry up for up to one minute with increasing delays.
+6. The throttling configuration to use. An instance of :py:class:`aiodynamo.models.RetryConfig`. By default, if the DynamoDB rate limit is exceeded, aiodynamo will retry up for up to one minute with increasing delays.
 
 Credentials
 -----------
@@ -365,9 +365,8 @@ Models
     :members: keys_only, new_image, old_image, new_and_old_images
     :undoc-members:
 
-.. autoclass:: aiodynamo.models.WaitConfig
-    :members: max_attempts, retry_delay
-    :undoc-members:
+.. autoclass:: aiodynamo.models.RetryConfig
+    :members: time_limit_secs, default, default_wait_config, delays
 
 .. autoclass:: aiodynamo.models.ReturnValues
     :members: none, all_old, updated_old, all_new, updated_new

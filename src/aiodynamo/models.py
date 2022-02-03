@@ -203,14 +203,25 @@ class MyPyWorkaroundRetryConfigBase:
 class RetryConfig(MyPyWorkaroundRetryConfigBase, metaclass=abc.ABCMeta):
     @classmethod
     def default(cls) -> RetryConfig:
+        """
+        Default RetryConfig to be used as a throttle config for Client
+        """
         return ExponentialBackoffRetry()
 
     @classmethod
     def default_wait_config(cls) -> RetryConfig:
+        """
+        Default RetryConfig to be used as wait config for table level operations.
+        """
         return ExponentialBackoffRetry(time_limit_secs=500)
 
     @abc.abstractmethod
     def delays(self) -> Iterable[Seconds]:
+        """
+        Custom RetryConfig classes must implement this method. It should return
+        an iterable yielding numbers of seconds indicating the delay before the
+        next attempt is made.
+        """
         raise NotImplementedError()
 
     async def attempts(self) -> AsyncIterable[None]:
