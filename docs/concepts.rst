@@ -12,7 +12,7 @@ Credentials
 
 Since aiodynamo does not rely on botocore, it uses its own logic to load AWS credentials. There is built in support for
 loading them from environment variables, EC2 instance metadata APIs and ECS container metadata APIs, and they're loaded
-in that order of priority.
+in that order of priority. You may also provide :ref:`your own logic <credentials_loader>` to load credentials.
 
 Pythonic Argument Names
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -85,3 +85,9 @@ Compare the following two calls::
             write=2
         )
     )
+
+HTTP Client Library Independence
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+While aiodynamo has built in support for some versions of aiohttp and httpx, you can use any async HTTP client
+library you want by writing a small :ref:`adaptor <http_adaptor>` for it.

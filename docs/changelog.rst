@@ -1,6 +1,52 @@
 Changelog
 =========
 
+22.02
+-----
+
+Unreleased
+
+Breaking Changes
+~~~~~~~~~~~~~~~~
+
+HTTP Client Adaptor Interface
+*****************************
+
+The :ref:`HTTP Client Adaptor Interface <http_adaptor>` has changed completely.
+This change should only affect users who implement their own adaptor or use the interface
+directly, for example when implementing a custom :ref:`Credentials Loader <credentials_loader>`.
+
+Previously, the interface required the adaptor to be a class with two methods, one for GET and one for POST,
+with different semantics for both. Further, adaptors were required to handle DynamoDB errors themselves.
+This was confusing, led to issues with error handling and limited its use in Credential Loaders.
+
+The new interface is a callable which takes a :py:class:`aiodynamo.http.types.Request` and returns an awaitable
+:py:class:`aiodynamo.http.types.Response`.
+
+Both built-in adaptors still use the same interface for initialization, so no changes should be required by
+most users.
+
+Retry and Throttling Unification
+********************************
+
+Previously, aiodynamo had two very similar types to handle retrying and client side throttling:
+``aiodynamo.models.ThrottleConfig`` and ``aiodynamo.models.WaitConfig``. These have been combined
+into :py:class:`aiodynamo.models.RetryConfig`.
+
+``aiodynamo.models.ThrottleConfig`` was used to configure the :py:class:`aiodynamo.client.Client`
+and if you used a custom configuration, you will need to replace it with the equivalent :py:class:`aiodynamo.models.RetryConfig`
+implementation.
+
+``aiodynamo.models.WaitConfig`` was used in table-level operations such as :py:meth:`aiodynamo.client.Client.create_table`
+along others to wait for the table operation to actually complete. If you used a custom wait configuration,
+you will need to replace it with the equivalent :py:class:`aiodynamo.models.RetryConfig` implementation.
+
+Credentials Loader Changes
+**************************
+
+The internal, undocumented method ``fetch_with_retry`` in :py:class:`aiodynamo.credentials.Credentials` has
+been removed.
+
 21.12
 -----
 

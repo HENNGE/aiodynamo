@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 import uuid
-from typing import AsyncGenerator, Awaitable, Generator, Optional, Union
+from typing import AsyncGenerator, Generator, Union
 
 from httpx import AsyncClient
 
@@ -13,19 +13,22 @@ if sys.version_info >= (3, 8):
 else:
     from typing_extensions import Protocol
 
+from typing import Awaitable, Callable, Optional
+
 import pytest
 from yarl import URL
 
 from aiodynamo.client import Client
 from aiodynamo.credentials import Credentials
-from aiodynamo.http.base import HTTP
+from aiodynamo.http.types import HttpImplementation
 from aiodynamo.models import (
     KeySchema,
     KeySpec,
     KeyType,
     PayPerRequest,
+    RetryConfig,
+    StaticDelayRetry,
     Throughput,
-    WaitConfig,
 )
 
 
@@ -60,7 +63,9 @@ def region() -> str:
 
 
 @pytest.fixture()
-def client(http: HTTP, endpoint: URL, region: str) -> Generator[Client, None, None]:
+def client(
+    http: HttpImplementation, endpoint: URL, region: str
+) -> Generator[Client, None, None]:
     yield Client(
         http,
         Credentials.auto(),
@@ -69,25 +74,42 @@ def client(http: HTTP, endpoint: URL, region: str) -> Generator[Client, None, No
     )
 
 
+@pytest.fixture(scope="session")
+def wait_config(real_dynamo) -> RetryConfig:
+    return (
+        RetryConfig.default_wait_config()
+        if real_dynamo
+        else StaticDelayRetry(time_limit_secs=5, delay=0.5)
+    )
+
+
+@pytest.fixture(params=[True, False], scope="session")
+def consistent_read(request) -> bool:
+    return request.param
+
+
 async def _make_table(
-    client: Client, table_name_prefix: str, throughput: Union[Throughput, PayPerRequest]
+    client: Client,
+    table_name_prefix: str,
+    throughput: Union[Throughput, PayPerRequest],
+    wait_config: RetryConfig,
 ) -> str:
     name = table_name_prefix + str(uuid.uuid4())
     await client.create_table(
         name,
         throughput,
         KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
-        wait_for_active=WaitConfig(max_attempts=25, retry_delay=5),
+        wait_for_active=wait_config,
     )
     return name
 
 
-@pytest.fixture()
-async def table_factory(client: Client, table_name_prefix: str) -> TableFactory:
-    async def factory(
-        throughput: Union[Throughput, PayPerRequest] = Throughput(5, 5)
-    ) -> str:
-        return await _make_table(client, table_name_prefix, throughput)
+@pytest.fixture
+async def table_factory(
+    client: Client, table_name_prefix: str, wait_config: RetryConfig
+) -> Callable[[Optional[Throughput]], Awaitable[str]]:
+    async def factory(throughput: Throughput = Throughput(5, 5)) -> str:
+        return await _make_table(client, table_name_prefix, throughput, wait_config)
 
     return factory
 
@@ -104,7 +126,13 @@ async def table(
 
 
 @pytest.fixture(scope="session")
-def prefilled_table(endpoint: URL, region: str, table_name_prefix: str):
+def prefilled_table(
+    endpoint: URL,
+    region: str,
+    table_name_prefix: str,
+    wait_config: RetryConfig,
+    session_event_loop: asyncio.BaseEventLoop,
+):
     """
     Event loop is function scoped, so we can't use pytest-asyncio here.
     """
@@ -112,7 +140,9 @@ def prefilled_table(endpoint: URL, region: str, table_name_prefix: str):
     async def startup() -> str:
         async with AsyncClient() as session:
             client = Client(HTTPX(session), Credentials.auto(), region, endpoint)
-            name = await _make_table(client, table_name_prefix, Throughput(1000, 2500))
+            name = await _make_table(
+                client, table_name_prefix, Throughput(1000, 2500), wait_config
+            )
             big = "x" * 20_000
 
             await asyncio.gather(
@@ -130,11 +160,11 @@ def prefilled_table(endpoint: URL, region: str, table_name_prefix: str):
                 HTTPX(session), Credentials.auto(), region, endpoint
             ).delete_table(name)
 
-    name = asyncio.run(startup())
+    name = session_event_loop.run_until_complete(startup())
     try:
         yield name
     finally:
-        asyncio.run(shutdown(name))
+        session_event_loop.run_until_complete(shutdown(name))
 
 
 @pytest.fixture

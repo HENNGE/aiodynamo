@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import json
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Union
+from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Union, cast
 
 from yarl import URL
 
@@ -22,6 +23,7 @@ from .errors import (
     TableNotFound,
     Throttled,
     TimeToLiveStatusNotChanged,
+    exception_from_response,
 )
 from .expressions import (
     Condition,
@@ -30,7 +32,7 @@ from .expressions import (
     ProjectionExpression,
     UpdateExpression,
 )
-from .http.base import HTTP, RequestFailed
+from .http.types import HttpImplementation, Request, RequestFailed
 from .models import (
     BatchGetRequest,
     BatchGetResponse,
@@ -43,20 +45,20 @@ from .models import (
     LocalSecondaryIndex,
     Page,
     PayPerRequest,
+    RetryConfig,
+    RetryTimeout,
     ReturnValues,
     Select,
     StreamSpecification,
     TableDescription,
     TableStatus,
-    ThrottleConfig,
     Throughput,
     TimeToLiveDescription,
     TimeToLiveStatus,
-    WaitConfig,
 )
 from .sign import signed_dynamo_request
 from .types import Item, NumericTypeConverter, TableName
-from .utils import dy2py, logger, py2dy
+from .utils import dy2py, logger, py2dy, wait
 
 
 @dataclass(frozen=True)
@@ -64,14 +66,14 @@ class TimeToLive:
     table: Table
 
     async def enable(
-        self, attribute: str, *, wait_for_enabled: Union[bool, WaitConfig] = False
+        self, attribute: str, *, wait_for_enabled: Union[bool, RetryConfig] = False
     ) -> None:
         await self.table.client.enable_time_to_live(
             self.table.name, attribute, wait_for_enabled=wait_for_enabled
         )
 
     async def disable(
-        self, attribute: str, *, wait_for_disabled: Union[bool, WaitConfig] = False
+        self, attribute: str, *, wait_for_disabled: Union[bool, RetryConfig] = False
     ) -> None:
         await self.table.client.disable_time_to_live(
             self.table.name, attribute, wait_for_disabled=wait_for_disabled
@@ -97,7 +99,7 @@ class Table:
         lsis: Optional[List[LocalSecondaryIndex]] = None,
         gsis: Optional[List[GlobalSecondaryIndex]] = None,
         stream: Optional[StreamSpecification] = None,
-        wait_for_active: Union[bool, WaitConfig] = False,
+        wait_for_active: Union[bool, RetryConfig] = False,
     ) -> None:
         return await self.client.create_table(
             self.name,
@@ -117,7 +119,7 @@ class Table:
         return await self.client.describe_table(self.name)
 
     async def delete(
-        self, *, wait_for_disabled: Union[bool, WaitConfig] = False
+        self, *, wait_for_disabled: Union[bool, RetryConfig] = False
     ) -> None:
         return await self.client.delete_table(
             self.name, wait_for_disabled=wait_for_disabled
@@ -348,12 +350,12 @@ class Table:
 
 @dataclass(frozen=True)
 class Client:
-    http: HTTP
+    http: HttpImplementation
     credentials: Credentials
     region: str
     endpoint: Optional[URL] = None
     numeric_type: NumericTypeConverter = float
-    throttle_config: ThrottleConfig = ThrottleConfig.default()
+    throttle_config: RetryConfig = RetryConfig.default()
 
     def table(self, name: str) -> Table:
         return Table(self, name)
@@ -375,7 +377,7 @@ class Client:
         lsis: Optional[List[LocalSecondaryIndex]] = None,
         gsis: Optional[List[GlobalSecondaryIndex]] = None,
         stream: Optional[StreamSpecification] = None,
-        wait_for_active: Union[bool, WaitConfig] = False,
+        wait_for_active: Union[bool, RetryConfig] = False,
     ) -> None:
         attributes = keys.to_attributes()
         if lsis is not None:
@@ -402,19 +404,15 @@ class Client:
             payload["StreamSpecification"] = stream.encode()
 
         await self.send_request(action="CreateTable", payload=payload)
-        if wait_for_active:
-            wait_config = (
-                wait_for_active
-                if isinstance(wait_for_active, WaitConfig)
-                else WaitConfig.default()
-            )
-            async for _ in wait_config.attempts():
-                try:
-                    description = await self.describe_table(name)
-                    if description.status == TableStatus.active:
-                        return
-                except TableNotFound:
-                    pass
+
+        async def check() -> bool:
+            try:
+                description = await self.describe_table(name)
+                return description.status == TableStatus.active
+            except TableNotFound:
+                return False
+
+        if not await wait(wait_for_active, check):
             raise TableDidNotBecomeActive()
 
     async def enable_time_to_live(
@@ -422,7 +420,7 @@ class Client:
         table: TableName,
         attribute: str,
         *,
-        wait_for_enabled: Union[bool, WaitConfig] = False,
+        wait_for_enabled: Union[bool, RetryConfig] = False,
     ) -> None:
         await self.set_time_to_live(
             table, attribute, True, wait_for_change=wait_for_enabled
@@ -445,7 +443,7 @@ class Client:
         table: TableName,
         attribute: str,
         *,
-        wait_for_disabled: Union[bool, WaitConfig] = False,
+        wait_for_disabled: Union[bool, RetryConfig] = False,
     ) -> None:
         await self.set_time_to_live(
             table, attribute, False, wait_for_change=wait_for_disabled
@@ -457,7 +455,7 @@ class Client:
         attribute: str,
         status: bool,
         *,
-        wait_for_change: Union[bool, WaitConfig] = False,
+        wait_for_change: Union[bool, RetryConfig] = False,
     ) -> None:
         await self.send_request(
             action="UpdateTimeToLive",
@@ -469,19 +467,16 @@ class Client:
                 },
             },
         )
-        if wait_for_change:
-            result_state = (
-                TimeToLiveStatus.enabled if status else TimeToLiveStatus.disabled
-            )
-            wait_config = (
-                wait_for_change
-                if isinstance(wait_for_change, WaitConfig)
-                else WaitConfig.default()
-            )
-            async for _ in wait_config.attempts():
-                description = await self.describe_time_to_live(table)
-                if description.status == result_state:
-                    return
+
+        desired_result_state = (
+            TimeToLiveStatus.enabled if status else TimeToLiveStatus.disabled
+        )
+
+        async def check() -> bool:
+            description = await self.describe_time_to_live(table)
+            return description.status == desired_result_state
+
+        if not await wait(wait_for_change, check):
             raise TimeToLiveStatusNotChanged()
 
     async def describe_table(self, name: TableName) -> TableDescription:
@@ -565,20 +560,21 @@ class Client:
             return None
 
     async def delete_table(
-        self, table: TableName, *, wait_for_disabled: Union[bool, WaitConfig] = False
+        self,
+        table: TableName,
+        *,
+        wait_for_disabled: Union[bool, RetryConfig] = False,
     ) -> None:
         await self.send_request(action="DeleteTable", payload={"TableName": table})
-        if wait_for_disabled:
-            wait_config = (
-                wait_for_disabled
-                if isinstance(wait_for_disabled, WaitConfig)
-                else WaitConfig.default()
-            )
-            async for _ in wait_config.attempts():
-                try:
-                    await self.describe_table(table)
-                except TableNotFound:
-                    return
+
+        async def check() -> bool:
+            try:
+                await self.describe_table(table)
+            except TableNotFound:
+                return True
+            return False
+
+        if not await wait(wait_for_disabled, check):
             raise TableDidNotBecomeDisabled()
 
     async def get_item(
@@ -940,13 +936,13 @@ class Client:
         action: str,
         payload: Mapping[str, Any],
     ) -> Dict[str, Any]:
-        failed: Optional[Exception] = None
+        exception: Optional[Exception] = None
         try:
             async for _ in self.throttle_config.attempts():
                 key = await self.credentials.get_key(self.http)
                 if key is None:
                     logger.debug("no credentials found")
-                    failed = NoCredentialsFound()
+                    exception = NoCredentialsFound()
                     continue
                 request = signed_dynamo_request(
                     key=key,
@@ -955,29 +951,45 @@ class Client:
                     region=self.region,
                     endpoint=self.endpoint,
                 )
+                logger.debug("sending request %r", request)
                 try:
-                    logger.debug("sending request %r", request)
-                    return await self.http.post(
-                        url=request.url, headers=request.headers, body=request.body
+                    response = await self.http(
+                        Request(
+                            method="POST",
+                            url=str(request.url),
+                            headers=request.headers,
+                            body=request.body,
+                        )
                     )
-                except Throttled:
-                    logger.debug("request throttled")
-                except ProvisionedThroughputExceeded:
-                    logger.debug("provisioned throughput exceeded")
-                except ExpiredToken:
-                    logger.debug("token expired")
-                    if not self.credentials.invalidate():
-                        raise
+                except asyncio.TimeoutError as exc:
+                    logger.debug("http timeout")
+                    exception = exc
+                    continue
                 except RequestFailed as exc:
                     logger.debug("request failed")
-                    failed = exc
-                except ServiceUnavailable:
-                    logger.debug("service unavailable")
-                except InternalDynamoError:
-                    logger.debug("internal dynamo error")
-        except Throttled:
-            if failed is not None:
-                raise failed
+                    exception = exc.inner
+                    continue
+                logger.debug("got response %r", response)
+                if response.status >= 400:
+                    exception = exception_from_response(response.status, response.body)
+                    if isinstance(exception, Throttled):
+                        logger.debug("request throttled")
+                    elif isinstance(exception, ProvisionedThroughputExceeded):
+                        logger.debug("provisioned throughput exceeded")
+                    elif isinstance(exception, ExpiredToken):
+                        logger.debug("token expired")
+                        if not self.credentials.invalidate():
+                            raise
+                    elif isinstance(exception, ServiceUnavailable):
+                        logger.debug("service unavailable")
+                    elif isinstance(exception, InternalDynamoError):
+                        logger.debug("internal dynamo error")
+                    else:
+                        raise exception
+                return cast(Dict[str, Any], json.loads(response.body))
+        except RetryTimeout:
+            if exception is not None:
+                raise exception
             raise
         raise BrokenThrottleConfig()
 

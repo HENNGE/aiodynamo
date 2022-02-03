@@ -16,11 +16,11 @@ from aiodynamo.errors import (
     ValidationException,
 )
 from aiodynamo.expressions import F, HashKey, RangeKey
-from aiodynamo.http.base import HTTP
+from aiodynamo.http.types import HttpImplementation
 from aiodynamo.models import (
     BatchGetRequest,
     BatchWriteRequest,
-    ExponentialBackoffThrottling,
+    ExponentialBackoffRetry,
     GlobalSecondaryIndex,
     KeySchema,
     KeySpec,
@@ -28,19 +28,19 @@ from aiodynamo.models import (
     LocalSecondaryIndex,
     Projection,
     ProjectionType,
+    RetryConfig,
     ReturnValues,
     TableStatus,
     Throughput,
     TimeToLiveStatus,
-    WaitConfig,
 )
 from aiodynamo.types import TableName
 from tests.integration.conftest import TableFactory
 
-pytestmark = pytest.mark.asyncio
 
-
-async def test_create_table_with_indices(client: Client, table_name_prefix):
+async def test_create_table_with_indices(
+    client: Client, table_name_prefix: str, wait_config: RetryConfig
+):
     name = table_name_prefix + secrets.token_hex(4)
     await client.create_table(
         name,
@@ -65,11 +65,10 @@ async def test_create_table_with_indices(client: Client, table_name_prefix):
                 projection=Projection(ProjectionType.all),
             )
         ],
-        wait_for_active=WaitConfig(max_attempts=25, retry_delay=5),
+        wait_for_active=wait_config,
     )
 
 
-@pytest.mark.parametrize("consistent_read", [True, False])
 async def test_put_get_item(
     client: Client, table: TableName, consistent_read: bool
 ) -> None:
@@ -142,7 +141,6 @@ async def test_count(client: Client, table: TableName) -> None:
     )
 
 
-@pytest.mark.parametrize("consistent_read", [True, False])
 async def test_count_with_limit(
     client: Client, prefilled_table: TableName, consistent_read: bool
 ) -> None:
@@ -172,7 +170,6 @@ async def test_scan_count(client: Client, table: TableName) -> None:
     )
 
 
-@pytest.mark.parametrize("consistent_read", [True, False])
 async def test_scan_count_with_limit(
     client: Client, prefilled_table: TableName, consistent_read: bool
 ) -> None:
@@ -230,18 +227,17 @@ async def test_delete_item(client: Client, table: TableName) -> None:
         await client.get_item(table, item)
 
 
-async def test_delete_table(client: Client, table_factory: TableFactory) -> None:
+async def test_delete_table(
+    client: Client, table_factory: TableFactory, wait_config: RetryConfig
+) -> None:
     name = await table_factory()
     # no error
     await client.put_item(name, {"h": "h", "r": "r"})
-    await client.delete_table(
-        name, wait_for_disabled=WaitConfig(max_attempts=25, retry_delay=5)
-    )
+    await client.delete_table(name, wait_for_disabled=wait_config)
     with pytest.raises(Exception):
         await client.put_item(name, {"h": "h", "r": "r"})
 
 
-@pytest.mark.parametrize("consistent_read", [True, False])
 async def test_query(client: Client, table: TableName, consistent_read: bool) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
@@ -270,7 +266,6 @@ async def test_query_descending(client: Client, table: TableName) -> None:
     assert rv == list(reversed(items))
 
 
-@pytest.mark.parametrize("consistent_read", [True, False])
 async def test_scan(client: Client, table: TableName, consistent_read: bool) -> None:
     item1 = {"h": "h", "r": "1", "d": "x"}
     item2 = {"h": "h", "r": "2", "d": "y"}
@@ -362,7 +357,6 @@ async def test_query_with_limit(client: Client, prefilled_table: TableName) -> N
     assert items[0]["r"] == "0"
 
 
-@pytest.mark.parametrize("consistent_read", [True, False])
 async def test_query_single_page(
     client: Client, prefilled_table: TableName, consistent_read: bool
 ) -> None:
@@ -382,7 +376,6 @@ async def test_query_single_page(
     )
 
 
-@pytest.mark.parametrize("consistent_read", [True, False])
 async def test_scan_single_page(
     client: Client, prefilled_table: TableName, consistent_read: bool
 ) -> None:
@@ -516,13 +509,15 @@ async def test_comparison_condition_expression(
     assert item["v"] == "final"
 
 
-async def test_no_credentials(http: HTTP, endpoint: URL, region: str) -> None:
+async def test_no_credentials(
+    http: HttpImplementation, endpoint: URL, region: str
+) -> None:
     client = Client(
         http,
         ChainCredentials([]),
         region,
         endpoint,
-        throttle_config=ExponentialBackoffThrottling(time_limit_secs=1),
+        throttle_config=ExponentialBackoffRetry(time_limit_secs=1),
     )
     with pytest.raises(NoCredentialsFound):
         await client.get_item("no-table", {"key": "no-key"})

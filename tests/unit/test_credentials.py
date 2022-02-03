@@ -19,7 +19,7 @@ from aiodynamo.credentials import (
     Metadata,
 )
 
-pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("fs")]
+pytestmark = [pytest.mark.usefixtures("fs")]
 
 
 class InstanceMetadataServer:

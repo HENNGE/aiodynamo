@@ -8,19 +8,8 @@ import time
 from dataclasses import dataclass
 from enum import Enum, unique
 from itertools import count
-from typing import (
-    Any,
-    AsyncIterable,
-    AsyncIterator,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    cast,
-)
+from typing import Any, AsyncIterable, Dict, Iterable, Iterator, List, Optional, cast
 
-from .errors import Throttled
 from .expressions import Parameters, ProjectionExpression
 from .types import (
     EncodedGlobalSecondaryIndex,
@@ -31,8 +20,8 @@ from .types import (
     EncodedStreamSpecification,
     EncodedThroughput,
     Item,
+    Seconds,
     TableName,
-    Timespan,
 )
 from .utils import py2dy
 
@@ -201,33 +190,38 @@ class Select(Enum):
     specific_attributes = "SPECIFIC_ATTRIBUTES"
 
 
+class RetryTimeout(Exception):
+    pass
+
+
+# https://github.com/python/mypy/issues/5374
 @dataclass(frozen=True)
-class WaitConfig:
-    max_attempts: int
-    retry_delay: Timespan
+class MyPyWorkaroundRetryConfigBase:
+    time_limit_secs: Seconds = 60
+
+
+class RetryConfig(MyPyWorkaroundRetryConfigBase, metaclass=abc.ABCMeta):
+    @classmethod
+    def default(cls) -> RetryConfig:
+        """
+        Default RetryConfig to be used as a throttle config for Client
+        """
+        return ExponentialBackoffRetry()
 
     @classmethod
-    def default(cls) -> WaitConfig:
-        return WaitConfig(25, 20)
-
-    async def attempts(self) -> AsyncIterator[None]:
-        for _ in range(self.max_attempts):
-            yield
-            await asyncio.sleep(self.retry_delay)
-
-
-@dataclass(frozen=True)
-class MypyWorkaroundThrottleConfigBase:
-    time_limit_secs: Timespan = 60
-
-
-class ThrottleConfig(MypyWorkaroundThrottleConfigBase, metaclass=abc.ABCMeta):
-    @classmethod
-    def default(cls) -> ThrottleConfig:
-        return ExponentialBackoffThrottling()
+    def default_wait_config(cls) -> RetryConfig:
+        """
+        Default RetryConfig to be used as wait config for table level operations.
+        """
+        return ExponentialBackoffRetry(time_limit_secs=500)
 
     @abc.abstractmethod
-    def delays(self) -> Iterable[float]:
+    def delays(self) -> Iterable[Seconds]:
+        """
+        Custom RetryConfig classes must implement this method. It should return
+        an iterable yielding numbers of seconds indicating the delay before the
+        next attempt is made.
+        """
         raise NotImplementedError()
 
     async def attempts(self) -> AsyncIterable[None]:
@@ -235,16 +229,25 @@ class ThrottleConfig(MypyWorkaroundThrottleConfigBase, metaclass=abc.ABCMeta):
         for delay in self.delays():
             yield
             if time.monotonic() > deadline:
-                raise Throttled()
+                raise RetryTimeout()
             await asyncio.sleep(delay)
 
 
 @dataclass(frozen=True)
-class DecorrelatedJitterThrottling(ThrottleConfig):
-    base_delay_secs: Timespan = 0.05
-    max_delay_secs: Timespan = 1
+class StaticDelayRetry(RetryConfig):
+    delay: Seconds = 1
 
-    def delays(self) -> Iterator[Timespan]:
+    def delays(self) -> Iterable[Seconds]:
+        while True:
+            yield self.delay
+
+
+@dataclass(frozen=True)
+class DecorelatedJitterRetry(RetryConfig):
+    base_delay_secs: Seconds = 0.05
+    max_delay_secs: Seconds = 1
+
+    def delays(self) -> Iterable[Seconds]:
         current_delay_secs = self.base_delay_secs
         while True:
             current_delay_secs = min(
@@ -255,11 +258,11 @@ class DecorrelatedJitterThrottling(ThrottleConfig):
 
 
 @dataclass(frozen=True)
-class ExponentialBackoffThrottling(ThrottleConfig):
-    base_delay_secs: Timespan = 2
-    max_delay_secs: Timespan = 20
+class ExponentialBackoffRetry(RetryConfig):
+    base_delay_secs: Seconds = 2
+    max_delay_secs: Seconds = 20
 
-    def delays(self) -> Iterable[float]:
+    def delays(self) -> Iterable[Seconds]:
         for attempt in count():
             yield min(
                 random.random() * (self.base_delay_secs ** attempt), self.max_delay_secs
