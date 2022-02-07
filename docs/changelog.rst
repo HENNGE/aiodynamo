@@ -1,6 +1,14 @@
 Changelog
 =========
 
+22.2.1
+------
+
+Release Date: February 7th, 2022
+
+* Fixed a critical bug introduced in 22.2 where errors from DynamoDB were not
+  correctly handled when retrying requests.
+
 22.2
 ----
 
