@@ -936,6 +936,24 @@ class Client:
         action: str,
         payload: Mapping[str, Any],
     ) -> Dict[str, Any]:
+        """
+        Send a request to DynamoDB and handle retries if necessary.
+
+        The self.throttle_config.attempts() async iterable handles retries
+        by yielding each time we should do another attempt and raising
+        RetryTimeout once the time limit is reached.
+
+        In each iteration of the loop, we send a request to DynamoDB and check
+        its result. If it's good, we break out of the loop and return the parsed
+        JSON data to the caller.
+        If a non-200 status is returned, we determine the error type via
+        exception_from_response and check if we should retry. If we should retry,
+        log the error and go to the next iteration, otherwise raise the exception.
+        In either case, we store the last exception found so if we hit the retry
+        limit, we raise that exception.
+        If the loop never executed, we raise a BrokenThrottleConfig because
+        RetryConfig.attempts() should always yield at least once.
+        """
         exception: Optional[Exception] = None
         try:
             async for _ in self.throttle_config.attempts():
@@ -970,23 +988,23 @@ class Client:
                     exception = exc.inner
                     continue
                 logger.debug("got response %r", response)
-                if response.status >= 400:
-                    exception = exception_from_response(response.status, response.body)
-                    if isinstance(exception, Throttled):
-                        logger.debug("request throttled")
-                    elif isinstance(exception, ProvisionedThroughputExceeded):
-                        logger.debug("provisioned throughput exceeded")
-                    elif isinstance(exception, ExpiredToken):
-                        logger.debug("token expired")
-                        if not self.credentials.invalidate():
-                            raise
-                    elif isinstance(exception, ServiceUnavailable):
-                        logger.debug("service unavailable")
-                    elif isinstance(exception, InternalDynamoError):
-                        logger.debug("internal dynamo error")
-                    else:
+                if response.status == 200:
+                    return cast(Dict[str, Any], json.loads(response.body))
+                exception = exception_from_response(response.status, response.body)
+                if isinstance(exception, Throttled):
+                    logger.debug("request throttled")
+                elif isinstance(exception, ProvisionedThroughputExceeded):
+                    logger.debug("provisioned throughput exceeded")
+                elif isinstance(exception, ExpiredToken):
+                    logger.debug("token expired")
+                    if not self.credentials.invalidate():
                         raise exception
-                return cast(Dict[str, Any], json.loads(response.body))
+                elif isinstance(exception, ServiceUnavailable):
+                    logger.debug("service unavailable")
+                elif isinstance(exception, InternalDynamoError):
+                    logger.debug("internal dynamo error")
+                else:
+                    raise exception
         except RetryTimeout:
             if exception is not None:
                 raise exception
