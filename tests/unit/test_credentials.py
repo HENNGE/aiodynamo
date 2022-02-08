@@ -1,10 +1,13 @@
 import datetime
 from pathlib import Path
 from textwrap import dedent
+from typing import AsyncGenerator, Optional
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 from aiohttp import web
 from freezegun import freeze_time
+from pyfakefs.fake_filesystem import FakeFilesystem  # type: ignore[import]
 from yarl import URL
 
 from aiodynamo.credentials import (
@@ -18,23 +21,24 @@ from aiodynamo.credentials import (
     Key,
     Metadata,
 )
+from aiodynamo.http.types import HttpImplementation
 
 pytestmark = [pytest.mark.usefixtures("fs")]
 
 
 class InstanceMetadataServer:
-    def __init__(self):
+    def __init__(self) -> None:
         self.port = 0
-        self.role = None
-        self.metadata = None
+        self.role: Optional[str] = None
+        self.metadata: Optional[Metadata] = None
         self.calls = 0
 
-    async def role_handler(self, request):
+    async def role_handler(self, request: web.Request) -> web.Response:
         if self.role is None:
             raise web.HTTPNotFound()
         return web.Response(body=self.role.encode("utf-8"))
 
-    async def credentials_handler(self, request):
+    async def credentials_handler(self, request: web.Request) -> web.Response:
         self.calls += 1
         if self.role is None:
             raise web.HTTPNotFound()
@@ -56,7 +60,7 @@ class InstanceMetadataServer:
 
 
 @pytest.fixture
-async def instance_metadata_server():
+async def instance_metadata_server() -> AsyncGenerator[InstanceMetadataServer, None]:
     ims = InstanceMetadataServer()
     app = web.Application()
     app.add_routes(
@@ -74,12 +78,14 @@ async def instance_metadata_server():
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
     await site.start()
-    ims.port = site._server.sockets[0].getsockname()[1]
+    ims.port = site._server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
     yield ims
     await runner.cleanup()
 
 
-async def test_env_credentials(monkeypatch, http):
+async def test_env_credentials(
+    monkeypatch: MonkeyPatch, http: HttpImplementation
+) -> None:
     monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
     monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
     monkeypatch.delenv("AWS_SESSION_TOKEN", raising=False)
@@ -100,7 +106,11 @@ async def test_env_credentials(monkeypatch, http):
 
 
 @pytest.mark.parametrize("role", ["role", "arn:aws:iam::1234567890:role/test-role"])
-async def test_ec2_instance_metdata_credentials(http, instance_metadata_server, role):
+async def test_ec2_instance_metdata_credentials(
+    http: HttpImplementation,
+    instance_metadata_server: InstanceMetadataServer,
+    role: str,
+) -> None:
     imc = InstanceMetadataCredentials(
         timeout=0.1,
         base_url=URL("http://localhost").with_port(instance_metadata_server.port),
@@ -119,7 +129,9 @@ async def test_ec2_instance_metdata_credentials(http, instance_metadata_server, 
     assert await imc.get_key(http) == metadata.key
 
 
-async def test_simultaneous_credentials_refresh(http, instance_metadata_server):
+async def test_simultaneous_credentials_refresh(
+    http: HttpImplementation, instance_metadata_server: InstanceMetadataServer
+) -> None:
     instance_metadata_server.role = "hoge"
     now = datetime.datetime(2020, 3, 12, 15, 37, 51, tzinfo=datetime.timezone.utc)
     expires = now + EXPIRES_SOON_THRESHOLD - datetime.timedelta(seconds=10)
@@ -148,7 +160,7 @@ async def test_simultaneous_credentials_refresh(http, instance_metadata_server):
         assert instance_metadata_server.calls == 1
 
 
-async def test_disabled(monkeypatch):
+async def test_disabled(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
     monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
     monkeypatch.delenv("AWS_SESSION_TOKEN", raising=False)
@@ -168,7 +180,7 @@ async def test_disabled(monkeypatch):
     assert not creds.is_disabled()
 
 
-async def test_file_credentials(fs, http):
+async def test_file_credentials(fs: FakeFilesystem, http: HttpImplementation) -> None:
     assert FileCredentials().is_disabled()
     fs.create_file(
         Path.home().joinpath(".aws", "credentials"),

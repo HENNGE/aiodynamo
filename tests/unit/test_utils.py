@@ -1,14 +1,19 @@
 import base64
 from decimal import Decimal
 from functools import partial
+from typing import Any, Callable, Dict
 
 import pytest
-from boto3.dynamodb.types import DYNAMODB_CONTEXT, TypeDeserializer
+from boto3.dynamodb.types import (  # type: ignore[import]
+    DYNAMODB_CONTEXT,
+    TypeDeserializer,
+)
 
+from aiodynamo.types import NumericTypeConverter
 from aiodynamo.utils import deserialize, dy2py
 
 
-def test_binary_decode():
+def test_binary_decode() -> None:
     assert dy2py({"test": {"B": base64.b64encode(b"hello")}}, float) == {
         "test": b"hello"
     }
@@ -29,12 +34,14 @@ def test_binary_decode():
         ({"NS": ["1.2"]}, DYNAMODB_CONTEXT.create_decimal, {Decimal("1.2")}),
     ],
 )
-def test_numeric_decode(value, numeric_type, result):
+def test_numeric_decode(
+    value: Dict[str, Any], numeric_type: NumericTypeConverter, result: Any
+) -> None:
     assert deserialize(value, numeric_type) == result
 
 
-def test_serde_compatibility():
-    def generate_item(nest):
+def test_serde_compatibility() -> None:
+    def generate_item(nest: bool) -> Dict[str, Any]:
         item = {
             "hash": {
                 "S": "string",
@@ -59,11 +66,13 @@ def test_serde_compatibility():
 
     item = generate_item(True)
 
-    class BinaryDeserializer(TypeDeserializer):
-        def _deserialize_b(self, value):
+    class BinaryDeserializer(TypeDeserializer):  # type: ignore[misc]
+        def _deserialize_b(self, value: Any) -> bytes:
             return base64.b64decode(value)
 
-    def deserialize_item(item, deserializer):
+    def deserialize_item(
+        item: Dict[str, Any], deserializer: Callable[[Any], Any]
+    ) -> Dict[str, Any]:
         return {k: deserializer(v) for k, v in item.items()}
 
     fast = deserialize_item(

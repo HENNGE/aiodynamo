@@ -40,7 +40,7 @@ from tests.integration.conftest import TableFactory
 
 async def test_create_table_with_indices(
     client: Client, table_name_prefix: str, wait_config: RetryConfig
-):
+) -> None:
     name = table_name_prefix + secrets.token_hex(4)
     await client.create_table(
         name,

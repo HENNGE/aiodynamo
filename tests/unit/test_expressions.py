@@ -1,6 +1,14 @@
+from typing import Any, Dict
+
 import pytest
 
-from aiodynamo.expressions import F, HashKey, Parameters
+from aiodynamo.expressions import (
+    F,
+    HashKey,
+    Parameters,
+    ProjectionExpression,
+    UpdateExpression,
+)
 
 
 @pytest.mark.parametrize(
@@ -15,7 +23,9 @@ from aiodynamo.expressions import F, HashKey, Parameters
         ),
     ],
 )
-def test_project(pe, expression, names):
+def test_project(
+    pe: ProjectionExpression, expression: str, names: Dict[str, str]
+) -> None:
     params = Parameters()
     assert pe.encode(params) == expression
     payload = params.to_request_payload()
@@ -45,7 +55,9 @@ def test_project(pe, expression, names):
         ),
     ],
 )
-def test_update_expression(exp, ue, ean, eav):
+def test_update_expression(
+    exp: UpdateExpression, ue: str, ean: Dict[str, str], eav: Dict[str, Dict[str, Any]]
+) -> None:
     params = Parameters()
     assert exp.encode(params) == ue
     payload = params.to_request_payload()
@@ -65,7 +77,9 @@ def test_update_expression(exp, ue, ean, eav):
         ),
     ],
 )
-def test_hash_key_encoding(hash_key, encoded, ean, eav):
+def test_hash_key_encoding(
+    hash_key: HashKey, encoded: str, ean: Dict[str, str], eav: Dict[str, Dict[str, str]]
+) -> None:
     params = Parameters()
     assert hash_key.encode(params) == encoded
     payload = params.to_request_payload()
@@ -84,12 +98,12 @@ def test_hash_key_encoding(hash_key, encoded, ean, eav):
         (F("foo", 1, "bar"), F("foo", 1, "baz"), False),
     ],
 )
-def test_f_eq(lhs, rhs, eq):
+def test_f_eq(lhs: F, rhs: F, eq: bool) -> None:
     assert (lhs == rhs) is eq
 
 
 @pytest.mark.parametrize(
     "f,r", [(F("foo"), "F(foo)"), (F("foo", 1, "bar"), "F(foo.1.bar)")]
 )
-def test_f_repr(f, r):
+def test_f_repr(f: F, r: str) -> None:
     assert repr(f) == r

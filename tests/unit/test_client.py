@@ -1,4 +1,5 @@
 import json
+from typing import Any, Type
 
 import pytest
 
@@ -16,7 +17,7 @@ from aiodynamo.http.types import Request, Response
 from aiodynamo.models import StaticDelayRetry
 
 
-def bjson(data):
+def bjson(data: Any) -> bytes:
     return json.dumps(data).encode()
 
 
@@ -31,8 +32,8 @@ def bjson(data):
     ],
 )
 async def test_client_send_request_retryable_errors(
-    status, dynamo_error, aiodynamo_error
-):
+    status: int, dynamo_error: str, aiodynamo_error: Type[Exception]
+) -> None:
     async def http(request: Request) -> Response:
         return Response(
             status=status,

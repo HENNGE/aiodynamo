@@ -43,6 +43,7 @@ freezegun = "^1.0"
 mypy = "0.931"
 pyfakefs = "^4.3.2"
 isort = "^5.8.0"
+types-freezegun = "^1.1.6"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -54,6 +55,13 @@ multi_line_output = "3"
 combine_as_imports = "1"
 include_trailing_comma = "True"
 known_first_party = "aiodynamo"
+
+[tool.mypy]
+strict = true
+files = [
+    "src/",
+    "tests/",
+]
 
 [build-system]
 requires = ["poetry>=0.12"]
