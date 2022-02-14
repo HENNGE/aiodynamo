@@ -9,6 +9,7 @@ from aiodynamo.client import Client
 from aiodynamo.credentials import Key, StaticCredentials
 from aiodynamo.errors import ValidationException
 from aiodynamo.http.aiohttp import AIOHTTP
+from aiodynamo.http.types import Request, Response
 from aiodynamo.models import StaticDelayRetry
 
 creds = StaticCredentials(Key("a", "b"))
@@ -53,3 +54,22 @@ async def test_dynamo_errors_get_raised_depaginated():
     with pytest.raises(ValidationException):
         async for _ in client.scan("test"):
             pass
+
+
+@pytest.mark.parametrize("status", [500, 503])
+async def test_dynamo_retries_50x(status):
+    responses = iter(
+        [
+            Response(status=status, body=b""),
+            Response(
+                status=200, body=json.dumps({"Item": {"fake": {"S": "key"}}}).encode()
+            ),
+        ]
+    )
+
+    async def http(request: Request):
+        return next(responses)
+
+    client = Client(http, creds, "test", throttle_config=StaticDelayRetry(delay=0.01))
+    item = await client.get_item("table", {"fake": "key"})
+    assert item == {"fake": "key"}
