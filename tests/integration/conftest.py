@@ -2,8 +2,9 @@ import asyncio
 import os
 import sys
 import uuid
-from typing import AsyncGenerator, Generator, Union
+from typing import AsyncGenerator, Generator, Union, cast
 
+from _pytest.fixtures import SubRequest
 from httpx import AsyncClient
 
 from aiodynamo.http.httpx import HTTPX
@@ -75,7 +76,7 @@ def client(
 
 
 @pytest.fixture(scope="session")
-def wait_config(real_dynamo) -> RetryConfig:
+def wait_config(real_dynamo: Optional[URL]) -> RetryConfig:
     return (
         RetryConfig.default_wait_config()
         if real_dynamo
@@ -84,8 +85,8 @@ def wait_config(real_dynamo) -> RetryConfig:
 
 
 @pytest.fixture(params=[True, False], scope="session")
-def consistent_read(request) -> bool:
-    return request.param
+def consistent_read(request: SubRequest) -> bool:
+    return cast(bool, request.param)
 
 
 async def _make_table(
@@ -107,7 +108,7 @@ async def _make_table(
 @pytest.fixture
 async def table_factory(
     client: Client, table_name_prefix: str, wait_config: RetryConfig
-) -> Callable[[Optional[Throughput]], Awaitable[str]]:
+) -> Callable[[Throughput], Awaitable[str]]:
     async def factory(throughput: Throughput = Throughput(5, 5)) -> str:
         return await _make_table(client, table_name_prefix, throughput, wait_config)
 
@@ -132,7 +133,7 @@ def prefilled_table(
     table_name_prefix: str,
     wait_config: RetryConfig,
     session_event_loop: asyncio.BaseEventLoop,
-):
+) -> Generator[str, None, None]:
     """
     Event loop is function scoped, so we can't use pytest-asyncio here.
     """
@@ -154,7 +155,7 @@ def prefilled_table(
 
         return name
 
-    async def shutdown(name: str):
+    async def shutdown(name: str) -> None:
         async with AsyncClient() as session:
             await Client(
                 HTTPX(session), Credentials.auto(), region, endpoint

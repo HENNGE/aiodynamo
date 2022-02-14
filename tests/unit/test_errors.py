@@ -1,6 +1,6 @@
 import json
 from contextlib import asynccontextmanager
-from typing import cast
+from typing import Any, AsyncIterator, cast
 
 import pytest
 from aiohttp import ClientConnectionError, ClientSession
@@ -15,10 +15,10 @@ from aiodynamo.models import StaticDelayRetry
 creds = StaticCredentials(Key("a", "b"))
 
 
-async def test_retry_raises_underlying_error_aiohttp():
+async def test_retry_raises_underlying_error_aiohttp() -> None:
     class TestSession:
         @asynccontextmanager
-        async def request(self, *args, **kwargs):
+        async def request(self, *args: Any, **kwargs: Any) -> AsyncIterator[None]:
             raise ClientConnectionError()
             yield  # needed for asynccontextmanager
 
@@ -30,11 +30,11 @@ async def test_retry_raises_underlying_error_aiohttp():
         await client.get_item("test", {"a": "b"})
 
 
-async def test_dynamo_errors_get_raised_depaginated():
+async def test_dynamo_errors_get_raised_depaginated() -> None:
     class TestResponse:
         status = 400
 
-        async def read(self):
+        async def read(self) -> bytes:
             return json.dumps(
                 {
                     "__type": "com.amazonaws.dynamodb.v20120810#ValidationException",
@@ -44,7 +44,9 @@ async def test_dynamo_errors_get_raised_depaginated():
 
     class TestSession:
         @asynccontextmanager
-        async def request(self, *args, **kwargs):
+        async def request(
+            self, *args: Any, **kwargs: Any
+        ) -> AsyncIterator[TestResponse]:
             yield TestResponse()
 
     http = AIOHTTP(cast(ClientSession, TestSession()))
@@ -57,7 +59,7 @@ async def test_dynamo_errors_get_raised_depaginated():
 
 
 @pytest.mark.parametrize("status", [500, 503])
-async def test_dynamo_retries_50x(status):
+async def test_dynamo_retries_50x(status: int) -> None:
     responses = iter(
         [
             Response(status=status, body=b""),
@@ -67,7 +69,7 @@ async def test_dynamo_retries_50x(status):
         ]
     )
 
-    async def http(request: Request):
+    async def http(request: Request) -> Response:
         return next(responses)
 
     client = Client(http, creds, "test", throttle_config=StaticDelayRetry(delay=0.01))
