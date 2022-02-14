@@ -1,6 +1,14 @@
 Changelog
 =========
 
+22.2.2
+------
+
+Release Date: February 14th, 2022
+
+* Fixed 503 errors from DynamoDB not being retried.
+* Fixed mypy type hint errors introduced in 22.2
+
 22.2.1
 ------
 
