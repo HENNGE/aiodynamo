@@ -16,9 +16,7 @@ def generate_item(nest):
         "float": {"N": "4.2"},
         "numeric_set": {"NS": ["42", "4.2"]},
         "string_set": {"SS": ["hello", "world"]},
-        "binary_set": {
-            "BS": [base64.b64encode(b"hello"), base64.b64encode(b"world")]
-        },
+        "binary_set": {"BS": [base64.b64encode(b"hello"), base64.b64encode(b"world")]},
     }
     if nest:
         item["list"] = {"L": [{"M": generate_item(False)}]}
