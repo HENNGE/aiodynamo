@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, cast
 
+import asyncio
 import httpx
 
 from .types import Request, RequestFailed, Response
@@ -20,5 +21,7 @@ class HTTPX:
                 content=cast(bytes, request.body),
             )
             return Response(response.status_code, await response.aread())
+        except httpx.TimeoutException:
+            raise asyncio.TimeoutError()
         except httpx.HTTPError as exc:
             raise RequestFailed(exc)
