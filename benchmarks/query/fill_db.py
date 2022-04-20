@@ -12,6 +12,7 @@ from utils import TABLE_NAME, KEY_FIELD, KEY_VALUE, REGION_NAME, ENDPOINT_URL
 
 DUMP = {f"field-%i": f"value-%i" for i in range(100)}
 
+
 async def inner():
     async with ClientSession() as session:
         client = Client(
@@ -21,9 +22,12 @@ async def inner():
             endpoint=URL(ENDPOINT_URL) if ENDPOINT_URL else None,
         )
         for i in range(1000):
-            await client.put_item(TABLE_NAME, {KEY_FIELD: KEY_VALUE, "quux": f"sample-{i}", **DUMP})
+            await client.put_item(
+                TABLE_NAME, {KEY_FIELD: KEY_VALUE, "quux": f"sample-{i}", **DUMP}
+            )
 
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(inner())

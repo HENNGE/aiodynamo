@@ -307,15 +307,12 @@ async def test_empty_string(
     key = {"h": "h", "r": "r"}
     await client.put_item(table, {**key, "s": ""})
     assert await client.get_item(table, key) == {"h": "h", "r": "r", "s": ""}
-    assert (
-        await client.update_item(
-            table,
-            key,
-            F("foo").set("") & F("bar").set("baz"),
-            return_values=ReturnValues.all_new,
-        )
-        == {"h": "h", "r": "r", "bar": "baz", "s": ""}
-    )
+    assert await client.update_item(
+        table,
+        key,
+        F("foo").set("") & F("bar").set("baz"),
+        return_values=ReturnValues.all_new,
+    ) == {"h": "h", "r": "r", "bar": "baz", "s": ""}
 
 
 async def test_empty_item(client: Client, table: TableName) -> None:

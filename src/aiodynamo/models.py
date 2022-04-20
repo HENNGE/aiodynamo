@@ -265,7 +265,7 @@ class ExponentialBackoffRetry(RetryConfig):
     def delays(self) -> Iterable[Seconds]:
         for attempt in count():
             yield min(
-                random.random() * (self.base_delay_secs ** attempt), self.max_delay_secs
+                random.random() * (self.base_delay_secs**attempt), self.max_delay_secs
             )
 
 

@@ -35,7 +35,7 @@ aiohttp = ["aiohttp"]
 pytest = "^6.0"
 pytest-asyncio = "^0.17"
 pytest-cov = "^2.6"
-black = {version = "^21.5b0",allow-prereleases = true}
+black = "^22.3"
 sphinx = "^4.3"
 pyperf = "^2.0"
 boto3 = "^1.12.18"
