@@ -1,6 +1,13 @@
 Changelog
 =========
 
+22.4
+----
+
+Release Date: April 20th, 2022
+
+* Fixed handling of timeout errors in httpx.
+
 22.2.2
 ------
 
