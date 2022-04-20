@@ -1,7 +1,7 @@
+import asyncio
 from dataclasses import dataclass
 from typing import Dict, cast
 
-import asyncio
 import httpx
 
 from .types import Request, RequestFailed, Response
