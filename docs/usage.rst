@@ -334,6 +334,8 @@ Key conditions are created using the :py:class:`aiodynamo.expressions.HashKey` a
 |
 
 .. autoclass:: aiodynamo.expressions.RangeKey
+    :members: begins_with, between, gt, gte, lt, lte, equals
+    :undoc-members:
 
 
 Models

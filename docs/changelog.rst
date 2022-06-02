@@ -1,6 +1,13 @@
 Changelog
 =========
 
+22.6
+----
+
+Release Date: June 2nd, 2022
+
+* Removed unsupported APIs from :py:class:`aiodynamo.expressions.RangeKey`.
+
 22.4
 ----
 
