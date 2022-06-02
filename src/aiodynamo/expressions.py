@@ -268,17 +268,6 @@ class RangeKey:
     def between(self, low: Any, high: Any) -> Condition:
         return Between(F(self.name), low, high)
 
-    def contains(
-        self, value: Union[str, bytes, int, float, decimal.Decimal]
-    ) -> Condition:
-        return Contains(F(self.name), value)
-
-    def size(self) -> Size:
-        return Size(F(self.name))
-
-    def is_in(self, values: Sequence[Any]) -> Condition:
-        return In(F(self.name), values)
-
     def gt(self, other: Any) -> Condition:
         return Comparison(F(self.name), ">", other)
 
@@ -293,9 +282,6 @@ class RangeKey:
 
     def equals(self, other: Any) -> Condition:
         return Comparison(F(self.name), "=", other)
-
-    def not_equals(self, other: Any) -> Condition:
-        return Comparison(F(self.name), "<>", other)
 
 
 class Parameters:

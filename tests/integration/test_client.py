@@ -1,6 +1,7 @@
 import asyncio
 import secrets
 from operator import itemgetter
+from typing import List
 
 import pytest
 from yarl import URL
@@ -15,7 +16,7 @@ from aiodynamo.errors import (
     UnknownOperation,
     ValidationException,
 )
-from aiodynamo.expressions import F, HashKey, RangeKey
+from aiodynamo.expressions import Condition, F, HashKey, RangeKey
 from aiodynamo.http.types import HttpImplementation
 from aiodynamo.models import (
     BatchGetRequest,
@@ -352,6 +353,34 @@ async def test_query_with_limit(client: Client, prefilled_table: TableName) -> N
     ]
     assert len(items) == 1
     assert items[0]["r"] == "0"
+
+
+@pytest.mark.parametrize(
+    "range_key,expected",
+    [
+        (RangeKey("r").begins_with("10"), ["10"]),
+        (RangeKey("r").between("97", "99"), ["97", "98", "99"]),
+        (RangeKey("r").gt("98"), ["99"]),
+        (RangeKey("r").gte("99"), ["99"]),
+        (RangeKey("r").lt("1"), ["0"]),
+        (RangeKey("r").lte("0"), ["0"]),
+        (RangeKey("r").equals("1"), ["1"]),
+    ],
+    ids=repr,
+)
+async def test_query_range_key_filters(
+    client: Client,
+    prefilled_table: TableName,
+    range_key: Condition,
+    expected: List[str],
+) -> None:
+    items = [
+        item["r"]
+        async for item in client.query(
+            prefilled_table, HashKey("h", "h") & range_key, projection=F("r")
+        )
+    ]
+    assert items == expected
 
 
 async def test_query_single_page(
