@@ -4,10 +4,7 @@ from functools import partial
 from typing import Any, Callable, Dict
 
 import pytest
-from boto3.dynamodb.types import (  # type: ignore[import]
-    DYNAMODB_CONTEXT,
-    TypeDeserializer,
-)
+from boto3.dynamodb.types import DYNAMODB_CONTEXT, TypeDeserializer
 
 from aiodynamo.types import NumericTypeConverter
 from aiodynamo.utils import deserialize, dy2py
@@ -66,7 +63,7 @@ def test_serde_compatibility() -> None:
 
     item = generate_item(True)
 
-    class BinaryDeserializer(TypeDeserializer):  # type: ignore[misc]
+    class BinaryDeserializer(TypeDeserializer):
         def _deserialize_b(self, value: Any) -> bytes:
             return base64.b64decode(value)
 

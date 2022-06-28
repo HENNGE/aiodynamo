@@ -2,10 +2,12 @@ import datetime
 from pathlib import Path
 from textwrap import dedent
 from typing import AsyncGenerator, Optional
+from unittest.mock import Mock
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from aiohttp import web
+from boto3 import Session
 from freezegun import freeze_time
 from pyfakefs.fake_filesystem import FakeFilesystem  # type: ignore[import]
 from yarl import URL
@@ -19,6 +21,7 @@ from aiodynamo.credentials import (
     FileCredentials,
     InstanceMetadataCredentials,
     Key,
+    KubernetesCredentials,
     Metadata,
 )
 from aiodynamo.http.types import HttpImplementation
@@ -225,3 +228,33 @@ async def test_file_credentials(fs: FakeFilesystem, http: HttpImplementation) ->
     assert await credentials.get_key(http) == Key(
         id="custom-baz", secret="custom-hoge", token="custom-token"
     )
+
+
+async def test_kubernetes_credentials(
+    monkeypatch: MonkeyPatch, http: HttpImplementation
+) -> None:
+    get_credentials_mock = Mock()
+    session_mock = Mock(return_value=get_credentials_mock)
+    get_credentials_mock.get_frozen_credentials.return_value = Mock(
+        access_key="123", secret_key="456", token="abcd"
+    )
+    credentials = KubernetesCredentials()
+    monkeypatch.setattr(Session, "get_credentials", session_mock)
+
+    loaded_key = await credentials.get_key(http)
+
+    assert not credentials.is_disabled()
+    assert loaded_key == Key(id="123", secret="456", token="abcd")
+
+
+async def test_kubernetes_credentials_with_error(
+    monkeypatch: MonkeyPatch, http: HttpImplementation
+) -> None:
+    session_mock = Mock(side_effect=Exception())
+    credentials = KubernetesCredentials()
+    monkeypatch.setattr(Session, "get_credentials", session_mock)
+
+    loaded_key = await credentials.get_key(http)
+
+    assert not credentials.is_disabled()
+    assert loaded_key is None

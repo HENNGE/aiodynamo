@@ -5,12 +5,14 @@ import asyncio
 import configparser
 import datetime
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import Callable, Optional, Sequence, TypeVar
 
+from boto3 import Session
 from yarl import URL
 
 from .http.types import HttpImplementation, Request, RequestFailed
@@ -144,6 +146,40 @@ class EnvironmentCredentials(Credentials):
 
     def is_disabled(self) -> bool:
         return self.key is None
+
+
+class KubernetesCredentials(Credentials):
+    """
+    Loads the credentials from AWS using the role assumed by the pod running on AWS.
+    """
+
+    def __init__(self) -> None:
+        self.__session: Optional[Session] = None
+        self.__logger = logging.getLogger(__name__)
+
+    async def get_key(self, http: HttpImplementation) -> Optional[Key]:
+        try:
+            if not self.__session:
+                self.__session = Session()
+
+            credentials = self.__session.get_credentials()
+            current_credentials = credentials.get_frozen_credentials()
+
+            return Key(
+                id=current_credentials.access_key,
+                secret=current_credentials.secret_key,
+                token=current_credentials.token,
+            )
+        except Exception as e:
+            self.__logger.exception(e)
+            return None
+
+    def invalidate(self) -> bool:
+        self.__session = None
+        return True
+
+    def is_disabled(self) -> bool:
+        return False
 
 
 # https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html
