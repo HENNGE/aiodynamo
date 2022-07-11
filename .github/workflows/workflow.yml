@@ -19,7 +19,7 @@ jobs:
         with:
           path: poetry.lock
           key: ${{ github.sha }}-${{ matrix.python-version }}
-  pytest:
+  pytest-dynalite:
     needs: lock
     strategy:
       matrix:
@@ -28,6 +28,33 @@ jobs:
     services:
       dynalite:
         image: dimaqq/dynalite:latest
+        ports:
+          - 8000:8000
+    env:
+      DYNAMODB_URL: http://localhost:8000
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/cache@v2
+        with:
+          path: poetry.lock
+          key: ${{ github.sha }}-${{ matrix.python-version }}
+      - run: curl -sSL https://install.python-poetry.org | python3 -
+      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry run pytest --verbose
+  pytest-dynamodb-local:
+    needs: lock
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
+    runs-on: "ubuntu-latest"
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:latest
         ports:
           - 8000:8000
     env:
