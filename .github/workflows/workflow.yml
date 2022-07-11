@@ -25,6 +25,11 @@ jobs:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10"]
     runs-on: "ubuntu-latest"
+    services:
+      dynalite:
+        image: dimaqq/dynalite:latest
+        ports:
+          - 8000:8000
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
