@@ -30,6 +30,10 @@ jobs:
         image: dimaqq/dynalite:latest
         ports:
           - 8000:8000
+    env:
+      DYNAMODB_URL: http://localhost:8000
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
