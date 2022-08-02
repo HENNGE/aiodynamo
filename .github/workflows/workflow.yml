@@ -73,6 +73,33 @@ jobs:
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run pytest --verbose
+  pytest-localstack:
+    needs: lock
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
+    runs-on: "ubuntu-latest"
+    services:
+      dynamodb:
+        image: localstack/localstack:0.14.2
+        ports:
+          - 4566-4583:4566-4583
+    env:
+      DYNAMODB_URL: http://localhost:4566
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/cache@v2
+        with:
+          path: poetry.lock
+          key: ${{ github.sha }}-${{ matrix.python-version }}
+      - run: curl -sSL https://install.python-poetry.org | python3 -
+      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry run pytest --verbose
   mypy:
     needs: lock
     strategy:
