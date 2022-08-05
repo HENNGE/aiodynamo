@@ -4,9 +4,21 @@ import asyncio
 import datetime
 import json
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Union, cast
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
 from yarl import URL
+
+from aiodynamo.operations import ConditionCheck, Delete, Put, Update
 
 from .credentials import Credentials
 from .errors import (
@@ -23,6 +35,8 @@ from .errors import (
     TableNotFound,
     Throttled,
     TimeToLiveStatusNotChanged,
+    TooManyTransactions,
+    TransactionEmpty,
     exception_from_response,
 )
 from .expressions import (
@@ -929,6 +943,25 @@ class Client:
                     )
             result[table] = BatchWriteResult(undeleted_keys, unput_items)
         return result
+
+    async def transact_write_items(
+        self,
+        items: Sequence[Union[Put, Update, Delete, ConditionCheck]],
+        *,
+        request_token: Optional[str] = None,
+    ) -> None:
+        if len(items) == 0:
+            raise TransactionEmpty("TransactWriteItems must have at least 1 operation")
+        if len(items) > 25:
+            raise TooManyTransactions(
+                "TransactWriteItems must have a maximum of 25 operations"
+            )
+
+        payload = {
+            "ClientRequestToken": request_token,
+            "TransactItems": [item.to_request_payload() for item in items],
+        }
+        await self.send_request(action="TransactWriteItems", payload=payload)
 
     async def send_request(
         self,

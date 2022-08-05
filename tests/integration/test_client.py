@@ -1,7 +1,7 @@
 import asyncio
 import secrets
 from operator import itemgetter
-from typing import List
+from typing import List, Type
 
 import pytest
 from yarl import URL
@@ -13,6 +13,8 @@ from aiodynamo.errors import (
     ItemNotFound,
     NoCredentialsFound,
     TableNotFound,
+    TooManyTransactions,
+    TransactionEmpty,
     UnknownOperation,
     ValidationException,
 )
@@ -35,6 +37,7 @@ from aiodynamo.models import (
     Throughput,
     TimeToLiveStatus,
 )
+from aiodynamo.operations import ConditionCheck, Delete, Put, Update
 from aiodynamo.types import TableName
 from tests.integration.conftest import TableFactory
 
@@ -587,6 +590,136 @@ async def test_batch(client: Client, table: TableName) -> None:
     )
     assert not response
     assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 0
+
+
+@pytest.mark.usefixtures("supports_transactions")
+@pytest.mark.parametrize(
+    "items,aiodynamo_error",
+    [
+        ([], TransactionEmpty),
+        (
+            [Put(table="any-table", item={"h": "h", "r": str(i)}) for i in range(26)],
+            TooManyTransactions,
+        ),
+    ],
+)
+async def test_transact_write_items_input_validation(
+    client: Client,
+    items: List[Put],
+    aiodynamo_error: Type[Exception],
+) -> None:
+    with pytest.raises(aiodynamo_error):
+        await client.transact_write_items(items=items)
+
+
+@pytest.mark.usefixtures("supports_transactions")
+async def test_transact_write_items_put(client: Client, table: TableName) -> None:
+    puts = [
+        Put(table=table, item={"h": "h", "r": str(i), "s": "initial"}) for i in range(2)
+    ]
+    response = await client.transact_write_items(items=puts)
+    assert not response
+    assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 2
+
+    with pytest.raises(errors.ConditionalCheckFailed):
+        put = Put(
+            table=table,
+            item={"h": "h", "r": "0", "s": "initial"},
+            condition=F("h").does_not_exist(),
+        )
+        response = await client.transact_write_items(items=[put])
+
+
+@pytest.mark.usefixtures("supports_transactions")
+async def test_transact_write_items_update(client: Client, table: TableName) -> None:
+    await client.put_item(table=table, item={"h": "h", "r": "1", "s": "initial"})
+    updates = [
+        Update(
+            table=table,
+            key={"h": "h", "r": "1"},
+            expression=F("s").set(f"changed"),
+        )
+    ]
+    response = await client.transact_write_items(items=updates)
+    assert not response
+    query = await client.query_single_page(table, HashKey("h", "h"))
+    assert query.items[0]["s"] == "changed"
+
+    with pytest.raises(errors.ConditionalCheckFailed):
+        update = Update(
+            table=table,
+            key={"h": "h", "r": "1"},
+            expression=F("s").set("changed2"),
+            condition=F("s").not_equals("changed"),
+        )
+        response = await client.transact_write_items(items=[update])
+
+
+@pytest.mark.usefixtures("supports_transactions")
+async def test_transact_write_items_delete(client: Client, table: TableName) -> None:
+    await client.put_item(table=table, item={"h": "h", "r": "1", "s": "initial"})
+    deletes = [
+        Delete(
+            table=table,
+            key={"h": "h", "r": "1"},
+        )
+    ]
+    response = await client.transact_write_items(items=deletes)
+    assert not response
+    assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 0
+
+    await client.put_item(table=table, item={"h": "h", "r": "1", "s": "initial"})
+    with pytest.raises(errors.ConditionalCheckFailed):
+        delete = Delete(
+            table=table,
+            key={"h": "h", "r": "1"},
+            condition=F("s").not_equals("initial"),
+        )
+        response = await client.transact_write_items(items=[delete])
+
+
+@pytest.mark.usefixtures("supports_transactions")
+async def test_transact_write_items_condition_check(
+    client: Client, table: TableName
+) -> None:
+    await client.put_item(table=table, item={"h": "h", "r": "1", "s": "initial"})
+    condition = ConditionCheck(
+        table=table, key={"h": "h", "r": "1"}, condition=F("s").not_equals("initial")
+    )
+    with pytest.raises(errors.ConditionalCheckFailed):
+        await client.transact_write_items(items=[condition])
+
+    condition = ConditionCheck(
+        table=table, key={"h": "h", "r": "1"}, condition=F("s").equals("initial")
+    )
+    response = await client.transact_write_items(items=[condition])
+    assert not response
+
+
+@pytest.mark.usefixtures("supports_transactions")
+async def test_transact_write_items_multiple_operations(
+    client: Client, table: TableName
+) -> None:
+    await client.put_item(table=table, item={"h": "h", "r": "1", "s": "initial"})
+    await client.put_item(table=table, item={"h": "h", "r": "2", "s": "initial"})
+
+    put = Put(table=table, item={"h": "h", "r": "3", "s": "initial"})
+    update = Update(
+        table=table,
+        key={"h": "h", "r": "1"},
+        expression=F("s").set("changed"),
+    )
+    delete = Delete(
+        table=table,
+        key={"h": "h", "r": "2"},
+    )
+
+    response = await client.transact_write_items(items=[put, update, delete])
+
+    assert not response
+    items = [item async for item in client.query(table, HashKey("h", "h"))]
+    assert len(items) == 2
+    assert items[0]["s"] == "changed"
 
 
 async def test_pay_per_request_table(

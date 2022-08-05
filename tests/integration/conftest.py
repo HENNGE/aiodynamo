@@ -7,7 +7,11 @@ from typing import AsyncGenerator, Generator, Union, cast
 from _pytest.fixtures import SubRequest
 from httpx import AsyncClient
 
+from aiodynamo.errors import UnknownOperation
+from aiodynamo.expressions import F
 from aiodynamo.http.httpx import HTTPX
+from aiodynamo.operations import ConditionCheck
+from aiodynamo.types import TableName
 
 if sys.version_info >= (3, 8):
     from typing import Protocol
@@ -47,6 +51,16 @@ def table_name_prefix() -> str:
 @pytest.fixture(scope="session")
 def real_dynamo() -> bool:
     return os.environ.get("TEST_ON_AWS", "false") == "true"
+
+
+@pytest.fixture()
+async def supports_transactions(client: Client, table: TableName) -> None:
+    try:
+        await client.transact_write_items(
+            [ConditionCheck(table, {"h": "h", "r": "r"}, F("h").does_not_exist())]
+        )
+    except UnknownOperation:
+        raise pytest.skip(f"Transactions not supported")
 
 
 @pytest.fixture(scope="session")

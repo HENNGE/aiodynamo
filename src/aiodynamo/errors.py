@@ -1,4 +1,5 @@
 import json
+from typing import Any, Dict
 
 
 class AIODynamoError(Exception):
@@ -112,6 +113,14 @@ class TransactionCanceled(AIODynamoError):
     pass
 
 
+class TransactionEmpty(AIODynamoError):
+    pass
+
+
+class TooManyTransactions(AIODynamoError):
+    pass
+
+
 class ReplicaAlreadyExists(AIODynamoError):
     pass
 
@@ -152,6 +161,14 @@ class ServiceUnavailable(AIODynamoError):
     pass
 
 
+class IdempotentParameterMismatch(AIODynamoError):
+    pass
+
+
+class TransactionInProgress(AIODynamoError):
+    pass
+
+
 ERRORS = {
     "ResourceNotFoundException": TableNotFound,
     "UnknownOperationException": UnknownOperation,
@@ -178,6 +195,8 @@ ERRORS = {
     "ValidationException": ValidationException,
     "ExpiredTokenException": ExpiredToken,
     "ResourceInUseException": ResourceInUse,
+    "IdempotentParameterMismatchException": IdempotentParameterMismatch,
+    "TransactionInProgressException": TransactionInProgress,
 }
 
 
@@ -188,6 +207,17 @@ def exception_from_response(status: int, body: bytes) -> Exception:
         return ServiceUnavailable()
     try:
         data = json.loads(body)
-        return ERRORS[data["__type"].split("#", 1)[1]](data)
+        error = ERRORS[data["__type"].split("#", 1)[1]](data)
+        if isinstance(error, TransactionCanceled):
+            error = extract_error_from_transaction_canceled(data)
+        return error
     except Exception:
         return UnknownError(status, body)
+
+
+def extract_error_from_transaction_canceled(data: Dict[str, Any]) -> AIODynamoError:
+    try:
+        error = data["CancellationReasons"][0]
+        return ERRORS[f"{error['Code']}Exception"](error["Message"])
+    except Exception:
+        return ERRORS[data["__type"].split("#", 1)[1]](data)
