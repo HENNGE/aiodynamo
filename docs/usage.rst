@@ -166,6 +166,11 @@ The ``Client`` class
     .. seealso::
         `BatchWriteItem - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_BatchWriteItem.html>`_.
 
+.. automethod:: aiodynamo.client.Client.transact_write_items
+
+    .. seealso::
+        `TransactWriteItems - DynamoDB API documentation <https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html>`_.
+
 
 The ``Table`` class
 -------------------
@@ -398,3 +403,20 @@ Models
     :members: undeleted_keys, unput_items
     :undoc-members:
 
+Operations
+------
+.. autoclass:: aiodynamo.operations.Put
+    :members: table, item, condition
+    :undoc-members:
+
+.. autoclass:: aiodynamo.operations.Update
+    :members: table, key, expression, condition
+    :undoc-members:
+
+.. autoclass:: aiodynamo.operations.Delete
+    :members: table, key, condition
+    :undoc-members:
+
+.. autoclass:: aiodynamo.operations.ConditionCheck
+    :members: table, key, condition
+    :undoc-members:
