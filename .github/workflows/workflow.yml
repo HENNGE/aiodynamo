@@ -27,7 +27,7 @@ jobs:
     runs-on: "ubuntu-latest"
     services:
       dynalite:
-        image: ghcr.io/dimaqq/dynalite:latest
+        image: ghcr.io/hennge/dynalite:latest
         ports:
           - 8000:8000
     env:
