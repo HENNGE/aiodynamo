@@ -404,7 +404,8 @@ Models
     :undoc-members:
 
 Operations
-------
+----------
+
 .. autoclass:: aiodynamo.operations.Put
     :members: table, item, condition
     :undoc-members:
