@@ -18,7 +18,7 @@ from typing import (
 
 from yarl import URL
 
-from aiodynamo.operations import ConditionCheck, Delete, Put, Update
+from aiodynamo.operations import ConditionCheck, Delete, Get, Put, Update
 
 from .credentials import Credentials
 from .errors import (
@@ -962,6 +962,26 @@ class Client:
             "TransactItems": [item.to_request_payload() for item in items],
         }
         await self.send_request(action="TransactWriteItems", payload=payload)
+
+    async def transact_get_items(
+        self,
+        items: List[Get],
+    ) -> List[Item]:
+        if len(items) == 0:
+            raise TransactionEmpty("TransactGetItems must have at least 1 operation")
+        if len(items) > 25:
+            raise TooManyTransactions(
+                "TransactGetItems must have a maximum of 25 operations"
+            )
+
+        payload = {
+            "TransactItems": [item.to_request_payload() for item in items],
+        }
+        response = await self.send_request(action="TransactGetItems", payload=payload)
+
+        return [
+            dy2py(item["Item"], self.numeric_type) for item in response["Responses"]
+        ]
 
     async def send_request(
         self,
