@@ -1,6 +1,15 @@
 Changelog
 =========
 
+22.8
+----
+
+Release Date: August 16th, 2022
+
+* Added support for :py:meth:`aiodynamo.client.Client.transact_write_items` and :py:meth:`aiodynamo.client.Client.transact_get_items`
+  thanks to `@nicolaszein <https://github.com/nicolaszein>`_.
+* Added continuous integration for `localstack <https://github.com/localstack/localstack>`_ thanks to `@nicolaszein <https://github.com/nicolaszein>`_.
+
 22.6
 ----
 
