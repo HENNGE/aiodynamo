@@ -3,7 +3,12 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from aiodynamo.errors import EmptyItem
-from aiodynamo.expressions import Condition, Parameters, UpdateExpression
+from aiodynamo.expressions import (
+    Condition,
+    Parameters,
+    ProjectionExpression,
+    UpdateExpression,
+)
 from aiodynamo.types import Item, TableName
 from aiodynamo.utils import py2dy
 
@@ -12,6 +17,30 @@ class Operation(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def to_request_payload(self) -> Dict[str, Any]:
         pass
+
+
+@dataclass(frozen=True)
+class Get(Operation):
+    table: TableName
+    key: Item
+    projection: Optional[ProjectionExpression] = None
+
+    def to_request_payload(self) -> Dict[str, Any]:
+        dynamo_key = py2dy(self.key)
+        if not dynamo_key:
+            raise EmptyItem()
+
+        payload: Dict[str, Any] = {
+            "TableName": self.table,
+            "Key": dynamo_key,
+        }
+
+        if self.projection:
+            params = Parameters()
+            payload["ProjectionExpression"] = self.projection.encode(params)
+            payload.update(params.to_request_payload())
+
+        return {"Get": payload}
 
 
 @dataclass(frozen=True)

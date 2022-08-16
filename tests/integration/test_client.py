@@ -37,7 +37,7 @@ from aiodynamo.models import (
     Throughput,
     TimeToLiveStatus,
 )
-from aiodynamo.operations import ConditionCheck, Delete, Put, Update
+from aiodynamo.operations import ConditionCheck, Delete, Get, Put, Update
 from aiodynamo.types import TableName
 from tests.integration.conftest import TableFactory
 
@@ -720,6 +720,49 @@ async def test_transact_write_items_multiple_operations(
     items = [item async for item in client.query(table, HashKey("h", "h"))]
     assert len(items) == 2
     assert items[0]["s"] == "changed"
+
+
+@pytest.mark.usefixtures("supports_transactions")
+@pytest.mark.parametrize(
+    "items,aiodynamo_error",
+    [
+        ([], TransactionEmpty),
+        (
+            [Get(table="any-table", key={"h": "h", "r": str(i)}) for i in range(26)],
+            TooManyTransactions,
+        ),
+    ],
+)
+async def test_transact_get_items_input_validation(
+    client: Client,
+    items: List[Get],
+    aiodynamo_error: Type[Exception],
+) -> None:
+    with pytest.raises(aiodynamo_error):
+        await client.transact_get_items(items=items)
+
+
+@pytest.mark.usefixtures("supports_transactions")
+async def test_transact_get_items(client: Client, table: TableName) -> None:
+    await client.put_item(table=table, item={"h": "h", "r": "1", "s": "initial"})
+    items = [Get(table=table, key={"h": "h", "r": "1"})]
+
+    response = await client.transact_get_items(items=items)
+
+    assert len(response) == 1
+
+
+@pytest.mark.usefixtures("supports_transactions")
+async def test_transact_get_items_with_projection(
+    client: Client, table: TableName
+) -> None:
+    await client.put_item(table=table, item={"h": "h", "r": "1", "s": "initial"})
+    items = [Get(table=table, key={"h": "h", "r": "1"}, projection=F("h") & F("s"))]
+
+    response = await client.transact_get_items(items=items)
+
+    assert len(response) == 1
+    assert response[0] == {"h": "h", "s": "initial"}
 
 
 async def test_pay_per_request_table(
