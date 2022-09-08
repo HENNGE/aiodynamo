@@ -155,7 +155,7 @@ def prefilled_table(
     async def startup() -> str:
         async with AsyncClient() as session:
             client = Client(
-                cast(HttpImplementation, HTTPX(session)),
+                HTTPX(session),
                 Credentials.auto(),
                 region,
                 endpoint,
@@ -177,7 +177,7 @@ def prefilled_table(
     async def shutdown(name: str) -> None:
         async with AsyncClient() as session:
             await Client(
-                cast(HttpImplementation, HTTPX(session)),
+                HTTPX(session),
                 Credentials.auto(),
                 region,
                 endpoint,

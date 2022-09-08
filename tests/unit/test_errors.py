@@ -22,7 +22,7 @@ async def test_retry_raises_underlying_error_aiohttp() -> None:
             raise ClientConnectionError()
             yield  # needed for asynccontextmanager
 
-    http = cast(HttpImplementation, (AIOHTTP(cast(ClientSession, TestSession()))))
+    http = AIOHTTP(cast(ClientSession, TestSession()))
     client = Client(
         http, creds, "test", throttle_config=StaticDelayRetry(time_limit_secs=-1)
     )
@@ -49,7 +49,7 @@ async def test_dynamo_errors_get_raised_depaginated() -> None:
         ) -> AsyncIterator[TestResponse]:
             yield TestResponse()
 
-    http = cast(HttpImplementation, (AIOHTTP(cast(ClientSession, TestSession()))))
+    http = AIOHTTP(cast(ClientSession, TestSession()))
     client = Client(
         http, creds, "test", throttle_config=StaticDelayRetry(time_limit_secs=-1)
     )
@@ -73,7 +73,7 @@ async def test_dynamo_retries_50x(status: int) -> None:
         return next(responses)
 
     client = Client(
-        cast(HttpImplementation, http),
+        http,
         creds,
         "test",
         throttle_config=StaticDelayRetry(delay=0.01),

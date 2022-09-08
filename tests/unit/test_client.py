@@ -41,7 +41,7 @@ async def test_client_send_request_retryable_errors(
         )
 
     client = Client(
-        cast(HttpImplementation, http),
+        http,
         StaticCredentials(Key("a", "b")),
         "test",
         throttle_config=StaticDelayRetry(delay=0.01, time_limit_secs=0),

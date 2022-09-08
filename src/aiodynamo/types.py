@@ -1,9 +1,8 @@
 import decimal
 from enum import Enum
-from typing import Any, Dict, List, Union
+from typing import Any, Callable, Dict, List, Union
 
 from ._compat import TypedDict
-from ._mypy_hacks import FixedCallable
 
 Timeout = Union[float, int]
 Numeric = Union[float, int, decimal.Decimal]
@@ -83,4 +82,4 @@ class EncodedStreamSpecification(EncodedStreamSpecificationRequired, total=False
 SIMPLE_TYPES = frozenset({AttributeType.boolean, AttributeType.string})
 
 
-NumericTypeConverter = FixedCallable[str, Any]
+NumericTypeConverter = Callable[[str], Any]

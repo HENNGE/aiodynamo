@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-from typing import Awaitable, Dict, Optional, Union
+from typing import Awaitable, Callable, Dict, Optional, Union
 
 from aiodynamo._compat import Literal, Protocol
-from aiodynamo._mypy_hacks import FixedCallable
 
 
 @dataclass(frozen=True)
@@ -24,4 +23,4 @@ class RequestFailed(Exception):
     inner: Exception
 
 
-HttpImplementation = FixedCallable[Request, Awaitable[Response]]
+HttpImplementation = Callable[[Request], Awaitable[Response]]
