@@ -154,7 +154,12 @@ def prefilled_table(
 
     async def startup() -> str:
         async with AsyncClient() as session:
-            client = Client(HTTPX(session), Credentials.auto(), region, endpoint)
+            client = Client(
+                cast(HttpImplementation, HTTPX(session)),
+                Credentials.auto(),
+                region,
+                endpoint,
+            )
             name = await _make_table(
                 client, table_name_prefix, Throughput(1000, 2500), wait_config
             )
@@ -172,7 +177,10 @@ def prefilled_table(
     async def shutdown(name: str) -> None:
         async with AsyncClient() as session:
             await Client(
-                HTTPX(session), Credentials.auto(), region, endpoint
+                cast(HttpImplementation, HTTPX(session)),
+                Credentials.auto(),
+                region,
+                endpoint,
             ).delete_table(name)
 
     name = session_event_loop.run_until_complete(startup())

@@ -9,7 +9,7 @@ from aiodynamo.client import Client
 from aiodynamo.credentials import Key, StaticCredentials
 from aiodynamo.errors import ValidationException
 from aiodynamo.http.aiohttp import AIOHTTP
-from aiodynamo.http.types import Request, Response
+from aiodynamo.http.types import HttpImplementation, Request, Response
 from aiodynamo.models import StaticDelayRetry
 
 creds = StaticCredentials(Key("a", "b"))
@@ -22,7 +22,7 @@ async def test_retry_raises_underlying_error_aiohttp() -> None:
             raise ClientConnectionError()
             yield  # needed for asynccontextmanager
 
-    http = AIOHTTP(cast(ClientSession, TestSession()))
+    http = cast(HttpImplementation, (AIOHTTP(cast(ClientSession, TestSession()))))
     client = Client(
         http, creds, "test", throttle_config=StaticDelayRetry(time_limit_secs=-1)
     )
@@ -49,7 +49,7 @@ async def test_dynamo_errors_get_raised_depaginated() -> None:
         ) -> AsyncIterator[TestResponse]:
             yield TestResponse()
 
-    http = AIOHTTP(cast(ClientSession, TestSession()))
+    http = cast(HttpImplementation, (AIOHTTP(cast(ClientSession, TestSession()))))
     client = Client(
         http, creds, "test", throttle_config=StaticDelayRetry(time_limit_secs=-1)
     )
@@ -72,6 +72,11 @@ async def test_dynamo_retries_50x(status: int) -> None:
     async def http(request: Request) -> Response:
         return next(responses)
 
-    client = Client(http, creds, "test", throttle_config=StaticDelayRetry(delay=0.01))
+    client = Client(
+        cast(HttpImplementation, http),
+        creds,
+        "test",
+        throttle_config=StaticDelayRetry(delay=0.01),
+    )
     item = await client.get_item("table", {"fake": "key"})
     assert item == {"fake": "key"}

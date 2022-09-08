@@ -283,7 +283,9 @@ async def test_scan(client: Client, table: TableName, consistent_read: bool) -> 
     assert index == 2
 
 
-async def test_exists(client: Client, table_factory: TableFactory) -> None:
+async def test_exists(
+    client: Client, table_factory: TableFactory, wait_config: RetryConfig
+) -> None:
     throughput = Throughput(5, 5)
     key_schema = KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string))
     attrs = {"h": KeyType.string, "r": KeyType.string}
@@ -297,7 +299,7 @@ async def test_exists(client: Client, table_factory: TableFactory) -> None:
         assert desc.key_schema == key_schema
         assert desc.item_count == 0
     finally:
-        await client.delete_table(name)
+        await client.delete_table(name, wait_for_disabled=wait_config)
     assert await client.table_exists(name) is False
     with pytest.raises(TableNotFound):
         await client.describe_table(name)
@@ -618,7 +620,7 @@ async def test_transact_write_items_put(client: Client, table: TableName) -> Non
         Put(table=table, item={"h": "h", "r": str(i), "s": "initial"}) for i in range(2)
     ]
     response = await client.transact_write_items(items=puts)
-    assert not response
+    assert response is None
     assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 2
 
     with pytest.raises(errors.ConditionalCheckFailed):
@@ -627,7 +629,7 @@ async def test_transact_write_items_put(client: Client, table: TableName) -> Non
             item={"h": "h", "r": "0", "s": "initial"},
             condition=F("h").does_not_exist(),
         )
-        response = await client.transact_write_items(items=[put])
+        await client.transact_write_items(items=[put])
 
 
 @pytest.mark.usefixtures("supports_transactions")

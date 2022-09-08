@@ -1,6 +1,6 @@
 import asyncio
 from asyncio import AbstractEventLoop
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator, Generator, cast
 
 import pytest
 from _pytest.fixtures import SubRequest
@@ -18,7 +18,7 @@ async def http(request: SubRequest) -> AsyncGenerator[HttpImplementation, None]:
         except ImportError:
             raise pytest.skip("httpx not installed")
         async with httpx.AsyncClient() as client:
-            yield HTTPX(client)
+            yield cast(HttpImplementation, HTTPX(client))
     elif request.param == "aiohttp":
         try:
             import aiohttp
@@ -27,7 +27,7 @@ async def http(request: SubRequest) -> AsyncGenerator[HttpImplementation, None]:
         except ImportError:
             raise pytest.skip("aiohttp not installed")
         async with aiohttp.ClientSession() as session:
-            yield AIOHTTP(session)
+            yield cast(HttpImplementation, AIOHTTP(session))
 
 
 @pytest.fixture(scope="session")

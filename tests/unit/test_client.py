@@ -1,5 +1,5 @@
 import json
-from typing import Any, Type
+from typing import Any, Type, cast
 
 import pytest
 
@@ -13,7 +13,7 @@ from aiodynamo.errors import (
     Throttled,
 )
 from aiodynamo.expressions import HashKey
-from aiodynamo.http.types import Request, Response
+from aiodynamo.http.types import HttpImplementation, Request, Response
 from aiodynamo.models import StaticDelayRetry
 
 
@@ -41,7 +41,7 @@ async def test_client_send_request_retryable_errors(
         )
 
     client = Client(
-        http,
+        cast(HttpImplementation, http),
         StaticCredentials(Key("a", "b")),
         "test",
         throttle_config=StaticDelayRetry(delay=0.01, time_limit_secs=0),
