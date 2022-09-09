@@ -1,5 +1,5 @@
 import json
-from typing import Any, Type, cast
+from typing import Any, Type
 
 import pytest
 

@@ -949,7 +949,7 @@ class Client:
         items: Sequence[Union[Put, Update, Delete, ConditionCheck]],
         *,
         request_token: Optional[str] = None,
-    ) -> Any:
+    ) -> None:
         if len(items) == 0:
             raise TransactionEmpty("TransactWriteItems must have at least 1 operation")
         if len(items) > 25:

@@ -154,12 +154,7 @@ def prefilled_table(
 
     async def startup() -> str:
         async with AsyncClient() as session:
-            client = Client(
-                HTTPX(session),
-                Credentials.auto(),
-                region,
-                endpoint,
-            )
+            client = Client(HTTPX(session), Credentials.auto(), region, endpoint)
             name = await _make_table(
                 client, table_name_prefix, Throughput(1000, 2500), wait_config
             )
