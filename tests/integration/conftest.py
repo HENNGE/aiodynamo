@@ -172,10 +172,7 @@ def prefilled_table(
     async def shutdown(name: str) -> None:
         async with AsyncClient() as session:
             await Client(
-                HTTPX(session),
-                Credentials.auto(),
-                region,
-                endpoint,
+                HTTPX(session), Credentials.auto(), region, endpoint
             ).delete_table(name)
 
     name = session_event_loop.run_until_complete(startup())

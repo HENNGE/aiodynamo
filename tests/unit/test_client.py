@@ -13,7 +13,7 @@ from aiodynamo.errors import (
     Throttled,
 )
 from aiodynamo.expressions import HashKey
-from aiodynamo.http.types import HttpImplementation, Request, Response
+from aiodynamo.http.types import Request, Response
 from aiodynamo.models import StaticDelayRetry
 
 
