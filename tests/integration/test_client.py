@@ -234,7 +234,7 @@ async def test_delete_item(client: Client, table: TableName) -> None:
 async def test_delete_table(
     client: Client, table_factory: TableFactory, wait_config: RetryConfig
 ) -> None:
-    name = await table_factory()
+    name = await table_factory(Throughput(5, 5))
     # no error
     await client.put_item(name, {"h": "h", "r": "r"})
     await client.delete_table(name, wait_for_disabled=wait_config)
@@ -283,11 +283,13 @@ async def test_scan(client: Client, table: TableName, consistent_read: bool) -> 
     assert index == 2
 
 
-async def test_exists(client: Client, table_factory: TableFactory) -> None:
+async def test_exists(
+    client: Client, table_factory: TableFactory, wait_config: RetryConfig
+) -> None:
     throughput = Throughput(5, 5)
     key_schema = KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string))
     attrs = {"h": KeyType.string, "r": KeyType.string}
-    name = await table_factory()
+    name = await table_factory(throughput)
     try:
         assert await client.table_exists(name)
         desc = await client.describe_table(name)
@@ -297,7 +299,7 @@ async def test_exists(client: Client, table_factory: TableFactory) -> None:
         assert desc.key_schema == key_schema
         assert desc.item_count == 0
     finally:
-        await client.delete_table(name)
+        await client.delete_table(name, wait_for_disabled=wait_config)
     assert await client.table_exists(name) is False
     with pytest.raises(TableNotFound):
         await client.describe_table(name)
@@ -617,8 +619,7 @@ async def test_transact_write_items_put(client: Client, table: TableName) -> Non
     puts = [
         Put(table=table, item={"h": "h", "r": str(i), "s": "initial"}) for i in range(2)
     ]
-    response = await client.transact_write_items(items=puts)
-    assert not response
+    await client.transact_write_items(items=puts)
     assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 2
 
     with pytest.raises(errors.ConditionalCheckFailed):
@@ -627,7 +628,7 @@ async def test_transact_write_items_put(client: Client, table: TableName) -> Non
             item={"h": "h", "r": "0", "s": "initial"},
             condition=F("h").does_not_exist(),
         )
-        response = await client.transact_write_items(items=[put])
+        await client.transact_write_items(items=[put])
 
 
 @pytest.mark.usefixtures("supports_transactions")
@@ -640,8 +641,7 @@ async def test_transact_write_items_update(client: Client, table: TableName) -> 
             expression=F("s").set(f"changed"),
         )
     ]
-    response = await client.transact_write_items(items=updates)
-    assert not response
+    await client.transact_write_items(items=updates)
     query = await client.query_single_page(table, HashKey("h", "h"))
     assert query.items[0]["s"] == "changed"
 
@@ -652,7 +652,7 @@ async def test_transact_write_items_update(client: Client, table: TableName) -> 
             expression=F("s").set("changed2"),
             condition=F("s").not_equals("changed"),
         )
-        response = await client.transact_write_items(items=[update])
+        await client.transact_write_items(items=[update])
 
 
 @pytest.mark.usefixtures("supports_transactions")
@@ -664,8 +664,7 @@ async def test_transact_write_items_delete(client: Client, table: TableName) -> 
             key={"h": "h", "r": "1"},
         )
     ]
-    response = await client.transact_write_items(items=deletes)
-    assert not response
+    await client.transact_write_items(items=deletes)
     assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 0
 
     await client.put_item(table=table, item={"h": "h", "r": "1", "s": "initial"})
@@ -675,7 +674,7 @@ async def test_transact_write_items_delete(client: Client, table: TableName) -> 
             key={"h": "h", "r": "1"},
             condition=F("s").not_equals("initial"),
         )
-        response = await client.transact_write_items(items=[delete])
+        await client.transact_write_items(items=[delete])
 
 
 @pytest.mark.usefixtures("supports_transactions")
@@ -692,8 +691,7 @@ async def test_transact_write_items_condition_check(
     condition = ConditionCheck(
         table=table, key={"h": "h", "r": "1"}, condition=F("s").equals("initial")
     )
-    response = await client.transact_write_items(items=[condition])
-    assert not response
+    await client.transact_write_items(items=[condition])
 
 
 @pytest.mark.usefixtures("supports_transactions")
@@ -714,9 +712,8 @@ async def test_transact_write_items_multiple_operations(
         key={"h": "h", "r": "2"},
     )
 
-    response = await client.transact_write_items(items=[put, update, delete])
+    await client.transact_write_items(items=[put, update, delete])
 
-    assert not response
     items = [item async for item in client.query(table, HashKey("h", "h"))]
     assert len(items) == 2
     assert items[0]["s"] == "changed"

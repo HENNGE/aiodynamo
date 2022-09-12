@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import Dict, Optional, Union
+from typing import Awaitable, Callable, Dict, Optional, Union
 
-from aiodynamo._compat import Literal, Protocol
+from aiodynamo._compat import Literal
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,4 @@ class RequestFailed(Exception):
     inner: Exception
 
 
-class HttpImplementation(Protocol):
-    async def __call__(self, request: Request) -> Response:
-        ...
+HttpImplementation = Callable[[Request], Awaitable[Response]]

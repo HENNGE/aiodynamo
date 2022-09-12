@@ -1,30 +1,18 @@
 import asyncio
 import os
-import sys
 import uuid
-from typing import AsyncGenerator, Generator, Union, cast
-
-from _pytest.fixtures import SubRequest
-from httpx import AsyncClient
-
-from aiodynamo.errors import UnknownOperation
-from aiodynamo.expressions import F
-from aiodynamo.http.httpx import HTTPX
-from aiodynamo.operations import ConditionCheck
-from aiodynamo.types import TableName
-
-if sys.version_info >= (3, 8):
-    from typing import Protocol
-else:
-    from typing_extensions import Protocol
-
-from typing import Awaitable, Callable, Optional
+from typing import AsyncGenerator, Awaitable, Callable, Generator, Optional, Union, cast
 
 import pytest
+from _pytest.fixtures import SubRequest
+from httpx import AsyncClient
 from yarl import URL
 
 from aiodynamo.client import Client
 from aiodynamo.credentials import Credentials
+from aiodynamo.errors import UnknownOperation
+from aiodynamo.expressions import F
+from aiodynamo.http.httpx import HTTPX
 from aiodynamo.http.types import HttpImplementation
 from aiodynamo.models import (
     KeySchema,
@@ -35,12 +23,10 @@ from aiodynamo.models import (
     StaticDelayRetry,
     Throughput,
 )
+from aiodynamo.operations import ConditionCheck
+from aiodynamo.types import TableName
 
-
-class TableFactory(Protocol):
-    @staticmethod
-    def __call__(throughput: Union[Throughput, PayPerRequest] = ...) -> Awaitable[str]:
-        ...
+TableFactory = Callable[[Union[Throughput, PayPerRequest]], Awaitable[str]]
 
 
 @pytest.fixture(scope="session")
@@ -133,7 +119,7 @@ async def table_factory(
 async def table(
     client: Client, table_factory: TableFactory
 ) -> AsyncGenerator[str, None]:
-    name = await table_factory()
+    name = await table_factory(Throughput(5, 5))
     try:
         yield name
     finally:
