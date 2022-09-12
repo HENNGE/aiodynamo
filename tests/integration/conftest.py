@@ -26,11 +26,7 @@ from aiodynamo.models import (
 from aiodynamo.operations import ConditionCheck
 from aiodynamo.types import TableName
 
-
-class TableFactory:
-    @staticmethod
-    def __call__(throughput: Union[Throughput, PayPerRequest] = ...) -> Awaitable[str]:
-        ...
+TableFactory = Callable[[Union[Throughput, PayPerRequest]], Awaitable[str]]
 
 
 @pytest.fixture(scope="session")
@@ -123,7 +119,7 @@ async def table_factory(
 async def table(
     client: Client, table_factory: TableFactory
 ) -> AsyncGenerator[str, None]:
-    name = await table_factory()
+    name = await table_factory(Throughput(5, 5))
     try:
         yield name
     finally:

@@ -234,7 +234,7 @@ async def test_delete_item(client: Client, table: TableName) -> None:
 async def test_delete_table(
     client: Client, table_factory: TableFactory, wait_config: RetryConfig
 ) -> None:
-    name = await table_factory()
+    name = await table_factory(Throughput(5, 5))
     # no error
     await client.put_item(name, {"h": "h", "r": "r"})
     await client.delete_table(name, wait_for_disabled=wait_config)
@@ -289,7 +289,7 @@ async def test_exists(
     throughput = Throughput(5, 5)
     key_schema = KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string))
     attrs = {"h": KeyType.string, "r": KeyType.string}
-    name = await table_factory()
+    name = await table_factory(throughput)
     try:
         assert await client.table_exists(name)
         desc = await client.describe_table(name)
