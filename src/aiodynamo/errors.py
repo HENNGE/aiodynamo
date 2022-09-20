@@ -207,7 +207,7 @@ def exception_from_response(status: int, body: bytes) -> Exception:
         return ServiceUnavailable()
     try:
         data = json.loads(body)
-        error = ERRORS[data["__type"].split("#", 1)[1]](data)
+        error = ERRORS[data["__type"].split("#", 1)[-1]](data)
         if isinstance(error, TransactionCanceled):
             error = extract_error_from_transaction_canceled(data)
         return error
@@ -220,4 +220,4 @@ def extract_error_from_transaction_canceled(data: Dict[str, Any]) -> AIODynamoEr
         error = data["CancellationReasons"][0]
         return ERRORS[f"{error['Code']}Exception"](error["Message"])
     except Exception:
-        return ERRORS[data["__type"].split("#", 1)[1]](data)
+        return ERRORS[data["__type"].split("#", 1)[-1]](data)
