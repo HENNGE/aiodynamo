@@ -1,6 +1,14 @@
 Changelog
 =========
 
+22.9
+----
+
+Release Date: September 20th, 2022
+
+* Updated minimum supported mypy version to 0.971, fixing some typing issues thanks to `@akawasaki  <https://github.com/akawasaki>`_.
+* Fixed support for exceptions when using dynamodb-local thanks to `@aclemons <https://github.com/aclemons>`_.
+
 22.8
 ----
 
