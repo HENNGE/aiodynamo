@@ -6,11 +6,13 @@ import configparser
 import datetime
 import json
 import os
+import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Callable, Optional, Sequence, TypeVar
+from typing import Any, Callable, Dict, Optional, Sequence, TypeVar
 
+from defusedxml import ElementTree as ET
 from yarl import URL
 
 from .http.types import HttpImplementation, Request, RequestFailed
@@ -34,6 +36,7 @@ class Credentials(metaclass=abc.ABCMeta):
         return ChainCredentials(
             candidates=[
                 EnvironmentCredentials(),
+                AssumeRoleWithWebIdentityCredentials(),
                 FileCredentials(),
                 ContainerMetadataCredentials(),
                 InstanceMetadataCredentials(),
@@ -287,6 +290,107 @@ def and_then(thing: Optional[T], mapper: Callable[[T], U]) -> Optional[U]:
     if thing is not None:
         return mapper(thing)
     return thing
+
+
+AWS_STS_API_VERSION = "2011-06-15"
+
+# https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html
+@dataclass
+class AssumeRoleWithWebIdentityCredentials(MetadataCredentials):
+    ACTION = "AssumeRoleWithWebIdentity"
+
+    timeout: Timeout = 2
+    max_attempts: int = 3
+
+    base_url: URL = URL("https://sts.amazonaws.com/")
+
+    token_path: Optional[str] = field(
+        default_factory=lambda: os.environ.get("AWS_WEB_IDENTITY_TOKEN_FILE", None)
+    )
+    role_arn: Optional[str] = field(
+        default_factory=lambda: os.environ.get("AWS_ROLE_ARN", None)
+    )
+    role_session_name: str = field(
+        default_factory=lambda: os.environ.get(
+            "AWS_ROLE_SESSION_NAME", f"default-session-{time.time()}"
+        )
+    )
+
+    def __post_init__(self) -> None:
+        self._identity_token: Optional[str] = None
+        super().__post_init__()
+
+    async def fetch_metadata(self, http: HttpImplementation) -> Metadata:
+        url = self._build_url()
+        response: bytes = await fetch_with_retry_and_timeout(
+            http=http,
+            max_attempts=self.max_attempts,
+            timeout=self.timeout,
+            request=Request(method="GET", url=url, headers=None, body=None),
+        )
+        credentials = self._take_credentials_from_response(response)
+        return Metadata(
+            key=Key(
+                id=credentials["AccessKeyId"],
+                secret=credentials["SecretAccessKey"],
+                token=credentials.get("SessionToken", None),
+            ),
+            expires=parse_amazon_timestamp(credentials["Expiration"]),
+        )
+
+    def is_disabled(self) -> bool:
+        if not self.token_path:
+            return True
+
+        if not self.role_arn:
+            error_msg = (
+                "The provided profile or the current environment is "
+                "configured to assume role with web identity but has no "
+                "role ARN configured. Ensure that the profile has the role_arn"
+                "configuration set or the AWS_ROLE_ARN env var is set."
+            )
+            raise Exception(error_msg)
+
+        return False
+
+    def _take_credentials_from_response(self, response: bytes) -> Dict[str, str]:
+        parsed_response: Dict[str, str] = {}
+
+        response_tree = ET.fromstring(response)
+        ns = {"sts": f"https://sts.amazonaws.com/doc/{AWS_STS_API_VERSION}/"}
+        credentials = response_tree.find(
+            "sts:AssumeRoleWithWebIdentityResult", ns
+        ).find("sts:Credentials", ns)
+
+        for cred in credentials:
+            _, _, tag = cred.tag.rpartition("}")
+            parsed_response[tag] = cred.text
+
+        return parsed_response
+
+    def _build_url(self) -> str:
+        params: Dict[str, Any] = {
+            "WebIdentityToken": self.identity_token,
+            "RoleArn": self.role_arn,
+            "RoleSessionName": self.role_session_name,
+            "Action": self.ACTION,
+            "Version": AWS_STS_API_VERSION,
+        }
+
+        return str(self.base_url.with_query(params))
+
+    @property
+    def identity_token(self) -> str:
+        if self._identity_token:
+            return self._identity_token
+
+        if not self.token_path:
+            raise Disabled()
+
+        with open(self.token_path) as token_file:
+            self._identity_token = token_file.read()
+
+        return self._identity_token
 
 
 # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint.html
