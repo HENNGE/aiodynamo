@@ -180,7 +180,9 @@ async def test_disabled(monkeypatch: MonkeyPatch) -> None:
     assert not creds.is_disabled()
 
 
-async def test_file_credentials(fs: FakeFilesystem, http: HttpImplementation) -> None:
+async def test_file_credentials(
+    fs: FakeFilesystem, http: HttpImplementation, monkeypatch: MonkeyPatch
+) -> None:
     assert FileCredentials().is_disabled()
     fs.create_file(
         Path.home().joinpath(".aws", "credentials"),
@@ -201,6 +203,11 @@ async def test_file_credentials(fs: FakeFilesystem, http: HttpImplementation) ->
     credentials = FileCredentials(profile_name="my-profile")
     assert not credentials.is_disabled()
     assert await credentials.get_key(http) == Key(id="baz", secret="hoge")
+    monkeypatch.setenv("AWS_PROFILE", "my-profile")
+    credentials = FileCredentials()
+    assert not credentials.is_disabled()
+    assert await credentials.get_key(http) == Key(id="baz", secret="hoge")
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
     custom_path = Path("/custom/credentials/file")
     assert FileCredentials(path=custom_path).is_disabled()
     fs.create_file(
