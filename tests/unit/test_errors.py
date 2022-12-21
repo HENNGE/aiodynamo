@@ -31,7 +31,10 @@ async def test_retry_raises_underlying_error_aiohttp() -> None:
 
 
 # dynamodb-local does non include the #-prefixed value
-@pytest.mark.parametrize("error_type", ["ValidationException", "com.amazonaws.dynamodb.v20120810#ValidationException"])
+@pytest.mark.parametrize(
+    "error_type",
+    ["ValidationException", "com.amazonaws.dynamodb.v20120810#ValidationException"],
+)
 async def test_dynamo_errors_get_raised_depaginated(error_type: str) -> None:
     class TestResponse:
         status = 400
