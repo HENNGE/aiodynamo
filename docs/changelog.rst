@@ -1,6 +1,14 @@
 Changelog
 =========
 
+22.12
+-----
+
+Release Date: December 27th, 2022
+
+* :py:class:`aiodynamo.credentials.FileCredentials` will now use the profile specified in the ``AWS_PROFILE`` environment
+  variable if it is set and no explicit profile is passed. Thanks to `@BTripp1986 <https://github.com/BTripp1986>`_.
+
 22.9
 ----
 
