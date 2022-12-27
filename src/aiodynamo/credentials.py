@@ -9,7 +9,7 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Callable, Optional, Sequence, TypeVar
+from typing import Callable, Optional, Sequence, TypeVar, cast
 
 from yarl import URL
 
@@ -158,8 +158,10 @@ class FileCredentials(Credentials):
         self,
         *,
         path: Optional[Path] = None,
-        profile_name: str = "default",
+        profile_name: Optional[str] = None,
     ) -> None:
+        if profile_name is None:
+            profile_name = cast(str, os.environ.get("AWS_PROFILE", "default"))
         if path is None:
             path = Path.home().joinpath(".aws", "credentials")
         self.key = None
