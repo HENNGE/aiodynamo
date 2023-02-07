@@ -4,11 +4,22 @@ import abc
 import decimal
 from dataclasses import dataclass, field
 from itertools import chain, count
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 from .errors import CannotAddToNestedField
 from .types import AttributeType, Numeric, ParametersDict
-from .utils import low_level_serialize
+from .utils import deparametetrize, low_level_serialize
 
 _ParametersCache = Dict[Tuple[Any, Any], str]
 
@@ -378,6 +389,14 @@ class Condition(metaclass=abc.ABCMeta):
     def encode(self, params: Parameters) -> str:
         pass
 
+    def debug(self, numeric_type: Callable[[str], Any] = float) -> str:
+        """
+        Format the expression as a string for debugging.
+        """
+        params = Parameters()
+        expression = self.encode(params)
+        return deparametetrize(expression, params, numeric_type)
+
 
 @dataclass(frozen=True)
 class NotCondition(Condition):
@@ -619,6 +638,16 @@ class UpdateExpression:
         if bits:
             return " ".join(bits)
         return None
+
+    def debug(self, numeric_type: Callable[[str], Any] = float) -> Optional[str]:
+        """
+        Format the expression as a string for debugging.
+        """
+        params = Parameters()
+        expression = self.encode(params)
+        if not expression:
+            return expression
+        return deparametetrize(expression, params, numeric_type)
 
 
 @dataclass(frozen=True)

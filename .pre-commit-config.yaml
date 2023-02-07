@@ -21,3 +21,9 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+    -   id: tests
+        name: tests
+        entry: poetry run pytest tests/unit
+        language: system
+        types: [python]
+        pass_filenames: false

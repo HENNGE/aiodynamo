@@ -3,6 +3,7 @@ from typing import Any, Dict
 import pytest
 
 from aiodynamo.expressions import (
+    Condition,
     F,
     HashKey,
     Parameters,
@@ -107,3 +108,28 @@ def test_f_eq(lhs: F, rhs: F, eq: bool) -> None:
 )
 def test_f_repr(f: F, r: str) -> None:
     assert repr(f) == r
+
+
+@pytest.mark.parametrize(
+    "expr,expected",
+    [
+        (F("a").equals(True) & F("b").gt(1), "(a = True AND b > 1)"),
+        (F("a", 1).begins_with("foo"), "begins_with(a[1], 'foo')"),
+    ],
+)
+def test_condition_debug(expr: Condition, expected: str) -> None:
+    assert expr.debug(int) == expected
+
+
+@pytest.mark.parametrize(
+    "expr,expected",
+    [
+        (
+            F("a").set(1) & F("b").add(2) & F("c").remove() & F("d").delete({"e"}),
+            "SET a = 1 REMOVE c ADD b 2 DELETE d {'e'}",
+        ),
+        (F("foo", "bar", 1).set("test"), "SET foo.bar[1] = 'test'"),
+    ],
+)
+def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
+    assert expr.debug(int) == expected
