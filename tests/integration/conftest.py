@@ -1,7 +1,19 @@
 import asyncio
 import os
 import uuid
-from typing import AsyncGenerator, Awaitable, Callable, Generator, Optional, Union, cast
+from dataclasses import dataclass
+from enum import Enum
+from typing import (
+    Any,
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Generator,
+    Iterable,
+    Optional,
+    Union,
+    cast,
+)
 
 import pytest
 from _pytest.fixtures import SubRequest
@@ -29,14 +41,66 @@ from aiodynamo.types import TableName
 TableFactory = Callable[[Union[Throughput, PayPerRequest]], Awaitable[str]]
 
 
+class Flavor(Enum):
+    real = "real"
+    scylla = "scylla"
+    other = "other"
+
+
+@dataclass
+class Implementation:
+    name: str
+    flavor: Flavor
+    endpoint: Optional[URL]
+
+
+def find_dynamo_implementations() -> Iterable[Implementation]:
+    if os.environ.get("TEST_ON_AWS", "false") == "true":
+        yield Implementation(name="Real DynamoDB", flavor=Flavor.real, endpoint=None)
+    for impl in filter(bool, os.environ.get("DYNAMODB_URLS", "").split(" ")):
+        name, url = impl.split("=")
+        if "," in url:
+            url, flavor_name = url.split(",")
+            flavor = Flavor(flavor_name)
+        else:
+            flavor = Flavor.other
+        yield Implementation(name=name, flavor=flavor, endpoint=URL(url))
+    try:
+        yield Implementation(
+            name=os.environ.get("DYNAMODB_NAME", "single"),
+            flavor=Flavor(os.environ.get("DYNAMODB_FLAVOR", "other")),
+            endpoint=URL(os.environ["DYNAMODB_URL"]),
+        )
+    except KeyError:
+        pass
+
+
+def pytest_make_parametrize_id(config: Any, val: Any) -> str:
+    if isinstance(val, Implementation):
+        return val.name
+    if isinstance(val, str):
+        return val
+    return repr(val)
+
+
+@pytest.fixture(scope="session", params=find_dynamo_implementations())
+def dynamodb_implementation(request: SubRequest) -> Implementation:
+    return cast(Implementation, request.param)
+
+
 @pytest.fixture(scope="session")
 def table_name_prefix() -> str:
     return os.environ.get("DYNAMODB_TABLE_PREFIX", "")
 
 
 @pytest.fixture(scope="session")
-def real_dynamo() -> bool:
-    return os.environ.get("TEST_ON_AWS", "false") == "true"
+def real_dynamo(dynamodb_implementation: Implementation) -> bool:
+    return dynamodb_implementation.flavor is Flavor.real
+
+
+@pytest.fixture(scope="session")
+def scylla(dynamodb_implementation: Implementation) -> bool:
+    return dynamodb_implementation.flavor is Flavor.scylla
 
 
 @pytest.fixture()
@@ -50,12 +114,8 @@ async def supports_transactions(client: Client, table: TableName) -> None:
 
 
 @pytest.fixture(scope="session")
-def endpoint(real_dynamo: bool) -> Optional[URL]:
-    if real_dynamo:
-        return None
-    if "DYNAMODB_URL" not in os.environ:
-        raise pytest.skip("DYNAMODB_URL not defined in environment")
-    return URL(os.environ["DYNAMODB_URL"])
+def endpoint(dynamodb_implementation: Implementation) -> Optional[URL]:
+    return dynamodb_implementation.endpoint
 
 
 @pytest.fixture(scope="session")
@@ -76,10 +136,10 @@ def client(
 
 
 @pytest.fixture(scope="session")
-def wait_config(real_dynamo: Optional[URL]) -> RetryConfig:
+def wait_config(dynamodb_implementation: Implementation) -> RetryConfig:
     return (
         RetryConfig.default_wait_config()
-        if real_dynamo
+        if dynamodb_implementation.flavor is Flavor.real
         else StaticDelayRetry(time_limit_secs=5, delay=0.5)
     )
 

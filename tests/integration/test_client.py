@@ -29,6 +29,7 @@ from aiodynamo.models import (
     KeySpec,
     KeyType,
     LocalSecondaryIndex,
+    PayPerRequest,
     Projection,
     ProjectionType,
     RetryConfig,
@@ -284,20 +285,21 @@ async def test_scan(client: Client, table: TableName, consistent_read: bool) -> 
 
 
 async def test_exists(
-    client: Client, table_factory: TableFactory, wait_config: RetryConfig
+    client: Client, table_factory: TableFactory, wait_config: RetryConfig, scylla: bool
 ) -> None:
     throughput = Throughput(5, 5)
     key_schema = KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string))
     attrs = {"h": KeyType.string, "r": KeyType.string}
     name = await table_factory(throughput)
+    expected_throughput = PayPerRequest() if scylla else throughput
     try:
         assert await client.table_exists(name)
         desc = await client.describe_table(name)
-        assert desc.throughput == throughput
+        assert desc.throughput == expected_throughput
         assert desc.status is TableStatus.active
         assert desc.attributes == attrs
         assert desc.key_schema == key_schema
-        assert desc.item_count == 0
+        assert desc.item_count == None if scylla else 0
     finally:
         await client.delete_table(name, wait_for_disabled=wait_config)
     assert await client.table_exists(name) is False

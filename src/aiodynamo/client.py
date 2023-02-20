@@ -67,6 +67,7 @@ from .models import (
     TableDescription,
     TableStatus,
     Throughput,
+    ThroughputType,
     TimeToLiveDescription,
     TimeToLiveStatus,
 )
@@ -107,7 +108,7 @@ class Table:
 
     async def create(
         self,
-        throughput: Union[Throughput, PayPerRequest],
+        throughput: ThroughputType,
         keys: KeySchema,
         *,
         lsis: Optional[List[LocalSecondaryIndex]] = None,
@@ -526,8 +527,13 @@ class Client:
             )
         else:
             key_schema = None
-        throughput: Optional[Throughput]
-        if "ProvisionedThroughput" in description:
+        throughput: Optional[ThroughputType]
+        if (
+            "BillingModeSummary" in description
+            and description["BillingModeSummary"]["BillingMode"] == PayPerRequest.MODE
+        ):
+            throughput = PayPerRequest()
+        elif "ProvisionedThroughput" in description:
             throughput = Throughput(
                 read=description["ProvisionedThroughput"]["ReadCapacityUnits"],
                 write=description["ProvisionedThroughput"]["WriteCapacityUnits"],
