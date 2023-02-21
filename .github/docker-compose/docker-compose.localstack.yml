@@ -3,4 +3,4 @@ services:
   dynamodb:
     image: "localstack/localstack:0.14.2"
     ports:
-      - "4566-4583:4566-4583"
+      - "8000:4566"

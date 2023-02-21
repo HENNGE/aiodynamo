@@ -24,73 +24,22 @@ jobs:
           path: poetry.lock
           key: ${{ github.sha }}-${{ matrix.python-version }}
 
-  pytest-dynalite:
+  pytest:
     needs: lock
     strategy:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+        implementation: ["dynalite", "dynamodb-local", "localstack"]
     runs-on: "ubuntu-latest"
     env:
       DYNAMODB_URL: http://localhost:8000
-      DYNAMODB_NAME: dynalite
+      DYNAMODB_FLAVOR: other
+      DYNAMODB_NAME: ${{ matrix.implementation }}
       AWS_ACCESS_KEY_ID: dummy
       AWS_SECRET_ACCESS_KEY: dummy
     steps:
       - uses: actions/checkout@v3
-      - run: docker compose up -d
-        working-directory: ./docker-compose/dynalite
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v3
-        with:
-          path: poetry.lock
-          key: ${{ github.sha }}-${{ matrix.python-version }}
-      - run: curl -sSL https://install.python-poetry.org | python3 -
-      - run: poetry install --extras aiohttp --extras httpx
-      - run: poetry run pytest --verbose
-
-  pytest-dynamodb-local:
-    needs: lock
-    strategy:
-      matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
-    runs-on: "ubuntu-latest"
-    env:
-      DYNAMODB_URL: http://localhost:8000
-      DYNAMODB_NAME: dynamodb-local
-      AWS_ACCESS_KEY_ID: dummy
-      AWS_SECRET_ACCESS_KEY: dummy
-    steps:
-      - uses: actions/checkout@v3
-      - run: docker compose up -d
-        working-directory: ./docker-compose/dynamodb-local
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v3
-        with:
-          path: poetry.lock
-          key: ${{ github.sha }}-${{ matrix.python-version }}
-      - run: curl -sSL https://install.python-poetry.org | python3 -
-      - run: poetry install --extras aiohttp --extras httpx
-      - run: poetry run pytest --verbose
-
-  pytest-localstack:
-    needs: lock
-    strategy:
-      matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
-    runs-on: "ubuntu-latest"
-    env:
-      DYNAMODB_URL: http://localhost:4566
-      DYNAMODB_NAME: localstack
-      AWS_ACCESS_KEY_ID: dummy
-      AWS_SECRET_ACCESS_KEY: dummy
-    steps:
-      - uses: actions/checkout@v3
-      - run: docker compose up -d
-        working-directory: ./docker-compose/localstack
+      - run: docker compose -f .github/docker-compose/docker-compose.${{ matrix.implementation }}.yml up -d
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
@@ -116,8 +65,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: dummy
     steps:
       - uses: actions/checkout@v3
-      - run: docker compose up -d
-        working-directory: ./docker-compose/scylla
+      - run: docker compose -f .github/docker-compose/docker-compose.scylla.yml up -d
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}

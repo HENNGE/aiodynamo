@@ -299,7 +299,7 @@ async def test_exists(
         assert desc.status is TableStatus.active
         assert desc.attributes == attrs
         assert desc.key_schema == key_schema
-        assert desc.item_count == None if scylla else 0
+        assert desc.item_count == (None if scylla else 0)
     finally:
         await client.delete_table(name, wait_for_disabled=wait_config)
     assert await client.table_exists(name) is False
