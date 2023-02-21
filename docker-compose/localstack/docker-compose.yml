@@ -1,0 +1,6 @@
+version: "3.9"
+services:
+  dynamodb:
+    image: "localstack/localstack:0.14.2"
+    ports:
+      - "4566-4583:4566-4583"
