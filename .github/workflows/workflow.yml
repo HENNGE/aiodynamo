@@ -2,6 +2,10 @@ name: workflow
 
 on: [push, pull_request]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lock:
     strategy:
@@ -19,17 +23,13 @@ jobs:
         with:
           path: poetry.lock
           key: ${{ github.sha }}-${{ matrix.python-version }}
+
   pytest-dynalite:
     needs: lock
     strategy:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
     runs-on: "ubuntu-latest"
-    services:
-      dynalite:
-        image: ghcr.io/hennge/dynalite:latest
-        ports:
-          - 8000:8000
     env:
       DYNAMODB_URL: http://localhost:8000
       DYNAMODB_NAME: dynalite
@@ -37,6 +37,8 @@ jobs:
       AWS_SECRET_ACCESS_KEY: dummy
     steps:
       - uses: actions/checkout@v2
+      - run: docker compose up -d
+        working-directory: ./docker-compose/dynalite
       - uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
@@ -47,17 +49,13 @@ jobs:
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run pytest --verbose
+
   pytest-dynamodb-local:
     needs: lock
     strategy:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
     runs-on: "ubuntu-latest"
-    services:
-      dynamodb:
-        image: amazon/dynamodb-local:latest
-        ports:
-          - 8000:8000
     env:
       DYNAMODB_URL: http://localhost:8000
       DYNAMODB_NAME: dynamodb-local
@@ -65,6 +63,8 @@ jobs:
       AWS_SECRET_ACCESS_KEY: dummy
     steps:
       - uses: actions/checkout@v2
+      - run: docker compose up -d
+        working-directory: ./docker-compose/dynamodb-local
       - uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
@@ -75,17 +75,13 @@ jobs:
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run pytest --verbose
+
   pytest-localstack:
     needs: lock
     strategy:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
     runs-on: "ubuntu-latest"
-    services:
-      dynamodb:
-        image: localstack/localstack:0.14.2
-        ports:
-          - 4566-4583:4566-4583
     env:
       DYNAMODB_URL: http://localhost:4566
       DYNAMODB_NAME: localstack
@@ -93,6 +89,8 @@ jobs:
       AWS_SECRET_ACCESS_KEY: dummy
     steps:
       - uses: actions/checkout@v2
+      - run: docker compose up -d
+        working-directory: ./docker-compose/localstack
       - uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
@@ -103,6 +101,34 @@ jobs:
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run pytest --verbose
+
+  pytest-scylla:
+    needs: lock
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+    runs-on: "ubuntu-latest"
+    env:
+      DYNAMODB_URL: http://localhost:8000
+      DYNAMODB_FLAVOR: scylla
+      DYNAMODB_NAME: scylla
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+    steps:
+      - uses: actions/checkout@v2
+      - run: docker compose up -d
+        working-directory: ./docker-compose/scylla
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/cache@v2
+        with:
+          path: poetry.lock
+          key: ${{ github.sha }}-${{ matrix.python-version }}
+      - run: curl -sSL https://install.python-poetry.org | python3 -
+      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry run pytest --verbose
+
   mypy:
     needs: lock
     strategy:
@@ -121,6 +147,7 @@ jobs:
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run mypy
+
   isort:
     needs: lock
     runs-on: "ubuntu-latest"
@@ -136,6 +163,7 @@ jobs:
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run isort --check --diff src tests
+
   black:
     needs: lock
     runs-on: "ubuntu-latest"
