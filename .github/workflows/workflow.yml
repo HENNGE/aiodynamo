@@ -51,6 +51,36 @@ jobs:
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run pytest --verbose
+  
+  pytest-dynalite-services:
+    needs: lock
+    strategy:
+      matrix:
+        python-version: ["3.7"]
+        # python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+    runs-on: "ubuntu-latest"
+    services:
+      dynalite:
+        image: ghcr.io/hennge/dynalite:latest
+        ports:
+          - 8000:8000
+    env:
+      DYNAMODB_URL: http://localhost:8000
+      DYNAMODB_NAME: dynalite
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/cache@v2
+        with:
+          path: poetry.lock
+          key: ${{ github.sha }}-${{ matrix.python-version }}
+      - run: curl -sSL https://install.python-poetry.org | python3 -
+      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry run pytest --verbose
 
   # pytest-dynamodb-local:
   #   needs: lock
