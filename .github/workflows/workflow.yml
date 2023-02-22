@@ -29,43 +29,17 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
-        implementation: ["dynalite", "dynamodb-local", "localstack"]
+        implementation: [{flavor: "other", name: "dynalite"}, {flavor: "other", name: "dynamodb-local"}, {flavor: "other", name: "localstack"}, {flavor: "scylla", name: "scylla"}]
     runs-on: "ubuntu-latest"
     env:
       DYNAMODB_URL: http://localhost:8000
-      DYNAMODB_FLAVOR: other
-      DYNAMODB_NAME: ${{ matrix.implementation }}
+      DYNAMODB_FLAVOR: ${{ matrix.implementation.flavor }}
+      DYNAMODB_NAME: ${{ matrix.implementation.name }}
       AWS_ACCESS_KEY_ID: dummy
       AWS_SECRET_ACCESS_KEY: dummy
     steps:
       - uses: actions/checkout@v3
-      - run: docker compose -f .github/docker-compose/docker-compose.${{ matrix.implementation }}.yml up -d
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v3
-        with:
-          path: poetry.lock
-          key: ${{ github.sha }}-${{ matrix.python-version }}
-      - run: curl -sSL https://install.python-poetry.org | python3 -
-      - run: poetry install --extras aiohttp --extras httpx
-      - run: poetry run pytest --verbose
-
-  pytest-scylla:
-    needs: lock
-    strategy:
-      matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11"]
-    runs-on: "ubuntu-latest"
-    env:
-      DYNAMODB_URL: http://localhost:8000
-      DYNAMODB_FLAVOR: scylla
-      DYNAMODB_NAME: scylla
-      AWS_ACCESS_KEY_ID: dummy
-      AWS_SECRET_ACCESS_KEY: dummy
-    steps:
-      - uses: actions/checkout@v3
-      - run: docker compose -f .github/docker-compose/docker-compose.scylla.yml up -d
+      - run: docker compose -f .github/docker-compose/docker-compose.${{ matrix.implementation.name }}.yml up -d
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
