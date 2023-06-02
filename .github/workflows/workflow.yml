@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 jobs:
   lock:
+    timeout-minutes: 10
     strategy:
       matrix:
         python-version: ["3.7", "3.8", "3.9", "3.10"]
@@ -20,6 +21,7 @@ jobs:
           path: poetry.lock
           key: ${{ github.sha }}-${{ matrix.python-version }}
   pytest-dynalite:
+    timeout-minutes: 10
     needs: lock
     strategy:
       matrix:
@@ -47,6 +49,7 @@ jobs:
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run pytest --verbose
   pytest-dynamodb-local:
+    timeout-minutes: 10
     needs: lock
     strategy:
       matrix:
@@ -74,6 +77,7 @@ jobs:
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run pytest --verbose
   pytest-localstack:
+    timeout-minutes: 10
     needs: lock
     strategy:
       matrix:
@@ -101,6 +105,7 @@ jobs:
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run pytest --verbose
   mypy:
+    timeout-minutes: 10
     needs: lock
     strategy:
       matrix:
@@ -119,6 +124,7 @@ jobs:
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run mypy
   isort:
+    timeout-minutes: 10
     needs: lock
     runs-on: "ubuntu-latest"
     steps:
@@ -134,6 +140,7 @@ jobs:
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run isort --check --diff src tests
   black:
+    timeout-minutes: 10
     needs: lock
     runs-on: "ubuntu-latest"
     steps:
