@@ -952,9 +952,9 @@ class Client:
     ) -> None:
         if len(items) == 0:
             raise TransactionEmpty("TransactWriteItems must have at least 1 operation")
-        if len(items) > 25:
+        if len(items) > 100:
             raise TooManyTransactions(
-                "TransactWriteItems must have a maximum of 25 operations"
+                "TransactWriteItems must have a maximum of 100 operations"
             )
 
         payload = {
@@ -969,9 +969,9 @@ class Client:
     ) -> List[Item]:
         if len(items) == 0:
             raise TransactionEmpty("TransactGetItems must have at least 1 operation")
-        if len(items) > 25:
+        if len(items) > 100:
             raise TooManyTransactions(
-                "TransactGetItems must have a maximum of 25 operations"
+                "TransactGetItems must have a maximum of 100 operations"
             )
 
         payload = {
