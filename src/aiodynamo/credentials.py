@@ -356,7 +356,7 @@ class ContainerMetadataCredentials(MetadataCredentials):
 @dataclass
 class InstanceMetadataCredentials(MetadataCredentials):
     """
-    Loads credentials from the EC2 instance metadata endpoint.
+    Loads credentials from the EC2 instance metadata endpoint using IMDSv2.
     """
 
     timeout: Timeout = 1
@@ -373,6 +373,7 @@ class InstanceMetadataCredentials(MetadataCredentials):
         return self.disabled
 
     async def fetch_metadata(self, http: HttpImplementation) -> Metadata:
+        token_headers = await self.get_token_headers(http)
         role_url = self.base_url.with_path(
             "/latest/meta-data/iam/security-credentials/"
         )
@@ -382,7 +383,7 @@ class InstanceMetadataCredentials(MetadataCredentials):
                 max_attempts=self.max_attempts,
                 timeout=self.timeout,
                 request=Request(
-                    method="GET", url=str(role_url), headers=None, body=None
+                    method="GET", url=str(role_url), headers=token_headers, body=None
                 ),
             )
         ).decode("utf-8")
@@ -394,7 +395,7 @@ class InstanceMetadataCredentials(MetadataCredentials):
             max_attempts=self.max_attempts,
             timeout=self.timeout,
             request=Request(
-                method="GET", url=str(credentials_url), headers=None, body=None
+                method="GET", url=str(credentials_url), headers=token_headers, body=None
             ),
         )
         credentials = json.loads(raw_credentials)
@@ -406,6 +407,24 @@ class InstanceMetadataCredentials(MetadataCredentials):
             ),
             expires=parse_amazon_timestamp(credentials["Expiration"]),
         )
+
+    async def get_token_headers(self, http: HttpImplementation, session_duration_seconds: int = 5*60) -> dict[str, str]:
+        token_url = self.base_url.with_path(
+            "/latest/api/token/"
+        )
+        token = (
+            await fetch_with_retry_and_timeout(
+                http=http,
+                max_attempts=self.max_attempts,
+                timeout=self.timeout,
+                request=Request(
+                    method="PUT", url=str(token_url), headers={
+                        "X-aws-ec2-metadata-token-ttl-seconds": str(session_duration_seconds)
+                    }, body=None
+                ),
+            )
+        ).decode("utf-8")
+        return {"X-aws-ec2-metadata-token": token}
 
 
 class TooManyRetries(Exception):

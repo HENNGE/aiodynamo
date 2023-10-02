@@ -33,6 +33,10 @@ class InstanceMetadataServer:
         self.metadata: Optional[Metadata] = None
         self.calls = 0
 
+    async def token_handler(self, request: web.Request) -> web.Response:
+        token = "12345678"
+        return web.Response(body=token.encode("utf-8"))
+    
     async def role_handler(self, request: web.Request) -> web.Response:
         if self.role is None:
             raise web.HTTPNotFound()
@@ -71,6 +75,14 @@ async def instance_metadata_server() -> AsyncGenerator[InstanceMetadataServer, N
             web.get(
                 "/latest/meta-data/iam/security-credentials/{role:.*}",
                 ims.credentials_handler,
+            )
+        ]
+    )
+    app.add_routes(
+        [
+            web.put(
+                "/latest/api/token/",
+                ims.token_handler,
             )
         ]
     )
