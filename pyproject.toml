@@ -8,10 +8,10 @@ repository = "https://github.com/HENNGE/aiodynamo"
 documentation = "https://aiodynamo.readthedocs.io"
 classifiers = [
     "Framework :: AsyncIO",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3 :: Only",
     "Typing :: Typed",
     "License :: OSI Approved :: Apache Software License",
@@ -21,11 +21,10 @@ homepage = "https://github.com/HENNGE/aiodynamo"
 keywords = ["dynamodb", "asyncio", "aws"]
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.8"
 httpx = {version = ">=0.15.0 <1.0.0", optional = true}
 aiohttp = {version = "^3.6.2", optional = true}
 yarl = "^1.4.2"
-typing_extensions = { version = "^3.7", python = "< 3.8" }
 
 [tool.poetry.extras]
 httpx = ["httpx"]
@@ -36,7 +35,7 @@ pytest = "^6.0"
 pytest-asyncio = "^0.17"
 pytest-cov = "^2.6"
 black = "^22.3"
-sphinx = "^4.3"
+sphinx = "^7"
 pyperf = "^2.0"
 boto3 = "^1.12.18"
 freezegun = "^1.0"

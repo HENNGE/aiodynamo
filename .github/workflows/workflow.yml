@@ -7,7 +7,7 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
     runs-on: "ubuntu-latest"
     steps:
       - uses: actions/checkout@v2
@@ -25,7 +25,7 @@ jobs:
     needs: lock
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
     runs-on: "ubuntu-latest"
     services:
       dynalite:
@@ -53,7 +53,7 @@ jobs:
     needs: lock
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
     runs-on: "ubuntu-latest"
     services:
       dynamodb:
@@ -81,7 +81,7 @@ jobs:
     needs: lock
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
     runs-on: "ubuntu-latest"
     services:
       dynamodb:
@@ -109,7 +109,7 @@ jobs:
     needs: lock
     strategy:
       matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
     runs-on: "ubuntu-latest"
     steps:
       - uses: actions/checkout@v2
@@ -131,11 +131,11 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
-          python-version: "3.10"
+          python-version: "3.11"
       - uses: actions/cache@v2
         with:
           path: poetry.lock
-          key: ${{ github.sha }}-3.10
+          key: ${{ github.sha }}-3.11
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run isort --check --diff src tests
@@ -147,11 +147,11 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
-          python-version: "3.10"
+          python-version: "3.11"
       - uses: actions/cache@v2
         with:
           path: poetry.lock
-          key: ${{ github.sha }}-3.10
+          key: ${{ github.sha }}-3.11
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run black --check src/ tests/
