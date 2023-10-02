@@ -129,13 +129,13 @@ class LocalSecondaryIndex:
 
 @dataclass(frozen=True)
 class GlobalSecondaryIndex(LocalSecondaryIndex):
-    throughput: Throughput
+    throughput: Optional[Throughput]
 
     def encode(self) -> EncodedGlobalSecondaryIndex:
         # Cast due to https://github.com/python/mypy/issues/4122
         return cast(
             EncodedGlobalSecondaryIndex,
-            {**super().encode(), **self.throughput.encode()},
+            {**super().encode(), **self.throughput.encode() if self.throughput else {}},
         )
 
 
