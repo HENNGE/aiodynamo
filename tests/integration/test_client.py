@@ -600,7 +600,7 @@ async def test_batch(client: Client, table: TableName) -> None:
     [
         ([], TransactionEmpty),
         (
-            [Put(table="any-table", item={"h": "h", "r": str(i)}) for i in range(26)],
+            [Put(table="any-table", item={"h": "h", "r": str(i)}) for i in range(101)],
             TooManyTransactions,
         ),
     ],
@@ -725,7 +725,7 @@ async def test_transact_write_items_multiple_operations(
     [
         ([], TransactionEmpty),
         (
-            [Get(table="any-table", key={"h": "h", "r": str(i)}) for i in range(26)],
+            [Get(table="any-table", key={"h": "h", "r": str(i)}) for i in range(101)],
             TooManyTransactions,
         ),
     ],
