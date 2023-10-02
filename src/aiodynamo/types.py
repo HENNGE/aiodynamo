@@ -1,6 +1,6 @@
 import decimal
 from enum import Enum
-from typing import Any, Callable, Dict, List, Union
+from typing import Any, Callable, Dict, List, Union, Optional
 
 from ._compat import TypedDict
 
@@ -68,7 +68,7 @@ class EncodedLocalSecondaryIndex(TypedDict):
 
 
 class EncodedGlobalSecondaryIndex(EncodedLocalSecondaryIndex, total=False):
-    ProvisionedThroughput: EncodedThroughput
+    ProvisionedThroughput: Optional[EncodedThroughput]
 
 
 class EncodedStreamSpecificationRequired(TypedDict):

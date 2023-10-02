@@ -8,7 +8,17 @@ import time
 from dataclasses import dataclass
 from enum import Enum, unique
 from itertools import count
-from typing import Any, AsyncIterable, Dict, Iterable, Iterator, List, Optional, cast
+from typing import (
+    Any,
+    AsyncIterable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    cast,
+    Union,
+)
 
 from .expressions import Parameters, ProjectionExpression
 from .types import (
@@ -132,12 +142,19 @@ class GlobalSecondaryIndex(LocalSecondaryIndex):
     throughput: Optional[Throughput]
 
     def encode(self) -> EncodedGlobalSecondaryIndex:
+        # Writing this as an inline terary doesn't satisfy MyPy
+        # error: Missing key "ProvisionedThroughput" for TypedDict "EncodedThroughput"
+        t: Union[EncodedThroughput, dict[Any, Any]]
+        if self.throughput:
+            t = self.throughput.encode()
+        else:
+            t = {}
         # Cast due to https://github.com/python/mypy/issues/4122
         return cast(
             EncodedGlobalSecondaryIndex,
             {
                 **super().encode(),
-                **(self.throughput.encode() if self.throughput else {}),
+                **cast(EncodedThroughput, t),
             },
         )
 
