@@ -135,7 +135,10 @@ class GlobalSecondaryIndex(LocalSecondaryIndex):
         # Cast due to https://github.com/python/mypy/issues/4122
         return cast(
             EncodedGlobalSecondaryIndex,
-            {**super().encode(), **(self.throughput.encode() if self.throughput else {})},
+            {
+                **super().encode(),
+                **(self.throughput.encode() if self.throughput else {}),
+            },
         )
 
 
