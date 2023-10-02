@@ -424,6 +424,9 @@ class InstanceMetadataCredentials(MetadataCredentials):
                 ),
             )
         ).decode("utf-8")
+        if not token:
+            logger.debug("Could not get token")
+            return {}
         return {"X-aws-ec2-metadata-token": token}
 
 
