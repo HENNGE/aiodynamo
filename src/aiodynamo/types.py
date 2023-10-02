@@ -67,7 +67,7 @@ class EncodedLocalSecondaryIndex(TypedDict):
     Projection: EncodedProjection
 
 
-class EncodedGlobalSecondaryIndex(EncodedLocalSecondaryIndex):
+class EncodedGlobalSecondaryIndex(EncodedLocalSecondaryIndex, total=False):
     ProvisionedThroughput: EncodedThroughput
 
 
