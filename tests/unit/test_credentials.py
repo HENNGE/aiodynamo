@@ -36,7 +36,7 @@ class InstanceMetadataServer:
     async def token_handler(self, request: web.Request) -> web.Response:
         token = "12345678"
         return web.Response(body=token.encode("utf-8"))
-    
+
     async def role_handler(self, request: web.Request) -> web.Response:
         if self.role is None:
             raise web.HTTPNotFound()

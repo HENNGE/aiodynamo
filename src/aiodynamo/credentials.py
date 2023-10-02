@@ -408,19 +408,24 @@ class InstanceMetadataCredentials(MetadataCredentials):
             expires=parse_amazon_timestamp(credentials["Expiration"]),
         )
 
-    async def get_token_headers(self, http: HttpImplementation, session_duration_seconds: int = 5*60) -> dict[str, str]:
-        token_url = self.base_url.with_path(
-            "/latest/api/token/"
-        )
+    async def get_token_headers(
+        self, http: HttpImplementation, session_duration_seconds: int = 5 * 60
+    ) -> dict[str, str]:
+        token_url = self.base_url.with_path("/latest/api/token/")
         token = (
             await fetch_with_retry_and_timeout(
                 http=http,
                 max_attempts=self.max_attempts,
                 timeout=self.timeout,
                 request=Request(
-                    method="PUT", url=str(token_url), headers={
-                        "X-aws-ec2-metadata-token-ttl-seconds": str(session_duration_seconds)
-                    }, body=None
+                    method="PUT",
+                    url=str(token_url),
+                    headers={
+                        "X-aws-ec2-metadata-token-ttl-seconds": str(
+                            session_duration_seconds
+                        )
+                    },
+                    body=None,
                 ),
             )
         ).decode("utf-8")
