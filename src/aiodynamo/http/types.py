@@ -6,7 +6,7 @@ from aiodynamo._compat import Literal
 
 @dataclass(frozen=True)
 class Request:
-    method: Union[Literal["GET"], Literal["POST"]]
+    method: Union[Literal["GET"], Literal["POST"], Literal["PUT"]]
     url: str
     headers: Optional[Dict[str, str]]
     body: Optional[bytes]
