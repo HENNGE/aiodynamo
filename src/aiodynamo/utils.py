@@ -23,6 +23,7 @@ from typing import (
 from .types import DynamoItem, Item, NumericTypeConverter
 
 if TYPE_CHECKING:
+    from .expressions import Parameters
     from .models import RetryConfig
 
 T = TypeVar("T")
@@ -186,3 +187,13 @@ async def wait(
     except RetryTimeout:
         return False
     return False
+
+
+def deparametetrize(
+    expression: str, params: Parameters, numeric_type: Callable[[str], Any]
+) -> str:
+    for key, value in dy2py(params.values, numeric_type).items():
+        expression = expression.replace(key, repr(value))
+    for key, value in params.names.items():
+        expression = expression.replace(key, value)
+    return expression
