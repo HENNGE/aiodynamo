@@ -110,7 +110,7 @@ async def supports_transactions(client: Client, table: TableName) -> None:
             [ConditionCheck(table, {"h": "h", "r": "r"}, F("h").does_not_exist())]
         )
     except UnknownOperation:
-        raise pytest.skip(f"Transactions not supported")
+        raise pytest.skip("Transactions not supported")
 
 
 @pytest.fixture(scope="session")

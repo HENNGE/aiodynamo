@@ -1,7 +1,5 @@
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, Optional, Union
-
-from aiodynamo._compat import Literal
+from typing import Awaitable, Callable, Dict, Literal, Optional, Union
 
 
 @dataclass(frozen=True)

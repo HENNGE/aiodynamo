@@ -27,3 +27,11 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+    -   id: ruff
+        name: ruff
+        entry: poetry run ruff
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: ['check', 'src', 'tests']
+

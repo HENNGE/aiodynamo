@@ -110,3 +110,20 @@ jobs:
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run black --check src/ tests/
+
+  ruff:
+    timeout-minutes: 10
+    needs: lock
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v3
+        with:
+          path: poetry.lock
+          key: ${{ github.sha }}-3.11
+      - run: curl -sSL https://install.python-poetry.org | python3 -
+      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry run ruff check src/ tests/

@@ -640,7 +640,7 @@ async def test_transact_write_items_update(client: Client, table: TableName) -> 
         Update(
             table=table,
             key={"h": "h", "r": "1"},
-            expression=F("s").set(f"changed"),
+            expression=F("s").set("changed"),
         )
     ]
     await client.transact_write_items(items=updates)
