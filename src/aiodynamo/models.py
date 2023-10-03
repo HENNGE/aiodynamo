@@ -143,13 +143,23 @@ class LocalSecondaryIndex:
 
 @dataclass(frozen=True)
 class GlobalSecondaryIndex(LocalSecondaryIndex):
-    throughput: Throughput
+    throughput: Optional[Throughput]
 
     def encode(self) -> EncodedGlobalSecondaryIndex:
-        # Cast due to https://github.com/python/mypy/issues/4122
+        # mypy really does not like an if/else assignment where the branches have
+        # different types, so we need to do some ridiculous casting here.
+        # The outer cst is due to https://github.com/python/mypy/issues/4122
+        # The two inner casts to Any are because of the if/else with different types
         return cast(
             EncodedGlobalSecondaryIndex,
-            {**super().encode(), **self.throughput.encode()},
+            {
+                **super().encode(),
+                **(
+                    cast(Any, self.throughput.encode())
+                    if self.throughput
+                    else cast(Any, {})
+                ),
+            },
         )
 
 
