@@ -1,7 +1,7 @@
 import datetime
 from pathlib import Path
 from textwrap import dedent
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, Type, Union
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -65,9 +65,7 @@ class InstanceMetadataServer:
 
 
 @pytest.fixture
-async def instance_metadata_server(
-    use_v2: bool = True,
-) -> AsyncGenerator[InstanceMetadataServer, None]:
+async def instance_metadata_server() -> AsyncGenerator[InstanceMetadataServer, None]:
     ims = InstanceMetadataServer()
     app = web.Application()
     app.add_routes(
@@ -81,15 +79,14 @@ async def instance_metadata_server(
             )
         ]
     )
-    if use_v2:
-        app.add_routes(
-            [
-                web.put(
-                    "/latest/api/token/",
-                    ims.token_handler,
-                )
-            ]
-        )
+    app.add_routes(
+        [
+            web.put(
+                "/latest/api/token/",
+                ims.token_handler,
+            )
+        ]
+    )
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -121,13 +118,15 @@ async def test_env_credentials(
     assert key.token == "token"
 
 
-@pytest.mark.parametrize("model", [InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1])
+@pytest.mark.parametrize(
+    "model", [InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1]
+)
 @pytest.mark.parametrize("role", ["role", "arn:aws:iam::1234567890:role/test-role"])
 async def test_ec2_instance_metdata_credentials(
     http: HttpImplementation,
     instance_metadata_server: InstanceMetadataServer,
     role: str,
-    model: InstanceMetadataCredentialsV2 | InstanceMetadataCredentialsV1,
+    model: Type[Union[InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1]],
 ) -> None:
     imc = model(
         timeout=0.1,
@@ -147,11 +146,13 @@ async def test_ec2_instance_metdata_credentials(
     assert await imc.get_key(http) == metadata.key
 
 
-@pytest.mark.parametrize("model", [InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1])
+@pytest.mark.parametrize(
+    "model", [InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1]
+)
 async def test_simultaneous_credentials_refresh(
     http: HttpImplementation,
     instance_metadata_server: InstanceMetadataServer,
-    model: InstanceMetadataCredentialsV2 | InstanceMetadataCredentialsV1,
+    model: Type[Union[InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1]],
 ) -> None:
     instance_metadata_server.role = "hoge"
     now = datetime.datetime(2020, 3, 12, 15, 37, 51, tzinfo=datetime.timezone.utc)
