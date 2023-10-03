@@ -121,19 +121,14 @@ async def test_env_credentials(
     assert key.token == "token"
 
 
-@pytest.mark.parametrize("use_v2", [True, False])
+@pytest.mark.parametrize("model", [InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1])
 @pytest.mark.parametrize("role", ["role", "arn:aws:iam::1234567890:role/test-role"])
 async def test_ec2_instance_metdata_credentials(
     http: HttpImplementation,
     instance_metadata_server: InstanceMetadataServer,
     role: str,
-    use_v2: bool,
+    model: InstanceMetadataCredentialsV2 | InstanceMetadataCredentialsV1,
 ) -> None:
-    model = (
-        InstanceMetadataCredentialsV2
-        if use_v2
-        else InstanceMetadataCredentialsV1
-    )
     imc = model(
         timeout=0.1,
         base_url=URL("http://localhost").with_port(instance_metadata_server.port),
@@ -152,17 +147,12 @@ async def test_ec2_instance_metdata_credentials(
     assert await imc.get_key(http) == metadata.key
 
 
-@pytest.mark.parametrize("use_v2", [True, False])
+@pytest.mark.parametrize("model", [InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1])
 async def test_simultaneous_credentials_refresh(
     http: HttpImplementation,
     instance_metadata_server: InstanceMetadataServer,
-    use_v2: bool,
+    model: InstanceMetadataCredentialsV2 | InstanceMetadataCredentialsV1,
 ) -> None:
-    model = (
-        InstanceMetadataCredentialsV2
-        if use_v2
-        else InstanceMetadataCredentialsV1
-    )
     instance_metadata_server.role = "hoge"
     now = datetime.datetime(2020, 3, 12, 15, 37, 51, tzinfo=datetime.timezone.utc)
     expires = now + EXPIRES_SOON_THRESHOLD - datetime.timedelta(seconds=10)
