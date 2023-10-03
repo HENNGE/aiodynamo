@@ -9,7 +9,16 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Callable, Optional, Sequence, TypeVar, cast
+from typing import (
+    Awaitable,
+    Callable,
+    Generic,
+    Optional,
+    Sequence,
+    TypeVar,
+    Union,
+    cast,
+)
 
 from yarl import URL
 
@@ -215,21 +224,81 @@ EXPIRES_SOON_THRESHOLD = datetime.timedelta(minutes=15)
 EXPIRED_THRESHOLD = datetime.timedelta(minutes=10)
 
 
+class _Unset:
+    pass
+
+
+_UNSET = _Unset()
+
+
+T = TypeVar("T")
+U = TypeVar("U")
+
+
+@dataclass
+class Refreshable(Generic[T]):
+    name: str
+    should_refresh: Callable[[T], Refresh]
+    do_refresh: Callable[[HttpImplementation], Awaitable[T]]
+    _active_refresh_task: Optional[asyncio.Task[None]] = None
+    _current: Union[_Unset, T] = _UNSET
+
+    async def get(self, http: HttpImplementation) -> T:
+        refresh = self._check_refresh()
+        logger.debug("%s refresh status %r", self.name, refresh)
+        if refresh is Refresh.required:
+            if self._active_refresh_task is None:
+                logger.debug("%s starting mandatory refresh", self.name)
+                self._active_refresh_task = task = asyncio.create_task(
+                    self._refresh(http)
+                )
+                task.add_done_callback(self._clear_active_refresh)
+            else:
+                logger.debug("%s re-using active refresh", self.name)
+            await self._active_refresh_task
+        elif refresh is Refresh.soon:
+            if self._active_refresh_task is None:
+                logger.debug("%s starting early refresh", self.name)
+                self._active_refresh_task = asyncio.create_task(self._refresh(http))
+            else:
+                logger.debug("%s already refreshing", self.name)
+        assert not isinstance(self._current, _Unset)
+        return self._current
+
+    def invalidate(self) -> None:
+        self._current = _UNSET
+
+    def _check_refresh(self) -> Refresh:
+        if isinstance(self._current, _Unset):
+            return Refresh.required
+        return self.should_refresh(self._current)
+
+    async def _refresh(self, http: HttpImplementation) -> None:
+        self._current = await self.do_refresh(http)
+
+    def _clear_active_refresh(self, _task: asyncio.Task[None]) -> None:
+        self._active_refresh_task = None
+
+
 @dataclass(frozen=True)
 class Metadata:
     key: Key
     expires: datetime.datetime
 
     def check_refresh(self) -> Refresh:
-        now = datetime.datetime.now(datetime.timezone.utc)
-        if now >= self.expires:
-            return Refresh.required
-        diff = self.expires - now
-        if diff < EXPIRED_THRESHOLD:
-            return Refresh.required
-        if diff < EXPIRES_SOON_THRESHOLD:
-            return Refresh.soon
-        return Refresh.not_required
+        return check_refresh(self.expires)
+
+
+def check_refresh(expires: datetime.datetime) -> Refresh:
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if now >= expires:
+        return Refresh.required
+    diff = expires - now
+    if diff < EXPIRED_THRESHOLD:
+        return Refresh.required
+    if diff < EXPIRES_SOON_THRESHOLD:
+        return Refresh.soon
+    return Refresh.not_required
 
 
 class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
@@ -238,52 +307,23 @@ class MetadataCredentials(Credentials, metaclass=abc.ABCMeta):
         pass
 
     def __post_init__(self) -> None:
-        self._metadata: Optional[Metadata] = None
-        self._refresher: Optional[asyncio.Task[None]] = None
+        self._refresher: Refreshable[Metadata] = Refreshable(
+            f"metadata-credentials-{self.__class__.__name__}",
+            Metadata.check_refresh,
+            self.fetch_metadata,
+        )
 
     async def get_key(self, http: HttpImplementation) -> Optional[Key]:
         if self.is_disabled():
             logger.debug("%r is disabled", self)
             return None
-        refresh = self._check_refresh()
-        logger.debug("refresh status %r", refresh)
-        if refresh is Refresh.required:
-            if self._refresher is None:
-                logger.debug("starting mandatory refresh")
-                self._refresher = asyncio.create_task(self._refresh(http))
-            else:
-                logger.debug("re-using refresh")
-            try:
-                await self._refresher
-            finally:
-                self._refresher = None
-        elif refresh is Refresh.soon:
-            if self._refresher is None:
-                logger.debug("starting early refresh")
-                self._refresher = asyncio.create_task(self._refresh(http))
-            else:
-                logger.debug("already refreshing")
-        if self._metadata:
-            return self._metadata.key
-        return None
+        metadata = await self._refresher.get(http)
+        return metadata.key
 
     def invalidate(self) -> bool:
         logger.debug("%r invalidated", self)
-        self._metadata = None
+        self._refresher.invalidate()
         return True
-
-    def _check_refresh(self) -> Refresh:
-        if self._metadata is None:
-            return Refresh.required
-        return self._metadata.check_refresh()
-
-    async def _refresh(self, http: HttpImplementation) -> None:
-        self._metadata = await self.fetch_metadata(http)
-        logger.debug("fetched metadata %r", self._metadata)
-
-
-T = TypeVar("T")
-U = TypeVar("U")
 
 
 def and_then(thing: Optional[T], mapper: Callable[[T], U]) -> Optional[U]:
@@ -353,6 +393,15 @@ class ContainerMetadataCredentials(MetadataCredentials):
         )
 
 
+@dataclass
+class AuthToken:
+    value: str
+    expires: datetime.datetime
+
+    def check_refresh(self) -> Refresh:
+        return check_refresh(self.expires)
+
+
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 @dataclass
 class InstanceMetadataCredentialsV2(MetadataCredentials):
@@ -370,17 +419,21 @@ class InstanceMetadataCredentialsV2(MetadataCredentials):
         ).lower()
         == "true"
     )
-    auth_token: str = ""
+    token_session_duration_seconds: int = 5 * 60
+    auth_token: Refreshable[AuthToken] = field(init=False)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.auth_token: Refreshable[AuthToken] = Refreshable(
+            "imdsv2-token-refresher", AuthToken.check_refresh, self._fetch_token
+        )
 
     def is_disabled(self) -> bool:
         return self.disabled
 
     async def fetch_metadata(self, http: HttpImplementation) -> Metadata:
-        if not self.auth_token:
-            await self.get_token(http)
-        token_headers = and_then(
-            self.auth_token, lambda token: {"X-aws-ec2-metadata-token": token}
-        )
+        auth_token = await self.auth_token.get(http)
+        token_headers = {"X-aws-ec2-metadata-token": auth_token.value}
         role_url = self.base_url.with_path(
             "/latest/meta-data/iam/security-credentials/"
         )
@@ -415,10 +468,14 @@ class InstanceMetadataCredentialsV2(MetadataCredentials):
             expires=parse_amazon_timestamp(credentials["Expiration"]),
         )
 
-    async def get_token(
-        self, http: HttpImplementation, session_duration_seconds: int = 5 * 60
-    ) -> None:
+    async def _fetch_token(
+        self,
+        http: HttpImplementation,
+    ) -> AuthToken:
         token_url = self.base_url.with_path("/latest/api/token/")
+        expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            seconds=self.token_session_duration_seconds
+        )
         token = (
             await fetch_with_retry_and_timeout(
                 http=http,
@@ -429,14 +486,14 @@ class InstanceMetadataCredentialsV2(MetadataCredentials):
                     url=str(token_url),
                     headers={
                         "X-aws-ec2-metadata-token-ttl-seconds": str(
-                            session_duration_seconds
+                            self.token_session_duration_seconds
                         )
                     },
                     body=None,
                 ),
             )
         ).decode("utf-8")
-        self.auth_token = token
+        return AuthToken(token, expires)
 
 
 @dataclass
