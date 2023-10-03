@@ -36,8 +36,8 @@ class Credentials(metaclass=abc.ABCMeta):
                 EnvironmentCredentials(),
                 FileCredentials(),
                 ContainerMetadataCredentials(),
-                InstanceMetadataCredentialsWithImdsV2(),
-                InstanceMetadataCredentialsWithImdsV1(),
+                InstanceMetadataCredentialsV2(),
+                InstanceMetadataCredentialsV1(),
             ]
         )
 
@@ -355,7 +355,7 @@ class ContainerMetadataCredentials(MetadataCredentials):
 
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 @dataclass
-class InstanceMetadataCredentialsWithImdsV2(MetadataCredentials):
+class InstanceMetadataCredentialsV2(MetadataCredentials):
     """
     Loads credentials from the EC2 instance metadata endpoint using IMDSv2.
     IMDSv2 is considered more secure than IMDSv1, but it may not be available in older AWS SDKs.
@@ -440,7 +440,7 @@ class InstanceMetadataCredentialsWithImdsV2(MetadataCredentials):
 
 
 @dataclass
-class InstanceMetadataCredentialsWithImdsV1(MetadataCredentials):
+class InstanceMetadataCredentialsV1(MetadataCredentials):
     """
     Loads credentials from the EC2 instance metadata endpoint using IMDSv1.
     """

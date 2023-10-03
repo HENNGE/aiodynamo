@@ -17,8 +17,8 @@ from aiodynamo.credentials import (
     Credentials,
     EnvironmentCredentials,
     FileCredentials,
-    InstanceMetadataCredentialsWithImdsV1,
-    InstanceMetadataCredentialsWithImdsV2,
+    InstanceMetadataCredentialsV1,
+    InstanceMetadataCredentialsV2,
     Key,
     Metadata,
 )
@@ -130,9 +130,9 @@ async def test_ec2_instance_metdata_credentials(
     use_v2: bool,
 ) -> None:
     model = (
-        InstanceMetadataCredentialsWithImdsV2
+        InstanceMetadataCredentialsV2
         if use_v2
-        else InstanceMetadataCredentialsWithImdsV1
+        else InstanceMetadataCredentialsV1
     )
     imc = model(
         timeout=0.1,
@@ -159,9 +159,9 @@ async def test_simultaneous_credentials_refresh(
     use_v2: bool,
 ) -> None:
     model = (
-        InstanceMetadataCredentialsWithImdsV2
+        InstanceMetadataCredentialsV2
         if use_v2
-        else InstanceMetadataCredentialsWithImdsV1
+        else InstanceMetadataCredentialsV1
     )
     instance_metadata_server.role = "hoge"
     now = datetime.datetime(2020, 3, 12, 15, 37, 51, tzinfo=datetime.timezone.utc)
@@ -202,12 +202,12 @@ async def test_disabled(monkeypatch: MonkeyPatch) -> None:
     assert creds.candidates == []
     assert creds.is_disabled()
     assert EnvironmentCredentials().is_disabled()
-    assert InstanceMetadataCredentialsWithImdsV2().is_disabled()
-    assert InstanceMetadataCredentialsWithImdsV1().is_disabled()
+    assert InstanceMetadataCredentialsV2().is_disabled()
+    assert InstanceMetadataCredentialsV1().is_disabled()
     assert ContainerMetadataCredentials().is_disabled()
     monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "false")
-    assert not InstanceMetadataCredentialsWithImdsV2().is_disabled()
-    assert not InstanceMetadataCredentialsWithImdsV1().is_disabled()
+    assert not InstanceMetadataCredentialsV2().is_disabled()
+    assert not InstanceMetadataCredentialsV1().is_disabled()
     creds = Credentials.auto()
     assert len(creds.candidates) == 2
     assert not creds.is_disabled()
