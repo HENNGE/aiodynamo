@@ -7,6 +7,9 @@ as profiling showed that especially for querying data, boto libraries were very 
 Main differences to boto3/botocore/aiobotocore
 ----------------------------------------------
 
+
+.. _credentials:
+
 Credentials
 ~~~~~~~~~~~
 

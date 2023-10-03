@@ -73,4 +73,4 @@ from aiohttp import ClientSession
 * **Legible source code**. botocore and derived libraries generate their interface at runtime, so it cannot be inspected and isn't typed. aiodynamo is hand written code you can read, inspect and understand.
 * **Pluggable HTTP client**. If you're already using an asynchronous HTTP client in your project, you can use it with aiodynamo and don't need to add extra dependencies or run into dependency resolution issues.
 
-[Complete documentation is here](https://aiodynamo.readthedocs.io/)
+[Complete documentation is here](https://aiodynamo.readthedocs.io/) 
