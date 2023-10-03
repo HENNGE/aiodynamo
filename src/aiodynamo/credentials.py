@@ -36,7 +36,8 @@ class Credentials(metaclass=abc.ABCMeta):
                 EnvironmentCredentials(),
                 FileCredentials(),
                 ContainerMetadataCredentials(),
-                InstanceMetadataCredentials(),
+                InstanceMetadataCredentialsWithImdsV2(),
+                InstanceMetadataCredentialsWithImdsV1(),
             ]
         )
 
@@ -354,9 +355,10 @@ class ContainerMetadataCredentials(MetadataCredentials):
 
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 @dataclass
-class InstanceMetadataCredentials(MetadataCredentials):
+class InstanceMetadataCredentialsWithImdsV2(MetadataCredentials):
     """
     Loads credentials from the EC2 instance metadata endpoint using IMDSv2.
+    IMDSv2 is considered more secure than IMDSv1, but it may not be available in older AWS SDKs.
     """
 
     timeout: Timeout = 1
@@ -368,12 +370,17 @@ class InstanceMetadataCredentials(MetadataCredentials):
         ).lower()
         == "true"
     )
+    auth_token: str = ""
 
     def is_disabled(self) -> bool:
         return self.disabled
 
     async def fetch_metadata(self, http: HttpImplementation) -> Metadata:
-        token_headers = await self.get_token_headers(http)
+        if not self.auth_token:
+            await self.get_token(http)
+        token_headers = and_then(
+            self.auth_token, lambda token: {"X-aws-ec2-metadata-token": token}
+        )
         role_url = self.base_url.with_path(
             "/latest/meta-data/iam/security-credentials/"
         )
@@ -408,9 +415,9 @@ class InstanceMetadataCredentials(MetadataCredentials):
             expires=parse_amazon_timestamp(credentials["Expiration"]),
         )
 
-    async def get_token_headers(
+    async def get_token(
         self, http: HttpImplementation, session_duration_seconds: int = 5 * 60
-    ) -> dict[str, str]:
+    ) -> None:
         token_url = self.base_url.with_path("/latest/api/token/")
         token = (
             await fetch_with_retry_and_timeout(
@@ -429,10 +436,62 @@ class InstanceMetadataCredentials(MetadataCredentials):
                 ),
             )
         ).decode("utf-8")
-        if not token:
-            logger.debug("Could not get token")
-            return {}
-        return {"X-aws-ec2-metadata-token": token}
+        self.auth_token = token
+
+
+@dataclass
+class InstanceMetadataCredentialsWithImdsV1(MetadataCredentials):
+    """
+    Loads credentials from the EC2 instance metadata endpoint using IMDSv1.
+    """
+
+    timeout: Timeout = 1
+    max_attempts: int = 1
+    base_url: URL = URL("http://169.254.169.254")
+    disabled: bool = field(
+        default_factory=lambda: os.environ.get(
+            "AWS_EC2_METADATA_DISABLED", "false"
+        ).lower()
+        == "true"
+    )
+
+    def is_disabled(self) -> bool:
+        return self.disabled
+
+    async def fetch_metadata(self, http: HttpImplementation) -> Metadata:
+        role_url = self.base_url.with_path(
+            "/latest/meta-data/iam/security-credentials/"
+        )
+        role = (
+            await fetch_with_retry_and_timeout(
+                http=http,
+                max_attempts=self.max_attempts,
+                timeout=self.timeout,
+                request=Request(
+                    method="GET", url=str(role_url), headers=None, body=None
+                ),
+            )
+        ).decode("utf-8")
+        credentials_url = self.base_url.with_path(
+            f"/latest/meta-data/iam/security-credentials/{role}"
+        )
+        raw_credentials = await fetch_with_retry_and_timeout(
+            http=http,
+            max_attempts=self.max_attempts,
+            timeout=self.timeout,
+            request=Request(
+                method="GET", url=str(credentials_url), headers=None, body=None
+            ),
+        )
+        credentials = json.loads(raw_credentials)
+        return Metadata(
+            key=Key(
+                credentials["AccessKeyId"],
+                credentials["SecretAccessKey"],
+                credentials.get("Token", None),
+            ),
+            expires=parse_amazon_timestamp(credentials["Expiration"]),
+        )
 
 
 class TooManyRetries(Exception):
