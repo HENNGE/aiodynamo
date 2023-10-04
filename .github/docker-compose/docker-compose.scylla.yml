@@ -1,0 +1,7 @@
+version: "3.9"
+services:
+  dynalite:
+    image: "scylladb/scylla:latest"
+    command: ["--alternator-port", "8000", "--alternator-write-isolation", "always"]
+    ports:
+      - "8000:8000"

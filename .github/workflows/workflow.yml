@@ -2,6 +2,10 @@ name: workflow
 
 on: [push, pull_request]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lock:
     timeout-minutes: 10
@@ -10,100 +14,49 @@ jobs:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
     runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry lock
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: poetry.lock
           key: ${{ github.sha }}-${{ matrix.python-version }}
-  pytest-dynalite:
-    timeout-minutes: 10
+
+  pytest:
     needs: lock
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
+        implementation: [
+          {flavor: "other", name: "dynalite"},
+          {flavor: "other", name: "dynamodb-local"},
+          {flavor: "other", name: "localstack"},
+          {flavor: "scylla", name: "scylla"}
+        ]
     runs-on: "ubuntu-latest"
-    services:
-      dynalite:
-        image: ghcr.io/hennge/dynalite:latest
-        ports:
-          - 8000:8000
     env:
       DYNAMODB_URL: http://localhost:8000
+      DYNAMODB_FLAVOR: ${{ matrix.implementation.flavor }}
+      DYNAMODB_NAME: ${{ matrix.implementation.name }}
       AWS_ACCESS_KEY_ID: dummy
       AWS_SECRET_ACCESS_KEY: dummy
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - run: docker compose -f .github/docker-compose/docker-compose.${{ matrix.implementation.name }}.yml up -d
+      - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: poetry.lock
           key: ${{ github.sha }}-${{ matrix.python-version }}
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run pytest --verbose
-  pytest-dynamodb-local:
-    timeout-minutes: 10
-    needs: lock
-    strategy:
-      matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
-    runs-on: "ubuntu-latest"
-    services:
-      dynamodb:
-        image: amazon/dynamodb-local:latest
-        ports:
-          - 8000:8000
-    env:
-      DYNAMODB_URL: http://localhost:8000
-      AWS_ACCESS_KEY_ID: dummy
-      AWS_SECRET_ACCESS_KEY: dummy
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v2
-        with:
-          path: poetry.lock
-          key: ${{ github.sha }}-${{ matrix.python-version }}
-      - run: curl -sSL https://install.python-poetry.org | python3 -
-      - run: poetry install --extras aiohttp --extras httpx
-      - run: poetry run pytest --verbose
-  pytest-localstack:
-    timeout-minutes: 10
-    needs: lock
-    strategy:
-      matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
-    runs-on: "ubuntu-latest"
-    services:
-      dynamodb:
-        image: localstack/localstack:0.14.2
-        ports:
-          - 4566-4583:4566-4583
-    env:
-      DYNAMODB_URL: http://localhost:4566
-      AWS_ACCESS_KEY_ID: dummy
-      AWS_SECRET_ACCESS_KEY: dummy
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v2
-        with:
-          path: poetry.lock
-          key: ${{ github.sha }}-${{ matrix.python-version }}
-      - run: curl -sSL https://install.python-poetry.org | python3 -
-      - run: poetry install --extras aiohttp --extras httpx
-      - run: poetry run pytest --verbose
+
   mypy:
     timeout-minutes: 10
     needs: lock
@@ -112,46 +65,65 @@ jobs:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
     runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: poetry.lock
           key: ${{ github.sha }}-${{ matrix.python-version }}
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run mypy
+
   isort:
     timeout-minutes: 10
     needs: lock
     runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: poetry.lock
           key: ${{ github.sha }}-3.11
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run isort --check --diff src tests
+
   black:
     timeout-minutes: 10
     needs: lock
     runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.11"
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: poetry.lock
           key: ${{ github.sha }}-3.11
       - run: curl -sSL https://install.python-poetry.org | python3 -
       - run: poetry install --extras aiohttp --extras httpx
       - run: poetry run black --check src/ tests/
+
+  ruff:
+    timeout-minutes: 10
+    needs: lock
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v3
+        with:
+          path: poetry.lock
+          key: ${{ github.sha }}-3.11
+      - run: curl -sSL https://install.python-poetry.org | python3 -
+      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry run ruff check src/ tests/

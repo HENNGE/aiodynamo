@@ -45,6 +45,7 @@ isort = "^5.8.0"
 types-freezegun = "^1.1.6"
 urllib3 = "< 1.27"
 furo = "^2023.9.10"
+ruff = "^0.0.292"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -62,6 +63,15 @@ strict = true
 files = [
     "src/",
     "tests/",
+]
+
+[tool.ruff]
+ignore = [
+    "E722", # Do not use bare `except`
+    "E501", # Line too long (104 > 88 characters)
+]
+select = [
+    "E", "F", "T201",
 ]
 
 [build-system]

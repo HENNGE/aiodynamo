@@ -1,8 +1,6 @@
 import decimal
 from enum import Enum
-from typing import Any, Callable, Dict, List, Union
-
-from ._compat import TypedDict
+from typing import Any, Callable, Dict, List, TypedDict, Union
 
 Timeout = Union[float, int]
 Numeric = Union[float, int, decimal.Decimal]

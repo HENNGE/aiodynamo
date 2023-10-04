@@ -8,7 +8,17 @@ import time
 from dataclasses import dataclass
 from enum import Enum, unique
 from itertools import count
-from typing import Any, AsyncIterable, Dict, Iterable, Iterator, List, Optional, cast
+from typing import (
+    Any,
+    AsyncIterable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Union,
+    cast,
+)
 
 from .expressions import Parameters, ProjectionExpression
 from .types import (
@@ -55,11 +65,15 @@ class Throughput:
         }
 
 
+@dataclass(frozen=True)
 class PayPerRequest:
-    MODE: str = "PAY_PER_REQUEST"
+    MODE = "PAY_PER_REQUEST"
 
     def encode(self) -> EncodedPayPerRequest:
-        return {"BillingMode": self.MODE}
+        return {"BillingMode": PayPerRequest.MODE}
+
+
+ThroughputType = Union[Throughput, PayPerRequest]
 
 
 class KeyType(Enum):
@@ -189,7 +203,7 @@ class TableDescription:
     created: Optional[datetime.datetime]
     item_count: Optional[int]
     key_schema: Optional[KeySchema]
-    throughput: Optional[Throughput]
+    throughput: Optional[ThroughputType]
     status: TableStatus
 
 

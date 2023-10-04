@@ -1,7 +1,7 @@
 import datetime
 from pathlib import Path
 from textwrap import dedent
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, Type, Union
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -17,7 +17,8 @@ from aiodynamo.credentials import (
     Credentials,
     EnvironmentCredentials,
     FileCredentials,
-    InstanceMetadataCredentials,
+    InstanceMetadataCredentialsV1,
+    InstanceMetadataCredentialsV2,
     Key,
     Metadata,
 )
@@ -32,6 +33,10 @@ class InstanceMetadataServer:
         self.role: Optional[str] = None
         self.metadata: Optional[Metadata] = None
         self.calls = 0
+
+    async def token_handler(self, request: web.Request) -> web.Response:
+        token = "12345678"
+        return web.Response(body=token.encode("utf-8"))
 
     async def role_handler(self, request: web.Request) -> web.Response:
         if self.role is None:
@@ -74,6 +79,14 @@ async def instance_metadata_server() -> AsyncGenerator[InstanceMetadataServer, N
             )
         ]
     )
+    app.add_routes(
+        [
+            web.put(
+                "/latest/api/token/",
+                ims.token_handler,
+            )
+        ]
+    )
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -105,13 +118,17 @@ async def test_env_credentials(
     assert key.token == "token"
 
 
+@pytest.mark.parametrize(
+    "model", [InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1]
+)
 @pytest.mark.parametrize("role", ["role", "arn:aws:iam::1234567890:role/test-role"])
 async def test_ec2_instance_metdata_credentials(
     http: HttpImplementation,
     instance_metadata_server: InstanceMetadataServer,
     role: str,
+    model: Type[Union[InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1]],
 ) -> None:
-    imc = InstanceMetadataCredentials(
+    imc = model(
         timeout=0.1,
         base_url=URL("http://localhost").with_port(instance_metadata_server.port),
     )
@@ -129,21 +146,26 @@ async def test_ec2_instance_metdata_credentials(
     assert await imc.get_key(http) == metadata.key
 
 
+@pytest.mark.parametrize(
+    "model", [InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1]
+)
 async def test_simultaneous_credentials_refresh(
-    http: HttpImplementation, instance_metadata_server: InstanceMetadataServer
+    http: HttpImplementation,
+    instance_metadata_server: InstanceMetadataServer,
+    model: Type[Union[InstanceMetadataCredentialsV2, InstanceMetadataCredentialsV1]],
 ) -> None:
     instance_metadata_server.role = "hoge"
     now = datetime.datetime(2020, 3, 12, 15, 37, 51, tzinfo=datetime.timezone.utc)
     expires = now + EXPIRES_SOON_THRESHOLD - datetime.timedelta(seconds=10)
     expired = now + EXPIRED_THRESHOLD - datetime.timedelta(seconds=10)
     not_expired = now + datetime.timedelta(days=2)
-    imc = InstanceMetadataCredentials(
+    imc = model(
         timeout=0.1,
         base_url=URL("http://localhost").with_port(instance_metadata_server.port),
     )
     key1 = Key("id1", "secret1")
     key2 = Key("id2", "secret2")
-    imc._metadata = Metadata(
+    imc._refresher._current = Metadata(
         key1,
         expires,
     )
@@ -154,7 +176,7 @@ async def test_simultaneous_credentials_refresh(
         assert key == key1
         assert instance_metadata_server.calls == 0
         assert imc._refresher is not None
-        imc._metadata = Metadata(key1, expired)
+        imc._refresher._current = Metadata(key1, expired)
         key = await imc.get_key(http)
         assert key == key2
         assert instance_metadata_server.calls == 1
@@ -171,12 +193,14 @@ async def test_disabled(monkeypatch: MonkeyPatch) -> None:
     assert creds.candidates == []
     assert creds.is_disabled()
     assert EnvironmentCredentials().is_disabled()
-    assert InstanceMetadataCredentials().is_disabled()
+    assert InstanceMetadataCredentialsV2().is_disabled()
+    assert InstanceMetadataCredentialsV1().is_disabled()
     assert ContainerMetadataCredentials().is_disabled()
     monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "false")
-    assert not InstanceMetadataCredentials().is_disabled()
+    assert not InstanceMetadataCredentialsV2().is_disabled()
+    assert not InstanceMetadataCredentialsV1().is_disabled()
     creds = Credentials.auto()
-    assert len(creds.candidates) == 1
+    assert len(creds.candidates) == 2
     assert not creds.is_disabled()
 
 

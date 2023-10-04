@@ -22,8 +22,8 @@ Credentials
 
 In most cases, ``Credentials.auto()`` will load the credentials as you'd expect. Specifically, it will try multiple
 credentials providers in this order: :py:class:`aiodynamo.credentials.EnvironmentCredentials`,
-:py:class:`aiodynamo.credentials.FileCredentials`, :py:class:`aiodynamo.credentials.ContainerMetadataCredentials`
-and :py:class:`aiodynamo.credentials.InstanceMetadataCredentials`.
+:py:class:`aiodynamo.credentials.FileCredentials`, :py:class:`aiodynamo.credentials.ContainerMetadataCredentials`, :py:class:`aiodynamo.credentials.InstanceMetadataCredentialsV2`
+and :py:class:`aiodynamo.credentials.InstanceMetadataCredentialsV1`.
 
 In case you want to explicitly pass the credentials from Python, use :py:class:`aiodynamo.credentials.StaticCredentials`.
 
@@ -39,7 +39,12 @@ In case you want to explicitly pass the credentials from Python, use :py:class:`
 
 |
 
-.. autoclass:: aiodynamo.credentials.InstanceMetadataCredentials
+.. autoclass:: aiodynamo.credentials.InstanceMetadataCredentialsV2
+
+|
+
+
+.. autoclass:: aiodynamo.credentials.InstanceMetadataCredentialsV1
 
 |
 
@@ -292,6 +297,10 @@ Update Expressions
     Update expressions are created by calling methods on instances of :py:class:`aiodynamo.expressions.F` and
     combining the return values of those method calls with the ``&`` operator.
 
+    .. automethod:: debug
+
+|br|
+
 .. automethod:: aiodynamo.expressions.F.set
 .. automethod:: aiodynamo.expressions.F.set_if_not_exists
 .. automethod:: aiodynamo.expressions.F.change
@@ -312,6 +321,9 @@ Filter Expression and Condition Expressions
     of :py:class:`aiodynamo.expressions.F` and combining the return values of those method calls with the
     ``&`` or ``|`` operators. To negate a condition, use the ``~`` infix operator.
 
+    .. automethod:: debug
+
+|br|
 
 .. automethod:: aiodynamo.expressions.F.does_not_exist
 .. automethod:: aiodynamo.expressions.F.exists
@@ -327,6 +339,8 @@ Filter Expression and Condition Expressions
 .. automethod:: aiodynamo.expressions.F.equals
 .. automethod:: aiodynamo.expressions.F.not_equals
 .. automethod:: aiodynamo.expressions.F.size
+
+|br|
 
 .. autoclass:: aiodynamo.expressions.Size
     :members:
@@ -430,3 +444,7 @@ Operations
 .. autoclass:: aiodynamo.operations.ConditionCheck
     :members: table, key, condition
     :undoc-members:
+
+.. |br| raw:: html
+
+      <br>
