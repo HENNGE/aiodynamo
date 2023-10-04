@@ -22,8 +22,8 @@ Credentials
 
 In most cases, ``Credentials.auto()`` will load the credentials as you'd expect. Specifically, it will try multiple
 credentials providers in this order: :py:class:`aiodynamo.credentials.EnvironmentCredentials`,
-:py:class:`aiodynamo.credentials.FileCredentials`, :py:class:`aiodynamo.credentials.ContainerMetadataCredentials`
-and :py:class:`aiodynamo.credentials.InstanceMetadataCredentials`.
+:py:class:`aiodynamo.credentials.FileCredentials`, :py:class:`aiodynamo.credentials.ContainerMetadataCredentials`, :py:class:`aiodynamo.credentials.InstanceMetadataCredentialsV2`
+and :py:class:`aiodynamo.credentials.InstanceMetadataCredentialsV1`.
 
 In case you want to explicitly pass the credentials from Python, use :py:class:`aiodynamo.credentials.StaticCredentials`.
 
@@ -39,7 +39,12 @@ In case you want to explicitly pass the credentials from Python, use :py:class:`
 
 |
 
-.. autoclass:: aiodynamo.credentials.InstanceMetadataCredentials
+.. autoclass:: aiodynamo.credentials.InstanceMetadataCredentialsV2
+
+|
+
+
+.. autoclass:: aiodynamo.credentials.InstanceMetadataCredentialsV1
 
 |
 
