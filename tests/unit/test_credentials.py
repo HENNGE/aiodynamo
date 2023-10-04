@@ -165,7 +165,7 @@ async def test_simultaneous_credentials_refresh(
     )
     key1 = Key("id1", "secret1")
     key2 = Key("id2", "secret2")
-    imc._metadata = Metadata(
+    imc._refresher._current = Metadata(
         key1,
         expires,
     )
@@ -176,7 +176,7 @@ async def test_simultaneous_credentials_refresh(
         assert key == key1
         assert instance_metadata_server.calls == 0
         assert imc._refresher is not None
-        imc._metadata = Metadata(key1, expired)
+        imc._refresher._current = Metadata(key1, expired)
         key = await imc.get_key(http)
         assert key == key2
         assert instance_metadata_server.calls == 1
