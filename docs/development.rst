@@ -54,12 +54,16 @@ dependencies such as ``aiobotocore`` or ``botocore``. To run them, refer to thei
 Releasing
 ---------
 
-Run ``poetry build -fwheel`` to create a wheel, then ``twine upload dist/aiodynamo-<version>-py3-none-any.whl``.
+1. Update the version in ``pyproject.toml``
+2. Update ``docs/changelog.rst``
+3. Make a commit and push to Github
+4. `Create a release on Github`_
 
 .. _poetry: https://poetry.eustace.io/
 .. _repository: https://github.com/mhart/dynalite
 .. _container: https://hub.docker.com/r/dimaqq/dynalite/
 .. _pre-commit: https://pre-commit.com/
+.. _Create a release on Github: https://github.com/HENNGE/aiodynamo/releases
 .. _dynamodb-local: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html
 .. _dynalite: https://github.com/mhart/dynalite
 .. _ScyllaDB Alternator: https://docs.scylladb.com/stable/using-scylla/alternator/
