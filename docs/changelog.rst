@@ -1,6 +1,18 @@
 Changelog
 =========
 
+23.10
+-----
+
+Release Date: October 4th, 2023
+
+* Drop support for Python 3.7
+* Added support for `ScyllaDB Alternator <https://www.scylladb.com/alternator/>`_
+* Added debug helpers for :py:class:`aiodynamo.expressions.Condition` and :py:class:`aiodynamo.expressions.UpdateExpression`
+* Support pay-per-requests for Global Secondary Indices. Thanks to `@alexjurkiewicz <https://github.com/alexjurkiewicz>`_.
+* Added support for Instance Metadata Service Version 2 for loading credentials. Thanks to `@y26805 <https://github.com/y26805>`_.
+* Updated maximum allowed number of operations per transaction to 100. Thanks to `@stupoid <https://github.com/stupoid>`_.
+
 22.12
 -----
 
