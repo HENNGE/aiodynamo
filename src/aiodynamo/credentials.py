@@ -402,6 +402,9 @@ class AuthToken:
         return check_refresh(self.expires)
 
 
+MAX_IMDSV2_AUTH_TOKEN_SESSION_DURATION = 6 * 60 * 60
+DEFAULT_IMDSV2_AUTH_TOKEN_SESSION_DURATION = MAX_IMDSV2_AUTH_TOKEN_SESSION_DURATION
+
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 @dataclass
 class InstanceMetadataCredentialsV2(MetadataCredentials):
@@ -419,11 +422,17 @@ class InstanceMetadataCredentialsV2(MetadataCredentials):
         ).lower()
         == "true"
     )
-    token_session_duration_seconds: int = 5 * 60
+    token_session_duration_seconds: int = DEFAULT_IMDSV2_AUTH_TOKEN_SESSION_DURATION
     auth_token: Refreshable[AuthToken] = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if self.token_session_duration_seconds > MAX_IMDSV2_AUTH_TOKEN_SESSION_DURATION:
+            raise ValueError(
+                f"IMDS Version 2 auth token session duration must be lower than "
+                f"{MAX_IMDSV2_AUTH_TOKEN_SESSION_DURATION}, "
+                f"got {self.token_session_duration_seconds}"
+            )
         self.auth_token: Refreshable[AuthToken] = Refreshable(
             "imdsv2-token-refresher", AuthToken.check_refresh, self._fetch_token
         )
