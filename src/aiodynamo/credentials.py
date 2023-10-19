@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
 from typing import (
-    Awaitable,
     Callable,
+    Coroutine,
     Generic,
     Optional,
     Sequence,
@@ -99,17 +99,24 @@ class ChainCredentials(Credentials):
     """
     Chains multiple credentials providers together, trying them
     in order. Returns the first key found. Exceptions are suppressed.
+
+    Once a credentials provider returns a key, only that provider will
+    be used in subsequent calls.
     """
 
-    candidates: Sequence[Credentials]
+    _candidates: Sequence[Credentials]
+    _chosen: Credentials | None
 
     def __init__(self, candidates: Sequence[Credentials]) -> None:
-        self.candidates = [
+        self._candidates = [
             candidate for candidate in candidates if not candidate.is_disabled()
         ]
+        self._chosen = None
 
     async def get_key(self, http: HttpImplementation) -> Optional[Key]:
-        for candidate in self.candidates:
+        if self._chosen is not None:
+            return await self._chosen.get_key(http)
+        for candidate in self._candidates:
             try:
                 key = await candidate.get_key(http)
             except:
@@ -119,14 +126,15 @@ class ChainCredentials(Credentials):
                 logger.debug("Candidate %r didn't find a key", candidate)
             else:
                 logger.debug("Candidate %r found a key %r", candidate, key)
+                self._chosen = candidate
                 return key
         return None
 
     def invalidate(self) -> bool:
-        return any(candidate.invalidate() for candidate in self.candidates)
+        return any(candidate.invalidate() for candidate in self._candidates)
 
     def is_disabled(self) -> bool:
-        return not self.candidates
+        return not self._candidates
 
 
 class EnvironmentCredentials(Credentials):
@@ -239,8 +247,8 @@ U = TypeVar("U")
 class Refreshable(Generic[T]):
     name: str
     should_refresh: Callable[[T], Refresh]
-    do_refresh: Callable[[HttpImplementation], Awaitable[T]]
-    _active_refresh_task: Optional[asyncio.Task[None]] = None
+    do_refresh: Callable[[HttpImplementation], Coroutine[None, None, T]]
+    _active_refresh_task: Optional[asyncio.Task[T]] = None
     _current: Union[_Unset, T] = _UNSET
 
     async def get(self, http: HttpImplementation) -> T:
@@ -250,16 +258,20 @@ class Refreshable(Generic[T]):
             if self._active_refresh_task is None:
                 logger.debug("%s starting mandatory refresh", self.name)
                 self._active_refresh_task = task = asyncio.create_task(
-                    self._refresh(http)
+                    self.do_refresh(http)
                 )
                 task.add_done_callback(self._clear_active_refresh)
             else:
                 logger.debug("%s re-using active refresh", self.name)
-            await self._active_refresh_task
+            self._current = await self._active_refresh_task
         elif refresh is Refresh.soon:
             if self._active_refresh_task is None:
                 logger.debug("%s starting early refresh", self.name)
-                self._active_refresh_task = asyncio.create_task(self._refresh(http))
+                self._active_refresh_task = task = asyncio.create_task(
+                    self.do_refresh(http)
+                )
+                task.add_done_callback(self._clear_active_refresh)
+                task.add_done_callback(self._set_current)
             else:
                 logger.debug("%s already refreshing", self.name)
         assert not isinstance(self._current, _Unset)
@@ -273,10 +285,10 @@ class Refreshable(Generic[T]):
             return Refresh.required
         return self.should_refresh(self._current)
 
-    async def _refresh(self, http: HttpImplementation) -> None:
-        self._current = await self.do_refresh(http)
+    def _set_current(self, task: asyncio.Task[T]) -> None:
+        self._current = task.result()
 
-    def _clear_active_refresh(self, _task: asyncio.Task[None]) -> None:
+    def _clear_active_refresh(self, _task: asyncio.Task[T]) -> None:
         self._active_refresh_task = None
 
 
