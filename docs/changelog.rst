@@ -4,8 +4,10 @@ Changelog
 23.10.1
 -------
 
+Release Date: October 19th, 2023
+
 * Fixed issue with refreshable credentials not working due to timing issue introduced in 23.10.
-* Improved performance of :py:class:`aiodynamo.credentials.ChainCredentials`
+* Improved performance of :py:class:`aiodynamo.credentials.ChainCredentials`.
 
 23.10
 -----
