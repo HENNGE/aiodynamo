@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 from pathlib import Path
 from textwrap import dedent
@@ -7,12 +8,13 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from aiohttp import web
 from freezegun import freeze_time
-from pyfakefs.fake_filesystem import FakeFilesystem  # type: ignore[import]
+from pyfakefs.fake_filesystem import FakeFilesystem  # type: ignore[import-untyped]
 from yarl import URL
 
 from aiodynamo.credentials import (
     EXPIRED_THRESHOLD,
     EXPIRES_SOON_THRESHOLD,
+    ChainCredentials,
     ContainerMetadataCredentials,
     Credentials,
     EnvironmentCredentials,
@@ -21,8 +23,10 @@ from aiodynamo.credentials import (
     InstanceMetadataCredentialsV2,
     Key,
     Metadata,
+    Refresh,
+    Refreshable,
 )
-from aiodynamo.http.types import HttpImplementation
+from aiodynamo.http.types import HttpImplementation, Request, RequestFailed, Response
 
 pytestmark = [pytest.mark.usefixtures("fs")]
 
@@ -190,7 +194,7 @@ async def test_disabled(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.delenv("AWS_CONTAINER_CREDENTIALS_FULL_URI", raising=False)
     monkeypatch.setenv("AWS_EC2_METADATA_DISABLED", "true")
     creds = Credentials.auto()
-    assert creds.candidates == []
+    assert creds._candidates == []
     assert creds.is_disabled()
     assert EnvironmentCredentials().is_disabled()
     assert InstanceMetadataCredentialsV2().is_disabled()
@@ -200,7 +204,7 @@ async def test_disabled(monkeypatch: MonkeyPatch) -> None:
     assert not InstanceMetadataCredentialsV2().is_disabled()
     assert not InstanceMetadataCredentialsV1().is_disabled()
     creds = Credentials.auto()
-    assert len(creds.candidates) == 2
+    assert len(creds._candidates) == 2
     assert not creds.is_disabled()
 
 
@@ -256,3 +260,71 @@ async def test_file_credentials(
     assert await credentials.get_key(http) == Key(
         id="custom-baz", secret="custom-hoge", token="custom-token"
     )
+
+
+async def null_http(request: Request) -> Response:
+    raise RequestFailed(Exception())
+
+
+async def test_chain_credential_memory() -> None:
+    class BadLoader(Credentials):
+        def __init__(self) -> None:
+            self.called = 0
+
+        async def get_key(self, http: HttpImplementation) -> Optional[Key]:
+            self.called += 1
+            return None
+
+        def invalidate(self) -> bool:
+            return False
+
+        def is_disabled(self) -> bool:
+            return False
+
+    key = Key("id", "secret")
+
+    class GoodLoader(Credentials):
+        def __init__(self) -> None:
+            self.called = 0
+
+        async def get_key(self, http: HttpImplementation) -> Optional[Key]:
+            self.called += 1
+            return key
+
+        def invalidate(self) -> bool:
+            return False
+
+        def is_disabled(self) -> bool:
+            return False
+
+    bl = BadLoader()
+    gl = GoodLoader()
+    chain = ChainCredentials([bl, gl])
+    assert chain._chosen is None
+    assert await chain.get_key(null_http) is key
+    assert bl.called == 1
+    assert gl.called == 1
+    assert await chain.get_key(null_http) is key
+    assert bl.called == 1
+    assert gl.called == 2
+    assert chain._chosen is gl
+
+
+async def test_refreshable_background() -> None:
+    ev = asyncio.Event()
+
+    async def refresher(http: HttpImplementation) -> int:
+        await ev.wait()
+        return 1
+
+    refreshable = Refreshable(
+        "test_refreshable_background", lambda _: Refresh.soon, refresher
+    )
+    refreshable._current = 0
+    assert refreshable._active_refresh_task is None
+    assert await refreshable.get(null_http) == 0
+    assert refreshable._active_refresh_task is not None
+    ev.set()
+    await refreshable._active_refresh_task
+    assert refreshable._active_refresh_task is None
+    assert refreshable._current == 1

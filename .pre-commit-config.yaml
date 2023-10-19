@@ -33,5 +33,5 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
-        args: ['check', 'src', 'tests']
+        args: ['check', '--fix', 'src', 'tests']
 

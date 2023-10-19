@@ -4,7 +4,7 @@ from functools import partial
 from typing import Any, Callable, Dict
 
 import pytest
-from boto3.dynamodb.types import (  # type: ignore[import]
+from boto3.dynamodb.types import (  # type: ignore[import-untyped]
     DYNAMODB_CONTEXT,
     TypeDeserializer,
 )
