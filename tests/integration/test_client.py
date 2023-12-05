@@ -624,13 +624,33 @@ async def test_transact_write_items_put(client: Client, table: TableName) -> Non
     await client.transact_write_items(items=puts)
     assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 2
 
-    with pytest.raises(errors.ConditionalCheckFailed):
+    with pytest.raises(errors.TransactionCanceled) as excinfo:
         put = Put(
             table=table,
             item={"h": "h", "r": "0", "s": "initial"},
             condition=F("h").does_not_exist(),
         )
         await client.transact_write_items(items=[put])
+
+    assert len(excinfo.value.cancellation_reasons) == 1
+    assert excinfo.value.cancellation_reasons[0]["Code"] == "ConditionalCheckFailed"
+
+    with pytest.raises(errors.TransactionCanceled) as excinfo:
+        put = Put(
+            table=table,
+            item={"h": "h", "r": "3", "s": "initial"},
+            condition=F("h").does_not_exist(),
+        )
+        put_fail = Put(
+            table=table,
+            item={"h": "h", "r": "0", "s": "initial"},
+            condition=F("h").does_not_exist(),
+        )
+        await client.transact_write_items(items=[put, put_fail])
+
+    assert len(excinfo.value.cancellation_reasons) == 2
+    assert excinfo.value.cancellation_reasons[0]["Code"] == "None"
+    assert excinfo.value.cancellation_reasons[1]["Code"] == "ConditionalCheckFailed"
 
 
 @pytest.mark.usefixtures("supports_transactions")
@@ -647,7 +667,7 @@ async def test_transact_write_items_update(client: Client, table: TableName) -> 
     query = await client.query_single_page(table, HashKey("h", "h"))
     assert query.items[0]["s"] == "changed"
 
-    with pytest.raises(errors.ConditionalCheckFailed):
+    with pytest.raises(errors.TransactionCanceled) as excinfo:
         update = Update(
             table=table,
             key={"h": "h", "r": "1"},
@@ -655,6 +675,9 @@ async def test_transact_write_items_update(client: Client, table: TableName) -> 
             condition=F("s").not_equals("changed"),
         )
         await client.transact_write_items(items=[update])
+
+    assert len(excinfo.value.cancellation_reasons) == 1
+    assert excinfo.value.cancellation_reasons[0]["Code"] == "ConditionalCheckFailed"
 
 
 @pytest.mark.usefixtures("supports_transactions")
@@ -670,13 +693,17 @@ async def test_transact_write_items_delete(client: Client, table: TableName) -> 
     assert len([item async for item in client.query(table, HashKey("h", "h"))]) == 0
 
     await client.put_item(table=table, item={"h": "h", "r": "1", "s": "initial"})
-    with pytest.raises(errors.ConditionalCheckFailed):
+
+    with pytest.raises(errors.TransactionCanceled) as excinfo:
         delete = Delete(
             table=table,
             key={"h": "h", "r": "1"},
             condition=F("s").not_equals("initial"),
         )
         await client.transact_write_items(items=[delete])
+
+    assert len(excinfo.value.cancellation_reasons) == 1
+    assert excinfo.value.cancellation_reasons[0]["Code"] == "ConditionalCheckFailed"
 
 
 @pytest.mark.usefixtures("supports_transactions")
@@ -687,8 +714,11 @@ async def test_transact_write_items_condition_check(
     condition = ConditionCheck(
         table=table, key={"h": "h", "r": "1"}, condition=F("s").not_equals("initial")
     )
-    with pytest.raises(errors.ConditionalCheckFailed):
+    with pytest.raises(errors.TransactionCanceled) as excinfo:
         await client.transact_write_items(items=[condition])
+
+    assert len(excinfo.value.cancellation_reasons) == 1
+    assert excinfo.value.cancellation_reasons[0]["Code"] == "ConditionalCheckFailed"
 
     condition = ConditionCheck(
         table=table, key={"h": "h", "r": "1"}, condition=F("s").equals("initial")
