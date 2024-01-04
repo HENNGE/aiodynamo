@@ -5,6 +5,7 @@ import datetime
 import decimal
 import logging
 from collections import abc as collections_abc
+from dataclasses import dataclass
 from functools import reduce
 from typing import (
     TYPE_CHECKING,
@@ -12,6 +13,9 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
+    Generator,
+    Generic,
+    Iterable,
     List,
     Mapping,
     Set,
@@ -197,3 +201,43 @@ def deparametetrize(
     for key, value in params.names.items():
         expression = expression.replace(key, value)
     return expression
+
+
+@dataclass(frozen=True)
+class MinLen2AppendOnlyList(Generic[T]):
+    first: T
+    second: T
+    rest: tuple[T, ...]
+
+    @classmethod
+    def create(cls, first: T, second: T, *rest: T) -> MinLen2AppendOnlyList[T]:
+        return cls(first, second, rest)
+
+    def appending(self, value: T) -> MinLen2AppendOnlyList[T]:
+        return MinLen2AppendOnlyList(self.first, self.second, (*self.rest, value))
+
+    def extending(self, values: Iterable[T]) -> MinLen2AppendOnlyList[T]:
+        return MinLen2AppendOnlyList(self.first, self.second, (*self.rest, *values))
+
+    def __contains__(self, item: Any) -> bool:
+        return item == self.first or item == self.second or item in self.rest
+
+    def __getitem__(self, index: int) -> T:
+        if index == 0:
+            return self.first
+        elif index == 1:
+            return self.second
+        return self.rest[index - 2]
+
+    def __len__(self) -> int:
+        return len(self.rest) + 2
+
+    def __iter__(self) -> Generator[T, None, None]:
+        yield self.first
+        yield self.second
+        yield from self.rest
+
+    def __reversed__(self) -> Generator[T, None, None]:
+        yield from reversed(self.rest)
+        yield self.second
+        yield self.first

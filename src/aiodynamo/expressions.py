@@ -19,7 +19,7 @@ from typing import (
 
 from .errors import CannotAddToNestedField
 from .types import AttributeType, Numeric, ParametersDict
-from .utils import deparametetrize, low_level_serialize
+from .utils import MinLen2AppendOnlyList, deparametetrize, low_level_serialize
 
 _ParametersCache = Dict[Tuple[Any, Any], str]
 
@@ -377,10 +377,20 @@ class HashAndRangeKeyCondition(KeyCondition):
 
 class Condition(metaclass=abc.ABCMeta):
     def __and__(self, other: Condition) -> Condition:
-        return AndCondition(self, other)
+        if isinstance(self, AndCondition):
+            if isinstance(other, AndCondition):
+                return AndCondition(self.children.extending(other.children))
+            else:
+                return AndCondition(self.children.appending(other))
+        return AndCondition(MinLen2AppendOnlyList.create(self, other))
 
     def __or__(self, other: Condition) -> Condition:
-        return OrCondition(self, other)
+        if isinstance(self, OrCondition):
+            if isinstance(other, OrCondition):
+                return OrCondition(self.children.extending(other.children))
+            else:
+                return OrCondition(self.children.appending(other))
+        return OrCondition(MinLen2AppendOnlyList.create(self, other))
 
     def __invert__(self) -> Condition:
         return NotCondition(self)
@@ -408,20 +418,18 @@ class NotCondition(Condition):
 
 @dataclass(frozen=True)
 class AndCondition(Condition):
-    lhs: Condition
-    rhs: Condition
+    children: MinLen2AppendOnlyList[Condition]
 
     def encode(self, params: Parameters) -> str:
-        return f"({self.lhs.encode(params)} AND {self.rhs.encode(params)})"
+        return "(" + " AND ".join(child.encode(params) for child in self.children) + ")"
 
 
 @dataclass(frozen=True)
 class OrCondition(Condition):
-    lhs: Condition
-    rhs: Condition
+    children: MinLen2AppendOnlyList[Condition]
 
     def encode(self, params: Parameters) -> str:
-        return f"({self.lhs.encode(params)} OR {self.rhs.encode(params)})"
+        return "(" + " OR ".join(child.encode(params) for child in self.children) + ")"
 
 
 @dataclass(frozen=True)

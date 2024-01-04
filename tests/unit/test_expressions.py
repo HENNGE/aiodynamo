@@ -3,13 +3,17 @@ from typing import Any, Dict
 import pytest
 
 from aiodynamo.expressions import (
+    AndCondition,
+    Comparison,
     Condition,
     F,
     HashKey,
+    OrCondition,
     Parameters,
     ProjectionExpression,
     UpdateExpression,
 )
+from aiodynamo.utils import MinLen2AppendOnlyList
 
 
 @pytest.mark.parametrize(
@@ -115,6 +119,10 @@ def test_f_repr(f: F, r: str) -> None:
     [
         (F("a").equals(True) & F("b").gt(1), "(a = True AND b > 1)"),
         (F("a", 1).begins_with("foo"), "begins_with(a[1], 'foo')"),
+        (
+            F("a").equals("a") & F("b").equals("b") & F("c").equals("c"),
+            "(a = 'a' AND b = 'b' AND c = 'c')",
+        ),
     ],
 )
 def test_condition_debug(expr: Condition, expected: str) -> None:
@@ -133,3 +141,90 @@ def test_condition_debug(expr: Condition, expected: str) -> None:
 )
 def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
     assert expr.debug(int) == expected
+
+
+@pytest.mark.parametrize(
+    "expr,expected",
+    [
+        (
+            F("a").equals("a") & F("b").equals("b"),
+            AndCondition(
+                MinLen2AppendOnlyList.create(
+                    Comparison(F("a"), "=", "a"), Comparison(F("b"), "=", "b")
+                )
+            ),
+        ),
+        (
+            (F("a").equals("a") & F("b").equals("b")) & F("c").equals("c"),
+            AndCondition(
+                MinLen2AppendOnlyList.create(
+                    Comparison(F("a"), "=", "a"),
+                    Comparison(F("b"), "=", "b"),
+                    Comparison(F("c"), "=", "c"),
+                )
+            ),
+        ),
+        (
+            (F("a").equals("a") & F("b").equals("b"))
+            & (F("c").equals("c") & F("d").equals("d")),
+            AndCondition(
+                MinLen2AppendOnlyList.create(
+                    Comparison(F("a"), "=", "a"),
+                    Comparison(F("b"), "=", "b"),
+                    Comparison(F("c"), "=", "c"),
+                    Comparison(F("d"), "=", "d"),
+                )
+            ),
+        ),
+        (
+            F("a").equals("a") | F("b").equals("b"),
+            OrCondition(
+                MinLen2AppendOnlyList.create(
+                    Comparison(F("a"), "=", "a"), Comparison(F("b"), "=", "b")
+                )
+            ),
+        ),
+        (
+            (F("a").equals("a") | F("b").equals("b")) | F("c").equals("c"),
+            OrCondition(
+                MinLen2AppendOnlyList.create(
+                    Comparison(F("a"), "=", "a"),
+                    Comparison(F("b"), "=", "b"),
+                    Comparison(F("c"), "=", "c"),
+                )
+            ),
+        ),
+        (
+            (F("a").equals("a") | F("b").equals("b"))
+            | (F("c").equals("c") | F("d").equals("d")),
+            OrCondition(
+                MinLen2AppendOnlyList.create(
+                    Comparison(F("a"), "=", "a"),
+                    Comparison(F("b"), "=", "b"),
+                    Comparison(F("c"), "=", "c"),
+                    Comparison(F("d"), "=", "d"),
+                )
+            ),
+        ),
+        (
+            (F("a").equals("a") | F("b").equals("b"))
+            & (F("c").equals("c") | F("d").equals("d")),
+            AndCondition(
+                MinLen2AppendOnlyList.create(
+                    OrCondition(
+                        MinLen2AppendOnlyList.create(
+                            Comparison(F("a"), "=", "a"), Comparison(F("b"), "=", "b")
+                        )
+                    ),
+                    OrCondition(
+                        MinLen2AppendOnlyList.create(
+                            Comparison(F("c"), "=", "c"), Comparison(F("d"), "=", "d")
+                        )
+                    ),
+                )
+            ),
+        ),
+    ],
+)
+def test_condition_flattening(expr: Condition, expected: Condition) -> None:
+    assert expr == expected
