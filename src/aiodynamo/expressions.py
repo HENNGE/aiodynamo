@@ -19,7 +19,7 @@ from typing import (
 
 from .errors import CannotAddToNestedField
 from .types import AttributeType, Numeric, ParametersDict
-from .utils import MinLen2AppendOnlyList, deparametetrize, low_level_serialize
+from .utils import deparametetrize, low_level_serialize
 
 _ParametersCache = Dict[Tuple[Any, Any], str]
 
@@ -377,20 +377,24 @@ class HashAndRangeKeyCondition(KeyCondition):
 
 class Condition(metaclass=abc.ABCMeta):
     def __and__(self, other: Condition) -> Condition:
-        if isinstance(self, AndCondition):
-            if isinstance(other, AndCondition):
-                return AndCondition(self.children.extending(other.children))
-            else:
-                return AndCondition(self.children.appending(other))
-        return AndCondition(MinLen2AppendOnlyList.create(self, other))
+        if isinstance(self, AndCondition) and isinstance(other, AndCondition):
+            return AndCondition(self.children + other.children)
+        elif isinstance(self, AndCondition):
+            return AndCondition(self.children + (other,))
+        elif isinstance(other, AndCondition):
+            return AndCondition((self,) + other.children)
+        else:
+            return AndCondition((self, other))
 
     def __or__(self, other: Condition) -> Condition:
-        if isinstance(self, OrCondition):
-            if isinstance(other, OrCondition):
-                return OrCondition(self.children.extending(other.children))
-            else:
-                return OrCondition(self.children.appending(other))
-        return OrCondition(MinLen2AppendOnlyList.create(self, other))
+        if isinstance(self, OrCondition) and isinstance(other, OrCondition):
+            return OrCondition(self.children + other.children)
+        elif isinstance(self, OrCondition):
+            return OrCondition(self.children + (other,))
+        elif isinstance(other, OrCondition):
+            return OrCondition((self,) + other.children)
+        else:
+            return OrCondition((self, other))
 
     def __invert__(self) -> Condition:
         return NotCondition(self)
@@ -418,18 +422,22 @@ class NotCondition(Condition):
 
 @dataclass(frozen=True)
 class AndCondition(Condition):
-    children: MinLen2AppendOnlyList[Condition]
+    children: tuple[Condition, ...]
 
     def encode(self, params: Parameters) -> str:
-        return "(" + " AND ".join(child.encode(params) for child in self.children) + ")"
+        if len(self.children) < 2:
+            raise ValueError("two or more subclauses are required")
+        return f"({' AND '.join(child.encode(params) for child in self.children)})"
 
 
 @dataclass(frozen=True)
 class OrCondition(Condition):
-    children: MinLen2AppendOnlyList[Condition]
+    children: tuple[Condition, ...]
 
     def encode(self, params: Parameters) -> str:
-        return "(" + " OR ".join(child.encode(params) for child in self.children) + ")"
+        if len(self.children) < 2:
+            raise ValueError("two or more subclauses are required")
+        return f"({' OR '.join(child.encode(params) for child in self.children)})"
 
 
 @dataclass(frozen=True)
