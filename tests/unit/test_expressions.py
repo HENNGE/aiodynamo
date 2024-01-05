@@ -11,9 +11,9 @@ from aiodynamo.expressions import (
     OrCondition,
     Parameters,
     ProjectionExpression,
+    SubConditions,
     UpdateExpression,
 )
-from aiodynamo.utils import MinLen2AppendOnlyList
 
 
 @pytest.mark.parametrize(
@@ -149,7 +149,7 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
         (
             F("a").equals("a") & F("b").equals("b"),
             AndCondition(
-                MinLen2AppendOnlyList.create(
+                SubConditions.create(
                     Comparison(F("a"), "=", "a"), Comparison(F("b"), "=", "b")
                 )
             ),
@@ -157,7 +157,7 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
         (
             (F("a").equals("a") & F("b").equals("b")) & F("c").equals("c"),
             AndCondition(
-                MinLen2AppendOnlyList.create(
+                SubConditions.create(
                     Comparison(F("a"), "=", "a"),
                     Comparison(F("b"), "=", "b"),
                     Comparison(F("c"), "=", "c"),
@@ -167,7 +167,7 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
         (
             F("a").equals("a") & (F("b").equals("b") & F("c").equals("c")),
             AndCondition(
-                MinLen2AppendOnlyList.create(
+                SubConditions.create(
                     Comparison(F("a"), "=", "a"),
                     Comparison(F("b"), "=", "b"),
                     Comparison(F("c"), "=", "c"),
@@ -178,7 +178,7 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
             (F("a").equals("a") & F("b").equals("b"))
             & (F("c").equals("c") & F("d").equals("d")),
             AndCondition(
-                MinLen2AppendOnlyList.create(
+                SubConditions.create(
                     Comparison(F("a"), "=", "a"),
                     Comparison(F("b"), "=", "b"),
                     Comparison(F("c"), "=", "c"),
@@ -189,7 +189,7 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
         (
             F("a").equals("a") | F("b").equals("b"),
             OrCondition(
-                MinLen2AppendOnlyList.create(
+                SubConditions.create(
                     Comparison(F("a"), "=", "a"), Comparison(F("b"), "=", "b")
                 )
             ),
@@ -197,7 +197,7 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
         (
             (F("a").equals("a") | F("b").equals("b")) | F("c").equals("c"),
             OrCondition(
-                MinLen2AppendOnlyList.create(
+                SubConditions.create(
                     Comparison(F("a"), "=", "a"),
                     Comparison(F("b"), "=", "b"),
                     Comparison(F("c"), "=", "c"),
@@ -207,7 +207,7 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
         (
             F("a").equals("a") | (F("b").equals("b") | F("c").equals("c")),
             OrCondition(
-                MinLen2AppendOnlyList.create(
+                SubConditions.create(
                     Comparison(F("a"), "=", "a"),
                     Comparison(F("b"), "=", "b"),
                     Comparison(F("c"), "=", "c"),
@@ -218,7 +218,7 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
             (F("a").equals("a") | F("b").equals("b"))
             | (F("c").equals("c") | F("d").equals("d")),
             OrCondition(
-                MinLen2AppendOnlyList.create(
+                SubConditions.create(
                     Comparison(F("a"), "=", "a"),
                     Comparison(F("b"), "=", "b"),
                     Comparison(F("c"), "=", "c"),
@@ -230,14 +230,14 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
             (F("a").equals("a") | F("b").equals("b"))
             & (F("c").equals("c") | F("d").equals("d")),
             AndCondition(
-                MinLen2AppendOnlyList.create(
+                SubConditions.create(
                     OrCondition(
-                        MinLen2AppendOnlyList.create(
+                        SubConditions.create(
                             Comparison(F("a"), "=", "a"), Comparison(F("b"), "=", "b")
                         )
                     ),
                     OrCondition(
-                        MinLen2AppendOnlyList.create(
+                        SubConditions.create(
                             Comparison(F("c"), "=", "c"), Comparison(F("d"), "=", "d")
                         )
                     ),

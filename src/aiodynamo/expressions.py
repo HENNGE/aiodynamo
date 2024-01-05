@@ -8,6 +8,8 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Generator,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -19,7 +21,7 @@ from typing import (
 
 from .errors import CannotAddToNestedField
 from .types import AttributeType, Numeric, ParametersDict
-from .utils import MinLen2AppendOnlyList, deparametetrize, low_level_serialize
+from .utils import deparametetrize, low_level_serialize
 
 _ParametersCache = Dict[Tuple[Any, Any], str]
 
@@ -384,7 +386,7 @@ class Condition(metaclass=abc.ABCMeta):
                 return AndCondition(self.children.appending(other))
         elif isinstance(other, AndCondition):
             return AndCondition(other.children.prepending(self))
-        return AndCondition(MinLen2AppendOnlyList.create(self, other))
+        return AndCondition(SubConditions.create(self, other))
 
     def __or__(self, other: Condition) -> Condition:
         if isinstance(self, OrCondition):
@@ -394,7 +396,7 @@ class Condition(metaclass=abc.ABCMeta):
                 return OrCondition(self.children.appending(other))
         elif isinstance(other, OrCondition):
             return OrCondition(other.children.prepending(self))
-        return OrCondition(MinLen2AppendOnlyList.create(self, other))
+        return OrCondition(SubConditions.create(self, other))
 
     def __invert__(self) -> Condition:
         return NotCondition(self)
@@ -422,7 +424,7 @@ class NotCondition(Condition):
 
 @dataclass(frozen=True)
 class AndCondition(Condition):
-    children: MinLen2AppendOnlyList[Condition]
+    children: SubConditions
 
     def encode(self, params: Parameters) -> str:
         return "(" + " AND ".join(child.encode(params) for child in self.children) + ")"
@@ -430,7 +432,7 @@ class AndCondition(Condition):
 
 @dataclass(frozen=True)
 class OrCondition(Condition):
-    children: MinLen2AppendOnlyList[Condition]
+    children: SubConditions
 
     def encode(self, params: Parameters) -> str:
         return "(" + " OR ".join(child.encode(params) for child in self.children) + ")"
@@ -671,3 +673,30 @@ class FieldList(ProjectionExpression):
 
     def encode(self, params: Parameters) -> str:
         return ",".join(params.encode_path(field.path) for field in self.fields)
+
+
+@dataclass(frozen=True)
+class SubConditions:
+    first: Condition
+    second: Condition
+    rest: tuple[Condition, ...]
+
+    @classmethod
+    def create(
+        cls, first: Condition, second: Condition, *rest: Condition
+    ) -> SubConditions:
+        return cls(first, second, rest)
+
+    def prepending(self, value: Condition) -> SubConditions:
+        return SubConditions(value, self.first, (self.second, *self.rest))
+
+    def appending(self, value: Condition) -> SubConditions:
+        return SubConditions(self.first, self.second, (*self.rest, value))
+
+    def extending(self, values: Iterable[Condition]) -> SubConditions:
+        return SubConditions(self.first, self.second, (*self.rest, *values))
+
+    def __iter__(self) -> Generator[Condition, None, None]:
+        yield self.first
+        yield self.second
+        yield from self.rest

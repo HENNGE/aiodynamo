@@ -5,7 +5,6 @@ import datetime
 import decimal
 import logging
 from collections import abc as collections_abc
-from dataclasses import dataclass
 from functools import reduce
 from typing import (
     TYPE_CHECKING,
@@ -13,9 +12,6 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
-    Generator,
-    Generic,
-    Iterable,
     List,
     Mapping,
     Set,
@@ -201,28 +197,3 @@ def deparametetrize(
     for key, value in params.names.items():
         expression = expression.replace(key, value)
     return expression
-
-
-@dataclass(frozen=True)
-class MinLen2AppendOnlyList(Generic[T]):
-    first: T
-    second: T
-    rest: tuple[T, ...]
-
-    @classmethod
-    def create(cls, first: T, second: T, *rest: T) -> MinLen2AppendOnlyList[T]:
-        return cls(first, second, rest)
-
-    def prepending(self, value: T) -> MinLen2AppendOnlyList[T]:
-        return MinLen2AppendOnlyList(value, self.first, (self.second, *self.rest))
-
-    def appending(self, value: T) -> MinLen2AppendOnlyList[T]:
-        return MinLen2AppendOnlyList(self.first, self.second, (*self.rest, value))
-
-    def extending(self, values: Iterable[T]) -> MinLen2AppendOnlyList[T]:
-        return MinLen2AppendOnlyList(self.first, self.second, (*self.rest, *values))
-
-    def __iter__(self) -> Generator[T, None, None]:
-        yield self.first
-        yield self.second
-        yield from self.rest
