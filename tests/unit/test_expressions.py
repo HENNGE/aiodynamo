@@ -165,6 +165,16 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
             ),
         ),
         (
+            F("a").equals("a") & (F("b").equals("b") & F("c").equals("c")),
+            AndCondition(
+                MinLen2AppendOnlyList.create(
+                    Comparison(F("a"), "=", "a"),
+                    Comparison(F("b"), "=", "b"),
+                    Comparison(F("c"), "=", "c"),
+                )
+            ),
+        ),
+        (
             (F("a").equals("a") & F("b").equals("b"))
             & (F("c").equals("c") & F("d").equals("d")),
             AndCondition(
@@ -186,6 +196,16 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
         ),
         (
             (F("a").equals("a") | F("b").equals("b")) | F("c").equals("c"),
+            OrCondition(
+                MinLen2AppendOnlyList.create(
+                    Comparison(F("a"), "=", "a"),
+                    Comparison(F("b"), "=", "b"),
+                    Comparison(F("c"), "=", "c"),
+                )
+            ),
+        ),
+        (
+            F("a").equals("a") | (F("b").equals("b") | F("c").equals("c")),
             OrCondition(
                 MinLen2AppendOnlyList.create(
                     Comparison(F("a"), "=", "a"),

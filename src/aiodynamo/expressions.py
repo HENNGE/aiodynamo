@@ -382,6 +382,8 @@ class Condition(metaclass=abc.ABCMeta):
                 return AndCondition(self.children.extending(other.children))
             else:
                 return AndCondition(self.children.appending(other))
+        elif isinstance(other, AndCondition):
+            return AndCondition(other.children.prepending(self))
         return AndCondition(MinLen2AppendOnlyList.create(self, other))
 
     def __or__(self, other: Condition) -> Condition:
@@ -390,6 +392,8 @@ class Condition(metaclass=abc.ABCMeta):
                 return OrCondition(self.children.extending(other.children))
             else:
                 return OrCondition(self.children.appending(other))
+        elif isinstance(other, OrCondition):
+            return OrCondition(other.children.prepending(self))
         return OrCondition(MinLen2AppendOnlyList.create(self, other))
 
     def __invert__(self) -> Condition:
