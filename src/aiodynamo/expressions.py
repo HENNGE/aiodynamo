@@ -446,7 +446,7 @@ class AttributeTypeCondition(Condition):
     attribute_type: AttributeType
 
     def encode(self, params: Parameters) -> str:
-        return f"attribute_type({params.encode_path(self.field.path)}, {self.attribute_type.value})"
+        return f"attribute_type({params.encode_path(self.field.path)}, {params.encode_value(self.attribute_type.value)})"
 
 
 @dataclass(frozen=True)
