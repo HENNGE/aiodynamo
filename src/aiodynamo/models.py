@@ -206,6 +206,57 @@ class TableDescription:
     throughput: Optional[ThroughputType]
     status: TableStatus
 
+    @classmethod
+    def from_response(cls, description: Dict[str, Any]) -> "TableDescription":
+        attributes: Optional[Dict[str, KeyType]]
+        if "AttributeDefinitions" in description:
+            attributes = {
+                attribute["AttributeName"]: KeyType(attribute["AttributeType"])
+                for attribute in description["AttributeDefinitions"]
+            }
+        else:
+            attributes = None
+        creation_time: Optional[datetime.datetime]
+        if "CreationDateTime" in description:
+            creation_time = datetime.datetime.fromtimestamp(
+                description["CreationDateTime"], datetime.timezone.utc
+            )
+        else:
+            creation_time = None
+        key_schema: Optional[KeySchema]
+        if attributes and "KeySchema" in description:
+            key_schema = KeySchema(
+                *[
+                    KeySpec(
+                        name=key["AttributeName"], type=attributes[key["AttributeName"]]
+                    )
+                    for key in description["KeySchema"]
+                ]
+            )
+        else:
+            key_schema = None
+        throughput: Optional[ThroughputType]
+        if (
+            "BillingModeSummary" in description
+            and description["BillingModeSummary"]["BillingMode"] == PayPerRequest.MODE
+        ):
+            throughput = PayPerRequest()
+        elif "ProvisionedThroughput" in description:
+            throughput = Throughput(
+                read=description["ProvisionedThroughput"]["ReadCapacityUnits"],
+                write=description["ProvisionedThroughput"]["WriteCapacityUnits"],
+            )
+        else:
+            throughput = None
+        return TableDescription(
+            attributes=attributes,
+            created=creation_time,
+            item_count=description.get("ItemCount", None),
+            key_schema=key_schema,
+            throughput=throughput,
+            status=TableStatus(description["TableStatus"]),
+        )
+
 
 class Select(Enum):
     all_attributes = "ALL_ATTRIBUTES"

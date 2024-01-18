@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
 import json
 from dataclasses import dataclass
 from typing import (
@@ -54,8 +53,6 @@ from .models import (
     BatchWriteResult,
     GlobalSecondaryIndex,
     KeySchema,
-    KeySpec,
-    KeyType,
     LocalSecondaryIndex,
     Page,
     PayPerRequest,
@@ -115,7 +112,7 @@ class Table:
         gsis: Optional[List[GlobalSecondaryIndex]] = None,
         stream: Optional[StreamSpecification] = None,
         wait_for_active: Union[bool, RetryConfig] = False,
-    ) -> None:
+    ) -> TableDescription:
         return await self.client.create_table(
             self.name,
             throughput,
@@ -393,7 +390,7 @@ class Client:
         gsis: Optional[List[GlobalSecondaryIndex]] = None,
         stream: Optional[StreamSpecification] = None,
         wait_for_active: Union[bool, RetryConfig] = False,
-    ) -> None:
+    ) -> TableDescription:
         attributes = keys.to_attributes()
         if lsis is not None:
             for index in lsis:
@@ -418,9 +415,15 @@ class Client:
         if stream:
             payload["StreamSpecification"] = stream.encode()
 
-        await self.send_request(action="CreateTable", payload=payload)
+        response = await self.send_request(action="CreateTable", payload=payload)
+
+        description = TableDescription.from_response(response["TableDescription"])
+
+        if description.status == TableStatus.active:
+            return description
 
         async def check() -> bool:
+            nonlocal description
             try:
                 description = await self.describe_table(name)
                 return description.status == TableStatus.active
@@ -429,6 +432,7 @@ class Client:
 
         if not await wait(wait_for_active, check):
             raise TableDidNotBecomeActive()
+        return description
 
     async def enable_time_to_live(
         self,
@@ -499,55 +503,7 @@ class Client:
             action="DescribeTable", payload={"TableName": name}
         )
 
-        description = response["Table"]
-        attributes: Optional[Dict[str, KeyType]]
-        if "AttributeDefinitions" in description:
-            attributes = {
-                attribute["AttributeName"]: KeyType(attribute["AttributeType"])
-                for attribute in description["AttributeDefinitions"]
-            }
-        else:
-            attributes = None
-        creation_time: Optional[datetime.datetime]
-        if "CreationDateTime" in description:
-            creation_time = datetime.datetime.fromtimestamp(
-                description["CreationDateTime"], datetime.timezone.utc
-            )
-        else:
-            creation_time = None
-        key_schema: Optional[KeySchema]
-        if attributes and "KeySchema" in description:
-            key_schema = KeySchema(
-                *[
-                    KeySpec(
-                        name=key["AttributeName"], type=attributes[key["AttributeName"]]
-                    )
-                    for key in description["KeySchema"]
-                ]
-            )
-        else:
-            key_schema = None
-        throughput: Optional[ThroughputType]
-        if (
-            "BillingModeSummary" in description
-            and description["BillingModeSummary"]["BillingMode"] == PayPerRequest.MODE
-        ):
-            throughput = PayPerRequest()
-        elif "ProvisionedThroughput" in description:
-            throughput = Throughput(
-                read=description["ProvisionedThroughput"]["ReadCapacityUnits"],
-                write=description["ProvisionedThroughput"]["WriteCapacityUnits"],
-            )
-        else:
-            throughput = None
-        return TableDescription(
-            attributes=attributes,
-            created=creation_time,
-            item_count=description.get("ItemCount", None),
-            key_schema=key_schema,
-            throughput=throughput,
-            status=TableStatus(description["TableStatus"]),
-        )
+        return TableDescription.from_response(response["Table"])
 
     async def delete_item(
         self,
