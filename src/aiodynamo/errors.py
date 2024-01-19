@@ -1,5 +1,12 @@
 import json
-from typing import Any, Dict
+from dataclasses import dataclass
+from typing import Any, Dict, List, Union
+
+
+@dataclass(frozen=True)
+class CancellationReason:
+    code: str
+    message: str
 
 
 class AIODynamoError(Exception):
@@ -110,7 +117,17 @@ class PointInTimeRecoveryUnavailable(AIODynamoError):
 
 
 class TransactionCanceled(AIODynamoError):
-    pass
+    cancellation_reasons: List[Union[CancellationReason, None]]
+
+    def __init__(self, body: Dict[str, Any]):
+        self.body = body
+        self.cancellation_reasons: List[CancellationReason] = [
+            CancellationReason(reason["Code"], reason["Message"])
+            if reason["Code"] != "None"
+            else None
+            for reason in self.body["CancellationReasons"]
+        ]
+        super().__init__(body)
 
 
 class TransactionEmpty(AIODynamoError):
@@ -207,17 +224,7 @@ def exception_from_response(status: int, body: bytes) -> Exception:
         return ServiceUnavailable()
     try:
         data = json.loads(body)
-        error = ERRORS[data["__type"].split("#", 1)[-1]](data)
-        if isinstance(error, TransactionCanceled):
-            error = extract_error_from_transaction_canceled(data)
+        error: Exception = ERRORS[data["__type"].split("#", 1)[-1]](data)
         return error
     except Exception:
         return UnknownError(status, body)
-
-
-def extract_error_from_transaction_canceled(data: Dict[str, Any]) -> AIODynamoError:
-    try:
-        error = data["CancellationReasons"][0]
-        return ERRORS[f"{error['Code']}Exception"](error["Message"])
-    except Exception:
-        return ERRORS[data["__type"].split("#", 1)[-1]](data)
