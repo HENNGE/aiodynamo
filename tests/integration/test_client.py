@@ -633,7 +633,8 @@ async def test_transact_write_items_put(client: Client, table: TableName) -> Non
         await client.transact_write_items(items=[put])
 
     assert len(excinfo.value.cancellation_reasons) == 1
-    assert excinfo.value.cancellation_reasons[0]["Code"] == "ConditionalCheckFailed"
+    assert excinfo.value.cancellation_reasons[0] is not None
+    assert excinfo.value.cancellation_reasons[0].code == "ConditionalCheckFailed"
 
     with pytest.raises(errors.TransactionCanceled) as excinfo:
         put = Put(
@@ -649,8 +650,9 @@ async def test_transact_write_items_put(client: Client, table: TableName) -> Non
         await client.transact_write_items(items=[put, put_fail])
 
     assert len(excinfo.value.cancellation_reasons) == 2
-    assert excinfo.value.cancellation_reasons[0]["Code"] == "None"
-    assert excinfo.value.cancellation_reasons[1]["Code"] == "ConditionalCheckFailed"
+    assert excinfo.value.cancellation_reasons[0] is None
+    assert excinfo.value.cancellation_reasons[1] is not None
+    assert excinfo.value.cancellation_reasons[1].code == "ConditionalCheckFailed"
 
 
 @pytest.mark.usefixtures("supports_transactions")
@@ -677,7 +679,8 @@ async def test_transact_write_items_update(client: Client, table: TableName) -> 
         await client.transact_write_items(items=[update])
 
     assert len(excinfo.value.cancellation_reasons) == 1
-    assert excinfo.value.cancellation_reasons[0]["Code"] == "ConditionalCheckFailed"
+    assert excinfo.value.cancellation_reasons[0] is not None
+    assert excinfo.value.cancellation_reasons[0].code == "ConditionalCheckFailed"
 
 
 @pytest.mark.usefixtures("supports_transactions")
@@ -703,7 +706,8 @@ async def test_transact_write_items_delete(client: Client, table: TableName) -> 
         await client.transact_write_items(items=[delete])
 
     assert len(excinfo.value.cancellation_reasons) == 1
-    assert excinfo.value.cancellation_reasons[0]["Code"] == "ConditionalCheckFailed"
+    assert excinfo.value.cancellation_reasons[0] is not None
+    assert excinfo.value.cancellation_reasons[0].code == "ConditionalCheckFailed"
 
 
 @pytest.mark.usefixtures("supports_transactions")
@@ -718,7 +722,8 @@ async def test_transact_write_items_condition_check(
         await client.transact_write_items(items=[condition])
 
     assert len(excinfo.value.cancellation_reasons) == 1
-    assert excinfo.value.cancellation_reasons[0]["Code"] == "ConditionalCheckFailed"
+    assert excinfo.value.cancellation_reasons[0] is not None
+    assert excinfo.value.cancellation_reasons[0].code == "ConditionalCheckFailed"
 
     condition = ConditionCheck(
         table=table, key={"h": "h", "r": "1"}, condition=F("s").equals("initial")

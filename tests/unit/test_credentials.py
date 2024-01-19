@@ -8,7 +8,7 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from aiohttp import web
 from freezegun import freeze_time
-from pyfakefs.fake_filesystem import FakeFilesystem  # type: ignore[import-untyped]
+from pyfakefs.fake_filesystem import FakeFilesystem
 from yarl import URL
 
 from aiodynamo.credentials import (

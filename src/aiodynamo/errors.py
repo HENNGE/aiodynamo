@@ -1,10 +1,12 @@
 import json
-from typing import Any, Dict, List, Optional, TypedDict
+from dataclasses import dataclass
+from typing import Any, Dict, List, Union
 
 
-class CancellationReason(TypedDict):
-    Code: Optional[str]
-    Message: Optional[str]
+@dataclass(frozen=True)
+class CancellationReason:
+    code: str
+    message: str
 
 
 class AIODynamoError(Exception):
@@ -115,10 +117,15 @@ class PointInTimeRecoveryUnavailable(AIODynamoError):
 
 
 class TransactionCanceled(AIODynamoError):
+    cancellation_reasons: List[Union[CancellationReason, None]]
+
     def __init__(self, body: Dict[str, Any]):
         self.body = body
-        self.cancellation_reasons: List[CancellationReason] = self.body[
-            "CancellationReasons"
+        self.cancellation_reasons: List[CancellationReason] = [
+            CancellationReason(reason["Code"], reason["Message"])
+            if reason["Code"] != "None"
+            else None
+            for reason in self.body["CancellationReasons"]
         ]
         super().__init__(body)
 
