@@ -39,7 +39,7 @@ from aiodynamo.models import (
     TimeToLiveStatus,
 )
 from aiodynamo.operations import ConditionCheck, Delete, Get, Put, Update
-from aiodynamo.types import TableName
+from aiodynamo.types import AttributeType, TableName
 from tests.integration.conftest import TableFactory
 
 
@@ -803,3 +803,15 @@ async def test_pay_per_request_table(
     assert not set(map(itemgetter("r"), first_page.items)) & set(
         map(itemgetter("r"), second_page.items)
     )
+
+
+async def test_attribute_type_filter(client: Client, table: TableName) -> None:
+    await client.put_item(table=table, item={"h": "h", "r": "1", "a": 1})
+    await client.put_item(table=table, item={"h": "h", "r": "2", "a": "2"})
+    items = {
+        item["r"]
+        async for item in client.scan(
+            table=table, filter_expression=F("a").attribute_type(AttributeType.string)
+        )
+    }
+    assert items == {"2"}
