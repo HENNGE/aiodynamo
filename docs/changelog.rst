@@ -1,6 +1,17 @@
 Changelog
 =========
 
+24.1
+----
+
+Release Date: January 19th, 2024
+
+* Fixed attribute type condition.
+* Consistent handling of transaction cancelled errors. Thanks to `@aclemons <https://github.com/aclemons>`_.
+* OR and AND conditions are now flattened when possible.
+* Create table now returns its description and no longer calls describe table if the table is already active after being created.
+* Official support for Python 3.12.
+
 23.10.1
 -------
 
