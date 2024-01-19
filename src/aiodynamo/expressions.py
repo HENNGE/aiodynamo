@@ -8,6 +8,8 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Generator,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -377,10 +379,24 @@ class HashAndRangeKeyCondition(KeyCondition):
 
 class Condition(metaclass=abc.ABCMeta):
     def __and__(self, other: Condition) -> Condition:
-        return AndCondition(self, other)
+        if isinstance(self, AndCondition):
+            if isinstance(other, AndCondition):
+                return AndCondition(self.children.extending(other.children))
+            else:
+                return AndCondition(self.children.appending(other))
+        elif isinstance(other, AndCondition):
+            return AndCondition(other.children.prepending(self))
+        return AndCondition(SubConditions.create(self, other))
 
     def __or__(self, other: Condition) -> Condition:
-        return OrCondition(self, other)
+        if isinstance(self, OrCondition):
+            if isinstance(other, OrCondition):
+                return OrCondition(self.children.extending(other.children))
+            else:
+                return OrCondition(self.children.appending(other))
+        elif isinstance(other, OrCondition):
+            return OrCondition(other.children.prepending(self))
+        return OrCondition(SubConditions.create(self, other))
 
     def __invert__(self) -> Condition:
         return NotCondition(self)
@@ -408,20 +424,18 @@ class NotCondition(Condition):
 
 @dataclass(frozen=True)
 class AndCondition(Condition):
-    lhs: Condition
-    rhs: Condition
+    children: SubConditions
 
     def encode(self, params: Parameters) -> str:
-        return f"({self.lhs.encode(params)} AND {self.rhs.encode(params)})"
+        return "(" + " AND ".join(child.encode(params) for child in self.children) + ")"
 
 
 @dataclass(frozen=True)
 class OrCondition(Condition):
-    lhs: Condition
-    rhs: Condition
+    children: SubConditions
 
     def encode(self, params: Parameters) -> str:
-        return f"({self.lhs.encode(params)} OR {self.rhs.encode(params)})"
+        return "(" + " OR ".join(child.encode(params) for child in self.children) + ")"
 
 
 @dataclass(frozen=True)
@@ -659,3 +673,30 @@ class FieldList(ProjectionExpression):
 
     def encode(self, params: Parameters) -> str:
         return ",".join(params.encode_path(field.path) for field in self.fields)
+
+
+@dataclass(frozen=True)
+class SubConditions:
+    first: Condition
+    second: Condition
+    rest: tuple[Condition, ...]
+
+    @classmethod
+    def create(
+        cls, first: Condition, second: Condition, *rest: Condition
+    ) -> SubConditions:
+        return cls(first, second, rest)
+
+    def prepending(self, value: Condition) -> SubConditions:
+        return SubConditions(value, self.first, (self.second, *self.rest))
+
+    def appending(self, value: Condition) -> SubConditions:
+        return SubConditions(self.first, self.second, (*self.rest, value))
+
+    def extending(self, values: Iterable[Condition]) -> SubConditions:
+        return SubConditions(self.first, self.second, (*self.rest, *values))
+
+    def __iter__(self) -> Generator[Condition, None, None]:
+        yield self.first
+        yield self.second
+        yield from self.rest
