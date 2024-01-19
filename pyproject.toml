@@ -8,6 +8,7 @@ repository = "https://github.com/HENNGE/aiodynamo"
 documentation = "https://aiodynamo.readthedocs.io"
 classifiers = [
     "Framework :: AsyncIO",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.9",
