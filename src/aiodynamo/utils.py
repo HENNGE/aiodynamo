@@ -28,6 +28,8 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 logger = logging.getLogger("aiodynamo")
+request_logger = logging.getLogger("aiodynamo.request")
+response_logger = logging.getLogger("aiodynamo.response")
 
 
 def py2dy(data: Union[Item, None]) -> Union[DynamoItem, None]:
