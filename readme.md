@@ -47,7 +47,7 @@ async def main():
 ### API use
 
 ```py
-async def main():
+async def main(client: Client):
     table = client.table("my-table")
 
     # Create table if it doesn't exist
