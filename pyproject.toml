@@ -47,6 +47,8 @@ types-freezegun = "^1.1.6"
 urllib3 = "< 1.27"
 furo = "^2023.9.10"
 ruff = "^0.0.292"
+httpx = "^0.27.0"
+aiohttp = "^3.9.5"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
