@@ -186,6 +186,26 @@ class TransactionInProgress(AIODynamoError):
     pass
 
 
+class AccessDenied(AIODynamoError):
+    pass
+
+
+class IncompleteSignature(AIODynamoError):
+    pass
+
+
+class MissingAuthenticationToken(AIODynamoError):
+    pass
+
+
+class UnrecognizedClient(AIODynamoError):
+    pass
+
+
+class SerializationException(AIODynamoError):
+    pass
+
+
 ERRORS = {
     "ResourceNotFoundException": TableNotFound,
     "UnknownOperationException": UnknownOperation,
@@ -214,6 +234,11 @@ ERRORS = {
     "ResourceInUseException": ResourceInUse,
     "IdempotentParameterMismatchException": IdempotentParameterMismatch,
     "TransactionInProgressException": TransactionInProgress,
+    "AccessDeniedException": AccessDenied,
+    "IncompleteSignatureException": IncompleteSignature,
+    "MissingAuthenticationTokenException": MissingAuthenticationToken,
+    "UnrecognizedClientException": UnrecognizedClient,
+    "SerializationException": SerializationException,
 }
 
 
