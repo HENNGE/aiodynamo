@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 
 @dataclass(frozen=True)
