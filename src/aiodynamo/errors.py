@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -117,11 +117,11 @@ class PointInTimeRecoveryUnavailable(AIODynamoError):
 
 
 class TransactionCanceled(AIODynamoError):
-    cancellation_reasons: List[Union[CancellationReason, None]]
+    cancellation_reasons: List[Optional[CancellationReason]]
 
     def __init__(self, body: Dict[str, Any]):
         self.body = body
-        self.cancellation_reasons: List[CancellationReason] = [
+        self.cancellation_reasons: List[Optional[CancellationReason]] = [
             CancellationReason(reason["Code"], reason["Message"])
             if reason["Code"] != "None"
             else None
