@@ -54,7 +54,7 @@ jobs:
           path: poetry.lock
           key: ${{ github.sha }}-${{ matrix.python-version }}
       - run: curl -sSL https://install.python-poetry.org | python3 -
-      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry install
       - run: poetry run pytest --verbose
 
   mypy:
@@ -74,7 +74,7 @@ jobs:
           path: poetry.lock
           key: ${{ github.sha }}-${{ matrix.python-version }}
       - run: curl -sSL https://install.python-poetry.org | python3 -
-      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry install
       - run: poetry run mypy
 
   isort:
@@ -91,7 +91,7 @@ jobs:
           path: poetry.lock
           key: ${{ github.sha }}-3.12
       - run: curl -sSL https://install.python-poetry.org | python3 -
-      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry install
       - run: poetry run isort --check --diff src tests
 
   black:
@@ -108,7 +108,7 @@ jobs:
           path: poetry.lock
           key: ${{ github.sha }}-3.12
       - run: curl -sSL https://install.python-poetry.org | python3 -
-      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry install
       - run: poetry run black --check src/ tests/
 
   ruff:
@@ -125,5 +125,5 @@ jobs:
           path: poetry.lock
           key: ${{ github.sha }}-3.12
       - run: curl -sSL https://install.python-poetry.org | python3 -
-      - run: poetry install --extras aiohttp --extras httpx
+      - run: poetry install
       - run: poetry run ruff check src/ tests/
