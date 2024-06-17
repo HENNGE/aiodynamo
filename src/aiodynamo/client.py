@@ -70,7 +70,7 @@ from .models import (
 )
 from .sign import signed_dynamo_request
 from .types import Item, NumericTypeConverter, TableName
-from .utils import dy2py, logger, py2dy, wait
+from .utils import dy2py, logger, py2dy, request_logger, response_logger, wait
 
 
 @dataclass(frozen=True)
@@ -984,7 +984,7 @@ class Client:
                     region=self.region,
                     endpoint=self.endpoint,
                 )
-                logger.debug("sending request %r", request)
+                request_logger.debug("sending request %r", request)
                 try:
                     response = await self.http(
                         Request(
@@ -1002,7 +1002,7 @@ class Client:
                     logger.debug("request failed")
                     exception = exc.inner
                     continue
-                logger.debug("got response %r", response)
+                response_logger.debug("got response %r", response)
                 if response.status == 200:
                     return cast(Dict[str, Any], json.loads(response.body))
                 exception = exception_from_response(response.status, response.body)
