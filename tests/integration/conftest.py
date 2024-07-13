@@ -44,6 +44,7 @@ TableFactory = Callable[[Union[Throughput, PayPerRequest]], Awaitable[str]]
 class Flavor(Enum):
     real = "real"
     scylla = "scylla"
+    dynalite = "dynalite"
     other = "other"
 
 
@@ -94,13 +95,23 @@ def table_name_prefix() -> str:
 
 
 @pytest.fixture(scope="session")
-def real_dynamo(dynamodb_implementation: Implementation) -> bool:
-    return dynamodb_implementation.flavor is Flavor.real
+def flavor(dynamodb_implementation: Implementation) -> Flavor:
+    return dynamodb_implementation.flavor
 
 
 @pytest.fixture(scope="session")
-def scylla(dynamodb_implementation: Implementation) -> bool:
-    return dynamodb_implementation.flavor is Flavor.scylla
+def real_dynamo(flavor: Flavor) -> bool:
+    return flavor is Flavor.real
+
+
+@pytest.fixture(scope="session")
+def scylla(flavor: Flavor) -> bool:
+    return flavor is Flavor.scylla
+
+
+@pytest.fixture(scope="session")
+def dynalite(flavor: Flavor) -> bool:
+    return flavor is Flavor.dynalite
 
 
 @pytest.fixture()

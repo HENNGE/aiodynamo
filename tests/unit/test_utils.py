@@ -19,6 +19,28 @@ def test_binary_decode() -> None:
     }
 
 
+class XDistReprFix:
+    """
+    This wrapper is needed because some types, such as
+    `DYNAMODB_CONTEXT.create_decimal` cannot be used in
+    `pytest.mark.parametrize` because they do not have a
+    stable `__repr__` (the `__repr__` includes the objects
+    id which is different in each process), causing
+    non-deterministic test case order, which pytest-xdist
+    rejects.
+    """
+
+    def __init__(self, ntc: NumericTypeConverter) -> None:
+        self.ntc = ntc
+        self.name = ntc.__name__
+
+    def __repr__(self) -> str:
+        return self.name
+
+    def __call__(self, value: str) -> Any:
+        return self.ntc(value)
+
+
 @pytest.mark.parametrize(
     "value,numeric_type,result",
     [
@@ -26,12 +48,20 @@ def test_binary_decode() -> None:
             {
                 "N": "1.2",
             },
-            float,
+            XDistReprFix(float),
             1.2,
         ),
-        ({"NS": ["1.2"]}, float, {1.2}),
-        ({"N": "1.2"}, DYNAMODB_CONTEXT.create_decimal, Decimal("1.2")),
-        ({"NS": ["1.2"]}, DYNAMODB_CONTEXT.create_decimal, {Decimal("1.2")}),
+        ({"NS": ["1.2"]}, XDistReprFix(float), {1.2}),
+        (
+            {"N": "1.2"},
+            XDistReprFix(DYNAMODB_CONTEXT.create_decimal),
+            Decimal("1.2"),
+        ),
+        (
+            {"NS": ["1.2"]},
+            XDistReprFix(DYNAMODB_CONTEXT.create_decimal),
+            {Decimal("1.2")},
+        ),
     ],
 )
 def test_numeric_decode(

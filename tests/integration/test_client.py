@@ -236,8 +236,17 @@ async def test_update_item(client: Client, table: TableName) -> None:
     ids=repr,
 )
 async def test_update_item_condition(
-    client: Client, table: TableName, check: Any, cond: Condition, ok: bool
+    client: Client,
+    table: TableName,
+    check: Any,
+    cond: Condition,
+    ok: bool,
+    dynalite: bool,
 ) -> None:
+    if dynalite:
+        pytest.xfail(
+            "IN condition known to be broken on dynalite: https://github.com/architect/dynalite/pull/159"
+        )
     key = {"h": "hkv", "r": "rkv"}
     item = {**key, "target": 1, "check": check}
     await client.put_item(table, item)
