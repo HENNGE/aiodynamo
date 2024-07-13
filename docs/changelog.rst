@@ -1,6 +1,17 @@
 Changelog
 =========
 
+24.7
+----
+
+Release Date: July 13th, 2024
+
+* Split loggers into client, request and response loggers. Thanks to `@aclemons <https://github.com/aclemons>`_.
+* Improved README. Thanks to `@aisk <https://github.com/aisk>`_.
+* Fix type hint for ``TransactionCanceled.cancellation_reasons``. Thanks to `@aisk <https://github.com/aisk>`_.
+* Added additional error classes. Thanks to `@aisk <https://github.com/aisk>`_.
+* Improved tests. Support for running the test suite using pytest-xdist.
+
 24.1
 ----
 
