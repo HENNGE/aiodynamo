@@ -21,6 +21,7 @@ from aiodynamo.credentials import Credentials
 from aiodynamo.http.httpx import HTTPX
 from httpx import AsyncClient
 
+async def main():
     async with AsyncClient() as h:
         client = Client(HTTPX(h), Credentials.auto(), "us-east-1")
 ```
@@ -38,6 +39,7 @@ from aiodynamo.credentials import Credentials
 from aiodynamo.http.aiohttp import AIOHTTP
 from aiohttp import ClientSession
 
+async def main():
     async with ClientSession() as session:
         client = Client(AIOHTTP(session), Credentials.auto(), "us-east-1")
 ```
@@ -45,24 +47,29 @@ from aiohttp import ClientSession
 ### API use
 
 ```py
-        table = client.table("my-table")
+from aiodynamo.client import Client
+from aiodynamo.expressions import F
+from aiodynamo.models import Throughput, KeySchema, KeySpec, KeyType
 
-        # Create table if it doesn't exist
-        if not await table.exists():
-            await table.create(
-                Throughput(read=10, write=10),
-                KeySchema(hash_key=KeySpec("key", KeyType.string)),
-            )
+async def main(client: Client):
+    table = client.table("my-table")
 
-        # Create or override an item
-        await table.put_item({"key": "my-item", "value": 1})
-        # Get an item
-        item = await table.get_item({"key": "my-item"})
-        print(item)
-        # Update an item, if it exists.
-        await table.update_item(
-            {"key": "my-item"}, F("value").add(1), condition=F("key").exists()
+    # Create table if it doesn't exist
+    if not await table.exists():
+        await table.create(
+            Throughput(read=10, write=10),
+            KeySchema(hash_key=KeySpec("key", KeyType.string)),
         )
+
+    # Create or override an item
+    await table.put_item({"key": "my-item", "value": 1})
+    # Get an item
+    item = await table.get_item({"key": "my-item"})
+    print(item)
+    # Update an item, if it exists.
+    await table.update_item(
+        {"key": "my-item"}, F("value").add(1), condition=F("key").exists()
+    )
 ```
 
 ## Why aiodynamo
@@ -73,4 +80,4 @@ from aiohttp import ClientSession
 * **Legible source code**. botocore and derived libraries generate their interface at runtime, so it cannot be inspected and isn't typed. aiodynamo is hand written code you can read, inspect and understand.
 * **Pluggable HTTP client**. If you're already using an asynchronous HTTP client in your project, you can use it with aiodynamo and don't need to add extra dependencies or run into dependency resolution issues.
 
-[Complete documentation is here](https://aiodynamo.readthedocs.io/) 
+[Complete documentation is here](https://aiodynamo.readthedocs.io/)
