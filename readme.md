@@ -47,6 +47,10 @@ async def main():
 ### API use
 
 ```py
+from aiodynamo.client import Client
+from aiodynamo.expressions import F
+from aiodynamo.models import Throughput, KeySchema, KeySpec, KeyType
+
 async def main(client: Client):
     table = client.table("my-table")
 
