@@ -10,7 +10,7 @@ Please ensure you have `pre-commit`_ set up so that code formatting is applied a
 Tests
 -----
 
-To run the tests run ``poetry run pytest``.
+To run the tests run ``poetry run pytest``. On most systems ``poetry run pytest --numprocesses auto`` will lead to a much faster execution of the test suite.
 
 Integration Tests
 -----------------
@@ -22,9 +22,9 @@ Alternative DynamoDB Implementations
 
 Currently, aiodynamo is tested with `dynamodb-local`_, `dynalite`_ and `ScyllaDB Alternator`_.
 
-To test with one or more implementations, set the ``DYNAMODB_URLS`` environment variable. The value of that variable should be a space separated list of ``<name>=<config>`` pairs, where ``<config>`` is ``<url>[,<flavor>]`` with ``<flavor>`` being one of ``real``, ``scylla`` or ``other``. The flavor must be set for `ScyllaDB Alternator`_ as it has a slightly different behavior in ``DescribeTable`` compared to other implementations.
+To test with one or more implementations, set the ``DYNAMODB_URLS`` environment variable. The value of that variable should be a space separated list of ``<name>=<config>`` pairs, where ``<config>`` is ``<url>[,<flavor>]`` with ``<flavor>`` being one of ``real``, ``dynalite``, ``scylla`` or ``other``. The flavor must be set for `ScyllaDB Alternator`_ as it has a slightly different behavior in ``DescribeTable`` compared to other implementations and `dynalite`_ as it has some known issues.
 
-For example, to run the tests for all three instances with `dynamodb-local`_ running on port 8001, `dynalite`_ running on port 8002 and `ScyllaDB Alternator`_ running on port 8003, you would set ``DYNAMODB_URLS='dynamodb-local=http://localhost:8001 dynalite=http://localhost:8002 scylla=http://localhost:8003,scylla'``
+For example, to run the tests for all three instances with `dynamodb-local`_ running on port 8001, `dynalite`_ running on port 8002 and `ScyllaDB Alternator`_ running on port 8003, you would set ``DYNAMODB_URLS='dynamodb-local=http://localhost:8001 dynalite=http://localhost:8002,dynalite scylla=http://localhost:8003,scylla'``
 
 Since these alternative implementations still require credentials to be set, set both ``AWS_ACCESS_KEY_ID`` and ``AWS_SECRET_ACCESS_KEY`` to some made up value.
 

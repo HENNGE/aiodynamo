@@ -1,7 +1,9 @@
 import asyncio
+import contextlib
 import secrets
+import typing
 from operator import itemgetter
-from typing import List, Type
+from typing import Any, List, Type
 
 import pytest
 from yarl import URL
@@ -10,6 +12,7 @@ from aiodynamo import errors
 from aiodynamo.client import Client
 from aiodynamo.credentials import ChainCredentials
 from aiodynamo.errors import (
+    ConditionalCheckFailed,
     ItemNotFound,
     NoCredentialsFound,
     TableNotFound,
@@ -218,6 +221,48 @@ async def test_update_item(client: Client, table: TableName) -> None:
         "set-key-one": {"hello", "world", "hoge"},
         "set-key-two": {"world"},
     }
+
+
+@pytest.mark.parametrize(
+    "check,cond,ok",
+    [
+        (False, F("check").equals(False), True),
+        (False, F("check").is_in([False]), True),
+        (0, F("check").is_in([0]), True),
+        (None, F("check").is_in([None]), True),
+        (False, F("check").equals(True), False),
+        (False, F("check").is_in([True]), False),
+    ],
+    ids=repr,
+)
+async def test_update_item_condition(
+    client: Client,
+    table: TableName,
+    check: Any,
+    cond: Condition,
+    ok: bool,
+    dynalite: bool,
+) -> None:
+    if dynalite:
+        pytest.xfail(
+            "IN condition known to be broken on dynalite: https://github.com/architect/dynalite/pull/159"
+        )
+    key = {"h": "hkv", "r": "rkv"}
+    item = {**key, "target": 1, "check": check}
+    await client.put_item(table, item)
+    ctx: typing.Any = (
+        contextlib.nullcontext() if ok else pytest.raises(ConditionalCheckFailed)
+    )
+    with ctx:
+        updated = await client.update_item(
+            table,
+            key,
+            F("target").add(1),
+            condition=cond,
+            return_values=ReturnValues.all_new,
+        )
+        assert updated
+        assert updated["target"] == 2
 
 
 async def test_delete_item(client: Client, table: TableName) -> None:
