@@ -60,6 +60,10 @@ In case you want to explicitly pass the credentials from Python, use :py:class:`
 
 |
 
+.. autoclass:: aiodynamo.credentials.ProcessCredentials
+
+|
+
 .. autoclass:: aiodynamo.credentials.Key
     :members:
     :undoc-members:

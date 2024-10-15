@@ -572,6 +572,68 @@ class InstanceMetadataCredentialsV1(MetadataCredentials):
         )
 
 
+@dataclass
+class ProcessCredentialsError(Exception):
+    reason: str
+    return_code: int | None
+    stdout: bytes
+    stderr: bytes
+
+
+@dataclass
+class ProcessCredentials(MetadataCredentials):
+    command: list[str]
+
+    async def fetch_metadata(self, http: HttpImplementation) -> Metadata:
+        process = await asyncio.create_subprocess_exec(
+            *self.command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate(b"")
+        if process.returncode != 0:
+            raise ProcessCredentialsError(
+                f"Process terminated with non-zero return code {process.returncode}: {try_decode(stderr)}",
+                process.returncode,
+                stdout,
+                stderr,
+            )
+        try:
+            data = json.loads(stdout)
+        except json.JSONDecodeError:
+            raise ProcessCredentialsError(
+                f"Process returned non-JSON string: {try_decode(stdout)}",
+                process.returncode,
+                stdout,
+                stderr,
+            )
+        if data["version"] != 1:
+            raise ProcessCredentialsError(
+                f"Process returned unsupported version: {data['version']}",
+                process.returncode,
+                stdout,
+                stderr,
+            )
+
+        key = Key(
+            data["access_key_id"],
+            data["secret_access_key"],
+            data.get("session_token", None),
+        )
+        return Metadata(key, parse_amazon_timestamp(data["expiration"]))
+
+    def is_disabled(self) -> bool:
+        return False
+
+
+def try_decode(data: bytes) -> str:
+    try:
+        return data.decode()
+    except:
+        return repr(data)
+
+
 class TooManyRetries(Exception):
     pass
 
