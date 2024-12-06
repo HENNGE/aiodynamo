@@ -1,4 +1,5 @@
 import base64
+import datetime
 from decimal import Decimal
 from functools import partial
 from typing import Any, Callable, Dict
@@ -10,7 +11,28 @@ from boto3.dynamodb.types import (  # type: ignore[import-untyped]
 )
 
 from aiodynamo.types import NumericTypeConverter
-from aiodynamo.utils import deserialize, dy2py
+from aiodynamo.utils import deserialize, dy2py, parse_amazon_timestamp
+
+
+@pytest.mark.parametrize(
+    ("amazon_timestamp", "expected"),
+    [
+        (
+            "2020-03-12T15:37:51Z",
+            datetime.datetime(2020, 3, 12, 15, 37, 51, tzinfo=datetime.timezone.utc),
+        ),
+        (
+            "2024-12-06T08:03:52.192266Z",
+            datetime.datetime(
+                2024, 12, 6, 8, 3, 52, 192266, tzinfo=datetime.timezone.utc
+            ),
+        ),
+    ],
+)
+def test_parse_amazon_timestamp(
+    amazon_timestamp: str, expected: datetime.datetime
+) -> None:
+    assert parse_amazon_timestamp(amazon_timestamp) == expected
 
 
 def test_binary_decode() -> None:
