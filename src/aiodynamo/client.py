@@ -370,6 +370,7 @@ class Client:
     numeric_type: NumericTypeConverter = float
     throttle_config: RetryConfig = RetryConfig.default()
     health_monitor: HealthMonitor = NoOpHealthMonitor()
+    dual_stack: bool = False
 
     def table(self, name: str) -> Table:
         return Table(self, name)
@@ -984,6 +985,7 @@ class Client:
                     payload=payload,
                     action=action,
                     region=self.region,
+                    dual_stack=self.dual_stack,
                     endpoint=self.endpoint,
                 )
                 request_logger.debug("sending request %r", request)
