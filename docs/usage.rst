@@ -7,7 +7,7 @@ Client instantiation
 You should try to re-use clients, and especially HTTP clients, as much as possible. Don't create a new one for each
 action.
 
-The :py:class:`aiodynamo.client.Client` class takes three required and three optional arguments:
+The :py:class:`aiodynamo.client.Client` class takes three required and four optional arguments:
 
 1. An HTTP client adaptor, conforming to the :py:class:`aiodynamo.http.base.HTTP` interface.
 2. An instance of :py:class:`aiodynamo.credentials.Credentials` to authenticate with DynamoDB. You may use
@@ -16,6 +16,7 @@ The :py:class:`aiodynamo.client.Client` class takes three required and three opt
 4. An optional endpoint URL of your DynamoDB, as a :py:class:`yarl.URL` instance. Useful when using a local DynamoDB implementation such as dynalite or dynamodb-local.
 5. Which numeric type to use. This should be a callable which accepts a string as input and returns your numeric type as output. Defaults to ``float``.
 6. The throttling configuration to use. An instance of :py:class:`aiodynamo.models.RetryConfig`. By default, if the DynamoDB rate limit is exceeded, aiodynamo will retry up for up to one minute with increasing delays.
+7. A :py:class``aiodynamo.health.HealthMonitor` instance. By default, health monitoring is disabled.
 
 Credentials
 -----------
