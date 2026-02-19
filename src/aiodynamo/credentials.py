@@ -17,7 +17,6 @@ from typing import (
     Sequence,
     TypeVar,
     Union,
-    cast,
 )
 
 from yarl import URL
@@ -179,7 +178,7 @@ class FileCredentials(Credentials):
         profile_name: Optional[str] = None,
     ) -> None:
         if profile_name is None:
-            profile_name = cast(str, os.environ.get("AWS_PROFILE", "default"))
+            profile_name = os.environ.get("AWS_PROFILE", "default")
         if path is None:
             path = Path.home().joinpath(".aws", "credentials")
         self.key = None
@@ -417,6 +416,7 @@ class AuthToken:
 MAX_IMDSV2_AUTH_TOKEN_SESSION_DURATION = 6 * 60 * 60
 DEFAULT_IMDSV2_AUTH_TOKEN_SESSION_DURATION = MAX_IMDSV2_AUTH_TOKEN_SESSION_DURATION
 
+
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
 @dataclass
 class InstanceMetadataCredentialsV2(MetadataCredentials):
@@ -429,10 +429,9 @@ class InstanceMetadataCredentialsV2(MetadataCredentials):
     max_attempts: int = 1
     base_url: URL = URL("http://169.254.169.254")
     disabled: bool = field(
-        default_factory=lambda: os.environ.get(
-            "AWS_EC2_METADATA_DISABLED", "false"
-        ).lower()
-        == "true"
+        default_factory=lambda: (
+            os.environ.get("AWS_EC2_METADATA_DISABLED", "false").lower() == "true"
+        )
     )
     token_session_duration_seconds: int = DEFAULT_IMDSV2_AUTH_TOKEN_SESSION_DURATION
     auth_token: Refreshable[AuthToken] = field(init=False)
@@ -527,10 +526,9 @@ class InstanceMetadataCredentialsV1(MetadataCredentials):
     max_attempts: int = 1
     base_url: URL = URL("http://169.254.169.254")
     disabled: bool = field(
-        default_factory=lambda: os.environ.get(
-            "AWS_EC2_METADATA_DISABLED", "false"
-        ).lower()
-        == "true"
+        default_factory=lambda: (
+            os.environ.get("AWS_EC2_METADATA_DISABLED", "false").lower() == "true"
+        )
     )
 
     def is_disabled(self) -> bool:

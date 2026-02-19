@@ -2,6 +2,6 @@ version: "3.9"
 services:
   dynalite:
     image: "scylladb/scylla:latest"
-    command: ["--alternator-port", "8000", "--alternator-write-isolation", "always"]
+    command: ["--alternator-port", "8000", "--alternator-write-isolation", "always", "--rf-rack-valid-keyspaces=true"]
     ports:
       - "8000:8000"
