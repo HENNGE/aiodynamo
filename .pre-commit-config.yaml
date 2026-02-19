@@ -1,37 +1,29 @@
 repos:
 -   repo: local
     hooks:
-    -   id: black
-        name: black
-        entry: poetry run black
-        language: system
-        require_serial: true
-        types: [python]
-    -   id: isort
-        name: isort
-        entry: poetry run isort
-        language: system
-        types: [python]
-        require_serial: true
-        args: ['--filter-files']
-        files: "^(src/.*\\.py|tests/.*\\.py)"
     -   id: mypy
         name: mypy
-        entry: poetry run mypy
+        entry: uv run mypy
         language: system
         types: [python]
         pass_filenames: false
     -   id: tests
         name: tests
-        entry: poetry run pytest tests/unit
+        entry: uv run pytest tests/unit
         language: system
         types: [python]
         pass_filenames: false
     -   id: ruff
         name: ruff
-        entry: poetry run ruff
+        entry: uv run ruff
         language: system
         types: [python]
         pass_filenames: false
         args: ['check', '--fix', 'src', 'tests']
-
+    -   id: ruff-format
+        name: ruff-format
+        entry: uv run ruff
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: ['format', 'src', 'tests']

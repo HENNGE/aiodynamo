@@ -32,7 +32,6 @@ from aiodynamo.models import (
     KeySpec,
     KeyType,
     LocalSecondaryIndex,
-    PayPerRequest,
     Projection,
     ProjectionType,
     RetryConfig,
@@ -336,11 +335,10 @@ async def test_exists(
     key_schema = KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string))
     attrs = {"h": KeyType.string, "r": KeyType.string}
     name = await table_factory(throughput)
-    expected_throughput = PayPerRequest() if scylla else throughput
     try:
         assert await client.table_exists(name)
         desc = await client.describe_table(name)
-        assert desc.throughput == expected_throughput
+        assert desc.throughput == throughput
         assert desc.status is TableStatus.active
         assert desc.attributes == attrs
         assert desc.key_schema == key_schema

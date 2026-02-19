@@ -91,10 +91,7 @@ def signed_dynamo_request(
     credential_scope = f"{instant.date}/{region}/{SERVICE}/aws4_request"
     request_digest = hashlib.sha256(canonical_request.encode("utf-8")).hexdigest()
     string_to_sign = (
-        f"{ALGORITHM}\n"
-        f"{instant.timestamp}\n"
-        f"{credential_scope}\n"
-        f"{request_digest}"
+        f"{ALGORITHM}\n{instant.timestamp}\n{credential_scope}\n{request_digest}"
     )
 
     signing_key = derive_signing_key(key, instant, region)

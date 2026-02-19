@@ -100,7 +100,7 @@ TAG_DESERIALIZE_MAPPING: Dict[str, Callable[[Any, NumericTypeConverter], Any]] =
 def deserialize(value: Dict[str, Any], numeric_type: NumericTypeConverter) -> Any:
     if not value:
         raise TypeError(
-            "Value must be a nonempty dictionary whose key " "is a valid dynamodb type."
+            "Value must be a nonempty dictionary whose key is a valid dynamodb type."
         )
     tag, val = next(iter(value.items()))
     try:
