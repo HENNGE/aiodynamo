@@ -9,7 +9,7 @@ class HealthMonitor(Protocol):
     """
     Protocol for health monitors that can be configured on clients.
 
-    These can be used to detect unhealthy instances on AWS that can no longer communicate with DyanmoDB.
+    These can be used to detect unhealthy instances on AWS that can no longer communicate with DynamoDB.
     """
 
     def is_healthy(self) -> bool:
