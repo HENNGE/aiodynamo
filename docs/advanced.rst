@@ -84,7 +84,7 @@ Some simple monitoring strategies are provided built in, but you can implement y
 
     .. py:attribute:: decrement
 
-        Decrement the failure count by on on success.
+        Decrement the failure count by one on success.
 
     .. py:attribute:: reset
 
