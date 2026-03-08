@@ -3,7 +3,7 @@ import contextlib
 import secrets
 import typing
 from operator import itemgetter
-from typing import Any, List, Type
+from typing import Any, AsyncGenerator, List, Type
 
 import pytest
 from yarl import URL
@@ -21,7 +21,7 @@ from aiodynamo.errors import (
     UnknownOperation,
     ValidationException,
 )
-from aiodynamo.expressions import Condition, F, HashKey, RangeKey
+from aiodynamo.expressions import Condition, F, HashKey, MultiHashKey, RangeKey
 from aiodynamo.http.types import HttpImplementation
 from aiodynamo.models import (
     BatchGetRequest,
@@ -893,3 +893,189 @@ async def test_attribute_type_filter(client: Client, table: TableName) -> None:
         )
     }
     assert items == {"2"}
+
+
+# Multi-attribute GSI key tests
+
+MultiAttrGsiTable = typing.Tuple[TableName, str]
+
+
+@pytest.fixture
+async def multi_attr_gsi_table(
+    client: Client,
+    table_name_prefix: str,
+    wait_config: RetryConfig,
+    implementation_name: str,
+) -> AsyncGenerator[MultiAttrGsiTable, None]:
+    if implementation_name not in ("dynamodb-local", "Real DynamoDB"):
+        pytest.skip("Multi-attribute GSI keys not supported by this backend")
+
+    name = table_name_prefix + secrets.token_hex(4)
+    gsi_name = "tenant-region-index"
+    await client.create_table(
+        name,
+        Throughput(5, 5),
+        KeySchema(KeySpec("h", KeyType.string), KeySpec("r", KeyType.string)),
+        gsis=[
+            GlobalSecondaryIndex(
+                name=gsi_name,
+                schema=KeySchema(
+                    hash_key=(
+                        KeySpec("tenant", KeyType.string),
+                        KeySpec("region", KeyType.string),
+                    ),
+                    range_key=(
+                        KeySpec("date", KeyType.string),
+                        KeySpec("seq", KeyType.number),
+                    ),
+                ),
+                projection=Projection(ProjectionType.all),
+                throughput=Throughput(5, 5),
+            )
+        ],
+        wait_for_active=wait_config,
+    )
+
+    for item in [
+        {
+            "h": "1",
+            "r": "a",
+            "tenant": "acme",
+            "region": "us-east",
+            "date": "2025-01-01",
+            "seq": 1,
+        },
+        {
+            "h": "2",
+            "r": "b",
+            "tenant": "acme",
+            "region": "us-east",
+            "date": "2025-01-01",
+            "seq": 2,
+        },
+        {
+            "h": "3",
+            "r": "c",
+            "tenant": "acme",
+            "region": "us-east",
+            "date": "2025-01-02",
+            "seq": 1,
+        },
+        {
+            "h": "4",
+            "r": "d",
+            "tenant": "acme",
+            "region": "eu-west",
+            "date": "2025-01-01",
+            "seq": 1,
+        },
+        {
+            "h": "5",
+            "r": "e",
+            "tenant": "other",
+            "region": "us-east",
+            "date": "2025-01-01",
+            "seq": 1,
+        },
+    ]:
+        await client.put_item(name, item)
+
+    try:
+        yield name, gsi_name
+    finally:
+        await client.delete_table(name)
+
+
+async def test_multi_attr_gsi_query_partition_only(
+    client: Client, multi_attr_gsi_table: MultiAttrGsiTable
+) -> None:
+    table, gsi_name = multi_attr_gsi_table
+    results = [
+        item
+        async for item in client.query(
+            table,
+            MultiHashKey(("tenant", "acme"), ("region", "us-east")),
+            index=gsi_name,
+        )
+    ]
+    assert len(results) == 3
+    assert all(
+        item["tenant"] == "acme" and item["region"] == "us-east" for item in results
+    )
+
+
+async def test_multi_attr_gsi_query_with_first_sort_key_equals(
+    client: Client, multi_attr_gsi_table: MultiAttrGsiTable
+) -> None:
+    table, gsi_name = multi_attr_gsi_table
+    results = [
+        item
+        async for item in client.query(
+            table,
+            MultiHashKey(("tenant", "acme"), ("region", "us-east"))
+            & RangeKey("date").equals("2025-01-01"),
+            index=gsi_name,
+        )
+    ]
+    assert len(results) == 2
+    assert all(item["date"] == "2025-01-01" for item in results)
+
+
+async def test_multi_attr_gsi_query_with_first_sort_key_between(
+    client: Client, multi_attr_gsi_table: MultiAttrGsiTable
+) -> None:
+    table, gsi_name = multi_attr_gsi_table
+    results = [
+        item
+        async for item in client.query(
+            table,
+            MultiHashKey(("tenant", "acme"), ("region", "us-east"))
+            & RangeKey("date").between("2025-01-01", "2025-01-02"),
+            index=gsi_name,
+        )
+    ]
+    assert len(results) == 3
+
+
+async def test_multi_attr_gsi_query_with_sort_key_inequality(
+    client: Client, multi_attr_gsi_table: MultiAttrGsiTable
+) -> None:
+    table, gsi_name = multi_attr_gsi_table
+    results = [
+        item
+        async for item in client.query(
+            table,
+            MultiHashKey(("tenant", "acme"), ("region", "us-east"))
+            & RangeKey("date").equals("2025-01-01")
+            & RangeKey("seq").gte(2),
+            index=gsi_name,
+        )
+    ]
+    assert len(results) == 1
+    assert results[0]["seq"] == 2
+    assert results[0]["h"] == "2"
+
+
+async def test_multi_attr_gsi_query_with_sort_key_between(
+    client: Client, multi_attr_gsi_table: MultiAttrGsiTable
+) -> None:
+    table, gsi_name = multi_attr_gsi_table
+    results = [
+        item
+        async for item in client.query(
+            table,
+            MultiHashKey(("tenant", "acme"), ("region", "us-east"))
+            & RangeKey("date").equals("2025-01-01")
+            & RangeKey("seq").between(1, 2),
+            index=gsi_name,
+        )
+    ]
+    assert len(results) == 2
+
+
+async def test_multi_attr_gsi_describe_table(
+    client: Client, multi_attr_gsi_table: MultiAttrGsiTable
+) -> None:
+    table, _ = multi_attr_gsi_table
+    description = await client.describe_table(table)
+    assert description.key_schema is not None

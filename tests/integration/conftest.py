@@ -105,6 +105,11 @@ def real_dynamo(flavor: Flavor) -> bool:
 
 
 @pytest.fixture(scope="session")
+def implementation_name(dynamodb_implementation: Implementation) -> str:
+    return dynamodb_implementation.name
+
+
+@pytest.fixture(scope="session")
 def scylla(flavor: Flavor) -> bool:
     return flavor is Flavor.scylla
 
