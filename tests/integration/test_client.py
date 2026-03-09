@@ -42,7 +42,7 @@ from aiodynamo.models import (
 )
 from aiodynamo.operations import ConditionCheck, Delete, Get, Put, Update
 from aiodynamo.types import AttributeType, TableName
-from tests.integration.conftest import TableFactory
+from tests.integration.conftest import Flavor, TableFactory
 
 
 async def test_create_table_with_indices(
@@ -905,9 +905,9 @@ async def multi_attr_gsi_table(
     client: Client,
     table_name_prefix: str,
     wait_config: RetryConfig,
-    implementation_name: str,
+    flavor: Flavor,
 ) -> AsyncGenerator[MultiAttrGsiTable, None]:
-    if implementation_name not in ("dynamodb-local", "Real DynamoDB"):
+    if flavor not in (Flavor.dynamodb_local, Flavor.real):
         pytest.skip("Multi-attribute GSI keys not supported by this backend")
 
     name = table_name_prefix + secrets.token_hex(4)
