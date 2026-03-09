@@ -106,7 +106,6 @@ def real_dynamo(flavor: Flavor) -> bool:
     return flavor is Flavor.real
 
 
-
 @pytest.fixture(scope="session")
 def scylla(flavor: Flavor) -> bool:
     return flavor is Flavor.scylla
