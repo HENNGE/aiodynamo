@@ -893,3 +893,28 @@ async def test_attribute_type_filter(client: Client, table: TableName) -> None:
         )
     }
     assert items == {"2"}
+
+
+@pytest.mark.asyncio
+async def test_batch_write_records_trace_and_metrics(instrumented_client: Client, table: str) -> None:
+    await instrumented_client.batch_write(
+        {
+            table: BatchWriteRequest(
+                items_to_put=[{"h": "h", "r": "1"}, {"h": "h", "r": "2"}]
+            )
+        }
+    )
+
+    assert instrumented_client.telemetry.tracer.spans
+    span = instrumented_client.telemetry.tracer.spans[0]
+    assert span.name == "dynamodb.batch_write"
+    assert span.attributes["db.system"] == "dynamodb"
+    assert span.attributes["db.operation"] == "BatchWriteItem"
+    assert span.attributes["db.batch.item_count"] == 2
+
+    instrumented_client._metrics.record_batch_items.assert_called_once_with(
+        operation="BatchWriteItem",
+        region=instrumented_client.region,
+        count=2,
+    )
+    instrumented_client._metrics.record_batch_duration.assert_called_once()
