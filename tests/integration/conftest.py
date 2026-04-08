@@ -150,7 +150,7 @@ def client(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def instrumented_client(
     http: HttpImplementation,
     endpoint: URL,
