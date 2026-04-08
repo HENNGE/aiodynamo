@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import (
     Any,
     AsyncIterator,
@@ -68,6 +69,8 @@ from .models import (
     TimeToLiveDescription,
     TimeToLiveStatus,
 )
+from .otel.metrics import ClientMetrics
+from .otel.types import Telemetry
 from .sign import signed_dynamo_request
 from .types import Item, NumericTypeConverter, TableName
 from .utils import dy2py, logger, py2dy, request_logger, response_logger, wait
@@ -368,6 +371,17 @@ class Client:
     endpoint: Optional[URL] = None
     numeric_type: NumericTypeConverter = float
     throttle_config: RetryConfig = RetryConfig.default()
+    telemetry: Telemetry = field(default_factory=Telemetry)
+    _metrics: ClientMetrics = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """
+        Created once because it binds to the client's telemetry provider,
+        and the same instruments should be reused for all requests made by this client.
+        """
+        object.__setattr__(
+            self, "_metrics", ClientMetrics.from_telemetry(self.telemetry)
+        )
 
     def table(self, name: str) -> Table:
         return Table(self, name)
@@ -862,49 +876,107 @@ class Client:
     async def batch_get(
         self, request: Dict[TableName, BatchGetRequest]
     ) -> BatchGetResponse:
-        payload = {
-            "RequestItems": {
-                table: get_request.to_request_payload()
-                for table, get_request in request.items()
+        start = time.perf_counter()
+        items = request.items()
+        items_count = sum(len(item.to_request_payload()) for _, item in list(items))
+
+        with self.telemetry.tracer.start_as_current_span("dynamodb.batch_get") as span:
+            span.set_attribute("db.system", "dynamodb")
+            span.set_attribute("db.operation", "BatchGetItem")
+            span.set_attribute("db.batch.item_count", items_count)
+            self._metrics.record_batch_items(
+                count=items_count,
+                operation="BatchGetItem",
+                region=self.region,
+            )
+
+            payload = {
+                "RequestItems": {
+                    table: get_request.to_request_payload()
+                    for table, get_request in request.items()
+                }
             }
-        }
-        response = await self.send_request(action="BatchGetItem", payload=payload)
-        return BatchGetResponse(
-            items={
-                table: [dy2py(item, self.numeric_type) for item in items]
-                for table, items in response["Responses"].items()
-            },
-            unprocessed_keys={
-                table: [dy2py(key, self.numeric_type) for key in unprocessed["Keys"]]
-                for table, unprocessed in response["UnprocessedKeys"].items()
-            },
-        )
+            response = await self.send_request(action="BatchGetItem", payload=payload)
+
+            self._metrics.record_batch_duration(
+                duration=time.perf_counter() - start,
+                operation="BatchGet",
+                region=self.region,
+            )
+            return BatchGetResponse(
+                items={
+                    table: [dy2py(item, self.numeric_type) for item in items]
+                    for table, items in response["Responses"].items()
+                },
+                unprocessed_keys={
+                    table: [
+                        dy2py(key, self.numeric_type) for key in unprocessed["Keys"]
+                    ]
+                    for table, unprocessed in response["UnprocessedKeys"].items()
+                },
+            )
 
     async def batch_write(
         self, request: Dict[TableName, BatchWriteRequest]
     ) -> Dict[TableName, BatchWriteResult]:
-        payload = {
-            "RequestItems": {
-                table_name: write_request.to_request_payload()
-                for table_name, write_request in request.items()
+        start = time.perf_counter()
+        items = request.items()
+        items_count = sum(len(item.to_request_payload()) for _, item in list(items))
+
+        with self.telemetry.tracer.start_as_current_span(
+            "dynamodb.batch_write"
+        ) as span:
+            span.set_attribute("db.system", "dynamodb")
+            span.set_attribute("db.operation", "BatchWriteItem")
+            span.set_attribute("db.batch.item_count", items_count)
+            self._metrics.record_batch_items(
+                count=items_count,
+                operation="BatchWriteItem",
+                region=self.region,
+            )
+
+            payload = {
+                "RequestItems": {
+                    table_name: write_request.to_request_payload()
+                    for table_name, write_request in items
+                }
             }
-        }
-        response = await self.send_request(action="BatchWriteItem", payload=payload)
-        result = {}
-        for table, items in response["UnprocessedItems"].items():
-            undeleted_keys = []
-            unput_items = []
-            for item in items:
-                try:
-                    undeleted_keys.append(
-                        dy2py(item["DeleteRequest"]["Key"], self.numeric_type)
-                    )
-                except KeyError:
-                    unput_items.append(
-                        dy2py(item["PutRequest"]["Item"], self.numeric_type)
-                    )
-            result[table] = BatchWriteResult(undeleted_keys, unput_items)
-        return result
+
+            response = await self.send_request(action="BatchWriteItem", payload=payload)
+            result = {}
+
+            unprocessed_items = response["UnprocessedItems"].items()
+            unprocessed_items_count = sum(len(v) for v in unprocessed_items)
+            span.set_attribute(
+                "db.batch.unprocessed_item_count",
+                unprocessed_items_count,
+            )
+            self._metrics.record_batch_unprocessed_items(
+                count=unprocessed_items_count,
+                operation="BatchWriteItem",
+                region=self.region,
+            )
+
+            for table, items in unprocessed_items:
+                undeleted_keys = []
+                unput_items = []
+                for item in items:
+                    try:
+                        undeleted_keys.append(
+                            dy2py(item["DeleteRequest"]["Key"], self.numeric_type)
+                        )
+                    except KeyError:
+                        unput_items.append(
+                            dy2py(item["PutRequest"]["Item"], self.numeric_type)
+                        )
+                result[table] = BatchWriteResult(undeleted_keys, unput_items)
+
+            self._metrics.record_batch_duration(
+                duration=time.perf_counter() - start,
+                operation="BatchWriteItem",
+                region=self.region,
+            )
+            return result
 
     async def transact_write_items(
         self,
@@ -969,62 +1041,149 @@ class Client:
         If the loop never executed, we raise a BrokenThrottleConfig because
         RetryConfig.attempts() should always yield at least once.
         """
-        exception: Optional[Exception] = None
-        try:
-            async for _ in self.throttle_config.attempts():
-                key = await self.credentials.get_key(self.http)
-                if key is None:
-                    logger.debug("no credentials found")
-                    exception = NoCredentialsFound()
-                    continue
-                request = signed_dynamo_request(
-                    key=key,
-                    payload=payload,
-                    action=action,
-                    region=self.region,
-                    endpoint=self.endpoint,
-                )
-                request_logger.debug("sending request %r", request)
-                try:
-                    response = await self.http(
-                        Request(
-                            method="POST",
-                            url=str(request.url),
-                            headers=request.headers,
-                            body=request.body,
+        start = time.perf_counter()
+        self._metrics.record_request(operation=action, region=self.region)
+
+        with self.telemetry.tracer.start_as_current_span(
+            f"dynamodb.{action.lower()}"
+        ) as span:
+            span.set_attribute("db.system", "dynamodb")
+            span.set_attribute("db.operation", action)
+
+            if table_name := payload.get("TableName", ""):
+                span.set_attribute("db.table_name", table_name)
+
+            span.set_attribute("aws.region", self.region)
+
+            exception: Optional[Exception] = None
+
+            try:
+                async for _ in self.throttle_config.attempts():
+                    self._metrics.record_attempt(operation=action, region=self.region)
+                    key = await self.credentials.get_key(self.http)
+                    if key is None:
+                        logger.debug("no credentials found")
+                        exception = NoCredentialsFound()
+                        self._metrics.record_retry(
+                            operation=action,
+                            region=self.region,
+                            reason="No credentials found",
                         )
+                        span.add_event("retry.no_credentials")
+                        continue
+                    request = signed_dynamo_request(
+                        key=key,
+                        payload=payload,
+                        action=action,
+                        region=self.region,
+                        endpoint=self.endpoint,
                     )
-                except asyncio.TimeoutError as exc:
-                    logger.debug("http timeout")
-                    exception = exc
-                    continue
-                except RequestFailed as exc:
-                    logger.debug("request failed")
-                    exception = exc.inner
-                    continue
-                response_logger.debug("got response %r", response)
-                if response.status == 200:
-                    return cast(Dict[str, Any], json.loads(response.body))
-                exception = exception_from_response(response.status, response.body)
-                if isinstance(exception, Throttled):
-                    logger.debug("request throttled")
-                elif isinstance(exception, ProvisionedThroughputExceeded):
-                    logger.debug("provisioned throughput exceeded")
-                elif isinstance(exception, ExpiredToken):
-                    logger.debug("token expired")
-                    if not self.credentials.invalidate():
+                    request_logger.debug("sending request %r", request)
+                    try:
+                        response = await self.http(
+                            Request(
+                                method="POST",
+                                url=str(request.url),
+                                headers=request.headers,
+                                body=request.body,
+                            )
+                        )
+                    except asyncio.TimeoutError as exc:
+                        logger.debug("http timeout")
+                        exception = exc
+                        self._metrics.record_retry(
+                            operation=action,
+                            region=self.region,
+                            reason="TimeoutError",
+                        )
+                        span.add_event("retry.timeout")
+                        continue
+                    except RequestFailed as exc:
+                        logger.debug("request failed")
+                        exception = exc.inner
+                        self._metrics.record_retry(
+                            operation=action,
+                            region=self.region,
+                            reason="RequestFailed",
+                        )
+                        span.add_event("retry.request_failed")
+                        continue
+                    response_logger.debug("got response %r", response)
+                    if response.status == 200:
+                        return cast(Dict[str, Any], json.loads(response.body))
+                    exception = exception_from_response(response.status, response.body)
+                    if isinstance(exception, Throttled):
+                        logger.debug("request throttled")
+                        self._metrics.record_retry(
+                            operation=action,
+                            region=self.region,
+                            reason="Throttled",
+                        )
+                        span.add_event("retry.throttled")
+                        continue
+                    elif isinstance(exception, ProvisionedThroughputExceeded):
+                        logger.debug("provisioned throughput exceeded")
+                        self._metrics.record_retry(
+                            operation=action,
+                            region=self.region,
+                            reason="ProvisionedThroughputExceeded",
+                        )
+                        span.add_event("retry.provisioned_throughput_exceeded")
+                        continue
+                    elif isinstance(exception, ExpiredToken):
+                        logger.debug("token expired")
+                        if self.credentials.invalidate():
+                            self._metrics.record_retry(
+                                operation=action,
+                                region=self.region,
+                                reason="ExpiredToken",
+                            )
+                            span.add_event("retry.expired_token")
+                            continue
                         raise exception
-                elif isinstance(exception, ServiceUnavailable):
-                    logger.debug("service unavailable")
-                elif isinstance(exception, InternalDynamoError):
-                    logger.debug("internal dynamo error")
-                else:
+                    elif isinstance(exception, ServiceUnavailable):
+                        logger.debug("service unavailable")
+                        self._metrics.record_retry(
+                            operation=action,
+                            region=self.region,
+                            reason="ServiceUnavailable",
+                        )
+                        span.add_event("retry.service_unavailable")
+                        continue
+                    elif isinstance(exception, InternalDynamoError):
+                        logger.debug("internal dynamo error")
+                        self._metrics.record_retry(
+                            operation=action,
+                            region=self.region,
+                            reason="InternalDynamoError",
+                        )
+                        span.add_event("retry.internal_dynamo_error")
+                        continue
+                    else:
+                        self._metrics.record_error(
+                            operation=action,
+                            region=self.region,
+                            error_type=type(exception).__name__,
+                        )
+                        span.record_exception(exception)
+                        raise exception
+            except RetryTimeout:
+                if exception is not None:
+                    span.record_exception(exception)
+                    self._metrics.record_error(
+                        operation=action,
+                        region=self.region,
+                        error_type=type(exception).__name__,
+                    )
                     raise exception
-        except RetryTimeout:
-            if exception is not None:
-                raise exception
-            raise
-        raise BrokenThrottleConfig()
+                raise
+            finally:
+                self._metrics.record_request_duration(
+                    operation=action,
+                    region=self.region,
+                    duration=time.perf_counter() - start,
+                )
+            raise BrokenThrottleConfig()
 
     async def _depaginate(
         self, action: str, payload: Dict[str, Any], limit: Optional[int] = None

@@ -15,6 +15,10 @@ httpx = [
 aiohttp = [
     "aiohttp>=3.6.2",
 ]
+opentelemetry = [
+    "opentelemetry-api>=1.40.0",
+    "opentelemetry-sdk>=1.40.0",
+]
 
 [dependency-groups]
 dev = [

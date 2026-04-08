@@ -14,6 +14,7 @@ from typing import (
     Union,
     cast,
 )
+from unittest.mock import Mock
 
 import pytest
 from _pytest.fixtures import SubRequest
@@ -36,7 +37,10 @@ from aiodynamo.models import (
     Throughput,
 )
 from aiodynamo.operations import ConditionCheck
+from aiodynamo.otel.metrics import ClientMetrics
+from aiodynamo.otel.types import Telemetry
 from aiodynamo.types import TableName
+from tests.fakes import FakeMeter, FakeTracer
 
 TableFactory = Callable[[Union[Throughput, PayPerRequest]], Awaitable[str]]
 
@@ -144,6 +148,23 @@ def client(
         region,
         endpoint,
     )
+
+
+@pytest.fixture
+def instrumented_client(
+    http: HttpImplementation,
+    endpoint: URL,
+    region: str,
+) -> Generator[Client, None, None]:
+    client = Client(
+        http,
+        Credentials.auto(),
+        region,
+        endpoint,
+        telemetry=Telemetry(tracer=FakeTracer(), meter=FakeMeter()),
+    )
+    object.__setattr__(client, "_metrics", Mock(spec=ClientMetrics))
+    yield client
 
 
 @pytest.fixture(scope="session")
