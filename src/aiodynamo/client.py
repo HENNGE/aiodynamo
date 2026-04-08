@@ -19,6 +19,7 @@ from typing import (
 from yarl import URL
 
 from aiodynamo.operations import ConditionCheck, Delete, Get, Put, Update
+
 from .credentials import Credentials
 from .errors import (
     BrokenThrottleConfig,
@@ -371,12 +372,15 @@ class Client:
     numeric_type: NumericTypeConverter = float
     throttle_config: RetryConfig = RetryConfig.default()
     telemetry: Telemetry = field(default_factory=Telemetry)
+    _metrics: ClientMetrics = field(init=False, repr=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """
+        Created once because it binds to the client's telemetry provider,
+        and the same instruments should be reused for all requests made by this client.
+        """
         object.__setattr__(
-            self,
-            "_metrics",
-            ClientMetrics.from_telemetry(self.telemetry)
+            self, "_metrics", ClientMetrics.from_telemetry(self.telemetry)
         )
 
     def table(self, name: str) -> Table:
@@ -905,7 +909,9 @@ class Client:
                     for table, items in response["Responses"].items()
                 },
                 unprocessed_keys={
-                    table: [dy2py(key, self.numeric_type) for key in unprocessed["Keys"]]
+                    table: [
+                        dy2py(key, self.numeric_type) for key in unprocessed["Keys"]
+                    ]
                     for table, unprocessed in response["UnprocessedKeys"].items()
                 },
             )
@@ -917,7 +923,9 @@ class Client:
         items = request.items()
         items_count = sum(len(item.to_request_payload()) for _, item in list(items))
 
-        with self.telemetry.tracer.start_as_current_span("dynamodb.batch_write") as span:
+        with self.telemetry.tracer.start_as_current_span(
+            "dynamodb.batch_write"
+        ) as span:
             span.set_attribute("db.system", "dynamodb")
             span.set_attribute("db.operation", "BatchWriteItem")
             span.set_attribute("db.batch.item_count", items_count)
@@ -1036,7 +1044,9 @@ class Client:
         start = time.perf_counter()
         self._metrics.record_request(operation=action, region=self.region)
 
-        with self.telemetry.tracer.start_as_current_span(f"dynamodb.{action.lower()}") as span:
+        with self.telemetry.tracer.start_as_current_span(
+            f"dynamodb.{action.lower()}"
+        ) as span:
             span.set_attribute("db.system", "dynamodb")
             span.set_attribute("db.operation", action)
 

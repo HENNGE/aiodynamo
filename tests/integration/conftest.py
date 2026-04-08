@@ -149,9 +149,12 @@ def client(
         endpoint,
     )
 
+
 @pytest.fixture()
 def instrumented_client(
-    http: HttpImplementation, endpoint: URL, region: str,
+    http: HttpImplementation,
+    endpoint: URL,
+    region: str,
 ) -> Generator[Client, None, None]:
     client = Client(
         http,

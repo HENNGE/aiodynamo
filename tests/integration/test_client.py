@@ -896,7 +896,9 @@ async def test_attribute_type_filter(client: Client, table: TableName) -> None:
 
 
 @pytest.mark.asyncio
-async def test_batch_write_records_trace_and_metrics(instrumented_client: Client, table: str) -> None:
+async def test_batch_write_records_trace_and_metrics(
+    instrumented_client: Client, table: str
+) -> None:
     await instrumented_client.batch_write(
         {
             table: BatchWriteRequest(
@@ -905,16 +907,16 @@ async def test_batch_write_records_trace_and_metrics(instrumented_client: Client
         }
     )
 
-    assert instrumented_client.telemetry.tracer.spans
-    span = instrumented_client.telemetry.tracer.spans[0]
+    assert instrumented_client.telemetry.tracer.spans  # type: ignore[attr-defined]
+    span = instrumented_client.telemetry.tracer.spans[0]  # type: ignore[attr-defined]
     assert span.name == "dynamodb.batch_write"
     assert span.attributes["db.system"] == "dynamodb"
     assert span.attributes["db.operation"] == "BatchWriteItem"
     assert span.attributes["db.batch.item_count"] == 2
 
-    instrumented_client._metrics.record_batch_items.assert_called_once_with(
+    instrumented_client._metrics.record_batch_items.assert_called_once_with(  # type: ignore[attr-defined]
         operation="BatchWriteItem",
         region=instrumented_client.region,
         count=2,
     )
-    instrumented_client._metrics.record_batch_duration.assert_called_once()
+    instrumented_client._metrics.record_batch_duration.assert_called_once()  # type: ignore[attr-defined]
