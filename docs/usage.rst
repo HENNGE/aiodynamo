@@ -7,7 +7,7 @@ Client instantiation
 You should try to re-use clients, and especially HTTP clients, as much as possible. Don't create a new one for each
 action.
 
-The :py:class:`aiodynamo.client.Client` class takes three required and three optional arguments:
+The :py:class:`aiodynamo.client.Client` class takes three required and four optional arguments:
 
 1. An HTTP client adaptor, conforming to the :py:class:`aiodynamo.http.base.HTTP` interface.
 2. An instance of :py:class:`aiodynamo.credentials.Credentials` to authenticate with DynamoDB. You may use
@@ -16,6 +16,10 @@ The :py:class:`aiodynamo.client.Client` class takes three required and three opt
 4. An optional endpoint URL of your DynamoDB, as a :py:class:`yarl.URL` instance. Useful when using a local DynamoDB implementation such as dynalite or dynamodb-local.
 5. Which numeric type to use. This should be a callable which accepts a string as input and returns your numeric type as output. Defaults to ``float``.
 6. The throttling configuration to use. An instance of :py:class:`aiodynamo.models.RetryConfig`. By default, if the DynamoDB rate limit is exceeded, aiodynamo will retry up for up to one minute with increasing delays.
+7. Optional telemetry provider, used to emit traces and metrics. An instance of :py:class:`aiodynamo.otel.types.Telemetry`. Supply an OpenTelemetry-backed implementation or it defaults to no-op telemetry.
+
+.. seealso::
+    :ref:`telemetry` for more details.
 
 Credentials
 -----------
@@ -448,3 +452,39 @@ Operations
 .. |br| raw:: html
 
       <br>
+
+
+.. _telemetry:
+
+Telemetry
+---------
+
+The :py:class:`aiodynamo.otel.types.Telemetry` class is a thin abstraction over tracing and metrics.
+
+It accepts optional :py:class:`aiodynamo.otel.types.TracerLike` and :py:class:`aiodynamo.otel.types.MeterLike` instances,
+making it easy to integrate with `OpenTelemetry <https://opentelemetry.io/docs/>`_ or other OpenTelemetry-compatible
+backends without requiring a hard dependency.
+
+If you want to use OpenTelemetry, install the optional extra: ``aiodynamo[opentelemetry]``.
+If no telemetry object is provided, a default no-op telemetry implementation is used.
+
+The simplest way to use telemetry is to pass ``trace.get_tracer(__name__)`` and,
+if needed, ``metrics.get_meter(__name__)``. Exporters and providers are only required
+if you want to send telemetry data to an OpenTelemetry backend.
+
+.. code-block:: python
+
+    from opentelemetry import trace, metrics
+
+    telemetry = Telemetry(
+        tracer=trace.get_tracer(__name__),
+        meter=metrics.get_meter(__name__),
+    )
+
+    client = Client(
+        http=http,
+        credentials=credentials,
+        region="us-east-1",
+        endpoint=URL("http://localhost:8000"),
+        telemetry=telemetry,
+    )
