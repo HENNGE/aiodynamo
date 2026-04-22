@@ -1,6 +1,6 @@
 [project]
 name = "aiodynamo"
-version = "24.7"
+version = "26.4"
 description = "Asyncio DynamoDB client"
 authors = [{ name = "Jonas Obrist", email = "jonas.obrist@hennge.com" }]
 requires-python = ">=3.10"
