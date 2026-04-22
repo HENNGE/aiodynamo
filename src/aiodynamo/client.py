@@ -45,6 +45,7 @@ from .expressions import (
     ProjectionExpression,
     UpdateExpression,
 )
+from .health import HealthMonitor, NoOpHealthMonitor
 from .http.types import HttpImplementation, Request, RequestFailed
 from .models import (
     BatchGetRequest,
@@ -368,6 +369,7 @@ class Client:
     endpoint: Optional[URL] = None
     numeric_type: NumericTypeConverter = float
     throttle_config: RetryConfig = RetryConfig.default()
+    health_monitor: HealthMonitor = NoOpHealthMonitor()
 
     def table(self, name: str) -> Table:
         return Table(self, name)
@@ -997,34 +999,44 @@ class Client:
                 except asyncio.TimeoutError as exc:
                     logger.debug("http timeout")
                     exception = exc
+                    self.health_monitor.on_exception(exception)
                     continue
                 except RequestFailed as exc:
                     logger.debug("request failed")
                     exception = exc.inner
+                    self.health_monitor.on_exception(exception)
                     continue
+                except Exception as exc:
+                    self.health_monitor.on_exception(exc)
+                    raise
                 response_logger.debug("got response %r", response)
                 if response.status == 200:
+                    self.health_monitor.on_success()
                     return cast(Dict[str, Any], json.loads(response.body))
                 exception = exception_from_response(response.status, response.body)
-                if isinstance(exception, Throttled):
-                    logger.debug("request throttled")
-                elif isinstance(exception, ProvisionedThroughputExceeded):
-                    logger.debug("provisioned throughput exceeded")
-                elif isinstance(exception, ExpiredToken):
-                    logger.debug("token expired")
-                    if not self.credentials.invalidate():
-                        raise exception
-                elif isinstance(exception, ServiceUnavailable):
-                    logger.debug("service unavailable")
-                elif isinstance(exception, InternalDynamoError):
-                    logger.debug("internal dynamo error")
-                else:
-                    raise exception
+                self.handle_exception(exception)
         except RetryTimeout:
             if exception is not None:
                 raise exception
             raise
         raise BrokenThrottleConfig()
+
+    def handle_exception(self, exception: Exception) -> None:
+        self.health_monitor.on_exception(exception)
+        if isinstance(exception, Throttled):
+            logger.debug("request throttled")
+        elif isinstance(exception, ProvisionedThroughputExceeded):
+            logger.debug("provisioned throughput exceeded")
+        elif isinstance(exception, ExpiredToken):
+            logger.debug("token expired")
+            if not self.credentials.invalidate():
+                raise exception
+        elif isinstance(exception, ServiceUnavailable):
+            logger.debug("service unavailable")
+        elif isinstance(exception, InternalDynamoError):
+            logger.debug("internal dynamo error")
+        else:
+            raise exception
 
     async def _depaginate(
         self, action: str, payload: Dict[str, Any], limit: Optional[int] = None

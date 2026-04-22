@@ -1,6 +1,11 @@
 Changelog
 =========
 
+25.2
+----
+
+* Add health monitoring support.
+
 24.7
 ----
 
