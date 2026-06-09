@@ -343,11 +343,11 @@ def and_then(thing: Optional[T], mapper: Callable[[T], U]) -> Optional[U]:
     return thing
 
 
-# https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint.html
+# https://docs.aws.amazon.com/sdkref/latest/guide/feature-container-credentials.html
 @dataclass
 class ContainerMetadataCredentials(MetadataCredentials):
     """
-    Loads credentials from the ECS container metadata endpoint.
+    Loads credentials from ECS and EKS container metadata endpoint.
     """
 
     timeout: Timeout = 2
@@ -368,6 +368,11 @@ class ContainerMetadataCredentials(MetadataCredentials):
             "AWS_CONTAINER_AUTHORIZATION_TOKEN", None
         )
     )
+    auth_token_file: Optional[str] = field(
+        default_factory=lambda: os.environ.get(
+            "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE", None
+        )
+    )
 
     @property
     def url(self) -> Optional[URL]:
@@ -381,8 +386,18 @@ class ContainerMetadataCredentials(MetadataCredentials):
     def is_disabled(self) -> bool:
         return self.url is None
 
+    @property
+    def token(self) -> Optional[str]:
+        if self.auth_token_file is not None:
+            with open(self.auth_token_file, "r") as f:
+                return f.read().strip()
+        elif self.auth_token is not None:
+            return self.auth_token
+        else:
+            return None
+
     async def fetch_metadata(self, http: HttpImplementation) -> Metadata:
-        headers = and_then(self.auth_token, lambda token: {"Authorization": token})
+        headers = and_then(self.token, lambda token: {"Authorization": token})
         if self.url is None:
             raise Disabled()
         response = await fetch_with_retry_and_timeout(
