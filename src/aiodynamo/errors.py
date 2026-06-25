@@ -2,6 +2,9 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from .types import NumericTypeConverter
+from .utils import dy2py
+
 
 @dataclass(frozen=True)
 class CancellationReason:
@@ -93,7 +96,10 @@ class BackupNotFound(AIODynamoError):
 
 
 class ConditionalCheckFailed(AIODynamoError):
-    pass
+    def __init__(self, body: Dict[str, Any], numeric_type: NumericTypeConverter):
+        item = body.get("Item")
+        self.item = dy2py(item, numeric_type) if item is not None else None
+        super().__init__(body)
 
 
 class TransactionConflict(AIODynamoError):
@@ -119,7 +125,7 @@ class PointInTimeRecoveryUnavailable(AIODynamoError):
 class TransactionCanceled(AIODynamoError):
     cancellation_reasons: List[Optional[CancellationReason]]
 
-    def __init__(self, body: Dict[str, Any]):
+    def __init__(self, body: Dict[str, Any], _numeric_type: NumericTypeConverter):
         self.body = body
         self.cancellation_reasons: List[Optional[CancellationReason]] = [
             CancellationReason(reason["Code"], reason["Message"])
@@ -242,14 +248,18 @@ ERRORS = {
 }
 
 
-def exception_from_response(status: int, body: bytes) -> Exception:
+def exception_from_response(
+    status: int,
+    body: bytes,
+    numeric_type: NumericTypeConverter,
+) -> Exception:
     if status == 500:
         return InternalDynamoError()
     elif status == 503:
         return ServiceUnavailable()
     try:
         data = json.loads(body)
-        error: Exception = ERRORS[data["__type"].split("#", 1)[-1]](data)
+        error: Exception = ERRORS[data["__type"].split("#", 1)[-1]](data, numeric_type)
         return error
     except Exception:
         return UnknownError(status, body)

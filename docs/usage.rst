@@ -399,6 +399,10 @@ Models
     :members: none, all_old, updated_old, all_new, updated_new
     :undoc-members:
 
+.. autoclass:: aiodynamo.models.ReturnValuesOnConditionCheckFailure
+    :members: none, all_old
+    :undoc-members:
+
 .. autoclass:: aiodynamo.models.Projection
     :members: type, attrs
     :undoc-members:

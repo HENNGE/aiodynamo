@@ -36,6 +36,7 @@ from aiodynamo.models import (
     ProjectionType,
     RetryConfig,
     ReturnValues,
+    ReturnValuesOnConditionCheckFailure,
     TableStatus,
     Throughput,
     TimeToLiveStatus,
@@ -893,3 +894,97 @@ async def test_attribute_type_filter(client: Client, table: TableName) -> None:
         )
     }
     assert items == {"2"}
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        ReturnValuesOnConditionCheckFailure.all_old,
+        ReturnValuesOnConditionCheckFailure.none,
+    ],
+)
+async def test_delete_item_with_return_value_on_condition_check_failure(
+    client: Client,
+    table: TableName,
+    value: ReturnValuesOnConditionCheckFailure,
+    dynalite: bool,
+) -> None:
+    if dynalite:
+        pytest.skip("feature not supported by dynalite")
+
+    item = {"h": "h", "r": "1", "d": "x"}
+    await client.put_item(table, item)
+    with pytest.raises(errors.ConditionalCheckFailed) as exc_info:
+        await client.delete_item(
+            table,
+            {"h": "h", "r": "1"},
+            return_values_on_condition_check_failure=value,
+            condition=F("d").does_not_exist(),
+        )
+    if value == ReturnValuesOnConditionCheckFailure.all_old:
+        assert exc_info.value.item == item
+    else:
+        assert exc_info.value.item is None
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        ReturnValuesOnConditionCheckFailure.all_old,
+        ReturnValuesOnConditionCheckFailure.none,
+    ],
+)
+async def test_put_item_with_return_value_on_condition_check_failure(
+    client: Client,
+    table: TableName,
+    value: ReturnValuesOnConditionCheckFailure,
+    dynalite: bool,
+) -> None:
+    if dynalite:
+        pytest.skip("feature not supported by dynalite")
+
+    item = {"h": "h", "r": "1", "d": "x"}
+    await client.put_item(table, item)
+    with pytest.raises(errors.ConditionalCheckFailed) as exc_info:
+        await client.put_item(
+            table,
+            item,
+            return_values_on_condition_check_failure=value,
+            condition=F("d").does_not_exist(),
+        )
+    if value == ReturnValuesOnConditionCheckFailure.all_old:
+        assert exc_info.value.item == item
+    else:
+        assert exc_info.value.item is None
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        ReturnValuesOnConditionCheckFailure.all_old,
+        ReturnValuesOnConditionCheckFailure.none,
+    ],
+)
+async def test_update_item_with_return_value_on_condition_check_failure(
+    client: Client,
+    table: TableName,
+    value: ReturnValuesOnConditionCheckFailure,
+    dynalite: bool,
+) -> None:
+    if dynalite:
+        pytest.skip("feature not supported by dynalite")
+
+    item = {"h": "h", "r": "1", "d": "x"}
+    await client.put_item(table, item)
+    with pytest.raises(errors.ConditionalCheckFailed) as exc_info:
+        await client.update_item(
+            table,
+            {"h": "h", "r": "1"},
+            update_expression=F("d").set("y"),
+            return_values_on_condition_check_failure=value,
+            condition=F("d").does_not_exist(),
+        )
+    if value == ReturnValuesOnConditionCheckFailure.all_old:
+        assert exc_info.value.item == item
+    else:
+        assert exc_info.value.item is None
