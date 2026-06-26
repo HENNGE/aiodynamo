@@ -1,7 +1,6 @@
 # AsyncIO DynamoDB
 
 [![CircleCI](https://circleci.com/gh/HENNGE/aiodynamo.svg?style=svg)](https://circleci.com/gh/HENNGE/aiodynamo)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Documentation Status](https://readthedocs.org/projects/aiodynamo/badge/?version=latest)](https://aiodynamo.readthedocs.io/en/latest/?badge=latest)
 
 Asynchronous pythonic DynamoDB client; **2x** faster than `aiobotocore/boto3/botocore`.
