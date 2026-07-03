@@ -1,21 +1,21 @@
 Development
 ===========
 
-aiodynamo uses `poetry`_ to manage dependencies, make sure you have it installed.
+aiodynamo uses `uv`_ to manage dependencies, make sure you have it installed.
 
-After a git clone, run ``poetry install --extras aiohttp --extras httpx`` to install the dependencies, including the development dependencies.
+After a git clone, run ``uv sync`` to install the dependencies, including the development dependencies.
 
 Please ensure you have `pre-commit`_ set up so that code formatting is applied automatically.
 
 Tests
 -----
 
-To run the tests run ``poetry run pytest``. On most systems ``poetry run pytest --numprocesses auto`` will lead to a much faster execution of the test suite.
+To run the tests run ``uv run pytest``. On most systems ``uv run pytest --numprocesses auto`` will lead to a much faster execution of the test suite.
 
 Integration Tests
 -----------------
 
-Integration tests against DynamoDB implementations are automatically ran as part of ``poetry run pytest`` if certain environment variables are set.
+Integration tests against DynamoDB implementations are automatically ran as part of ``uv run pytest`` if certain environment variables are set.
 
 Alternative DynamoDB Implementations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -43,7 +43,7 @@ To run on AWS with a real DynamoDB instance, follow these steps:
 Docs
 ----
 
-To build the documentation, enter the ``docs/`` directory and run ``poetry run make html``.
+To build the documentation, enter the ``docs/`` directory and run ``uv run make html``.
 
 Benchmarks
 ----------
@@ -59,9 +59,7 @@ Releasing
 3. Make a commit and push to Github
 4. `Create a release on Github`_
 
-.. _poetry: https://poetry.eustace.io/
-.. _repository: https://github.com/mhart/dynalite
-.. _container: https://hub.docker.com/r/dimaqq/dynalite/
+.. _uv: https://docs.astral.sh/uv/
 .. _pre-commit: https://pre-commit.com/
 .. _Create a release on Github: https://github.com/HENNGE/aiodynamo/releases
 .. _dynamodb-local: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html
