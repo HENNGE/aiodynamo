@@ -60,6 +60,7 @@ from .models import (
     RetryConfig,
     RetryTimeout,
     ReturnValues,
+    ReturnValuesOnConditionCheckFailure,
     Select,
     StreamSpecification,
     TableDescription,
@@ -143,10 +144,15 @@ class Table:
         key: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
         return await self.client.delete_item(
-            self.name, key, return_values=return_values, condition=condition
+            self.name,
+            key,
+            return_values=return_values,
+            condition=condition,
+            return_values_on_condition_check_failure=return_values_on_condition_check_failure,
         )
 
     async def get_item(
@@ -170,6 +176,7 @@ class Table:
         item: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
         """
@@ -177,7 +184,11 @@ class Table:
         This will overwrite all attributes in an item.
         """
         return await self.client.put_item(
-            self.name, item, return_values=return_values, condition=condition
+            self.name,
+            item,
+            return_values=return_values,
+            return_values_on_condition_check_failure=return_values_on_condition_check_failure,
+            condition=condition,
         )
 
     def query(
@@ -346,6 +357,7 @@ class Table:
         update_expression: UpdateExpression,
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[Item, None]:
         """
@@ -357,6 +369,7 @@ class Table:
             key,
             update_expression,
             return_values=return_values,
+            return_values_on_condition_check_failure=return_values_on_condition_check_failure,
             condition=condition,
         )
 
@@ -513,6 +526,7 @@ class Client:
         key: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
         dynamo_key = py2dy(key)
@@ -523,6 +537,7 @@ class Client:
             "TableName": table,
             "Key": dynamo_key,
             "ReturnValues": return_values.value,
+            "ReturnValuesOnConditionCheckFailure": return_values_on_condition_check_failure.value,
         }
 
         if condition:
@@ -590,6 +605,7 @@ class Client:
         item: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
         dynamo_item = py2dy(item)
@@ -599,6 +615,7 @@ class Client:
             "TableName": table,
             "Item": dynamo_item,
             "ReturnValues": return_values.value,
+            "ReturnValuesOnConditionCheckFailure": return_values_on_condition_check_failure.value,
         }
         if condition:
             params = Parameters()
@@ -835,6 +852,7 @@ class Client:
         update_expression: UpdateExpression,
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[Item, None]:
         params = Parameters()
@@ -848,6 +866,7 @@ class Client:
             "Key": py2dy(key),
             "UpdateExpression": expression,
             "ReturnValues": return_values.value,
+            "ReturnValuesOnConditionCheckFailure": return_values_on_condition_check_failure.value,
         }
         if condition:
             payload["ConditionExpression"] = condition.encode(params)
@@ -1013,7 +1032,11 @@ class Client:
                 if response.status == 200:
                     self.health_monitor.on_success()
                     return cast(Dict[str, Any], json.loads(response.body))
-                exception = exception_from_response(response.status, response.body)
+                exception = exception_from_response(
+                    response.status,
+                    response.body,
+                    self.numeric_type,
+                )
                 self.handle_exception(exception)
         except RetryTimeout:
             if exception is not None:

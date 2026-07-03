@@ -190,6 +190,11 @@ class ReturnValues(Enum):
     updated_new = "UPDATED_NEW"
 
 
+class ReturnValuesOnConditionCheckFailure(Enum):
+    none = "NONE"
+    all_old = "ALL_OLD"
+
+
 class TableStatus(Enum):
     creating = "CREATING"
     updating = "UPDATING"
