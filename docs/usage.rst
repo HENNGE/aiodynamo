@@ -388,16 +388,39 @@ Models
     :members: enabled, view_type
     :undoc-members:
 
-.. autoclass:: aiodynamo.models..StreamViewType
-    :members: keys_only, new_image, old_image, new_and_old_images
-    :undoc-members:
+.. py:class:: aiodynamo.models.StreamViewType
+
+    .. py:attribute:: keys_only
+    .. py:attribute:: new_image
+    .. py:attribute:: old_image
+    .. py:attribute:: new_and_old_images
 
 .. autoclass:: aiodynamo.models.RetryConfig
     :members: time_limit_secs, default, default_wait_config, delays
 
-.. autoclass:: aiodynamo.models.ReturnValues
-    :members: none, all_old, updated_old, all_new, updated_new
-    :undoc-members:
+.. py:class:: aiodynamo.models.ReturnValues
+
+    Not all of these options are valid for all APIs that expect a :py:class:`ReturnValues`, please refer to the DynamoDB documentation for acceptable values.
+
+    .. py:attribute:: none
+
+            Return nothing
+
+    .. py:attribute:: all_old
+
+            Return the item as it was before the request
+
+    .. py:attribute:: updated_old
+
+            Return the part of the item before the request that was updated.
+
+    .. py:attribute:: all_new
+
+            Return the item as it was after the request.
+
+    .. py:attribute:: updated_new
+
+            Return the part of the item that was updated.
 
 .. autoclass:: aiodynamo.models.ReturnValuesOnConditionCheckFailure
     :members: none, all_old
@@ -407,9 +430,11 @@ Models
     :members: type, attrs
     :undoc-members:
 
-.. autoclass:: aiodynamo.models.ProjectionType
-    :members: all, keys_only, include
-    :undoc-members:
+.. py:class::  aiodynamo.models.ProjectionType
+
+    .. py:attribute:: all
+    .. py:attribute:: keys_only
+    .. py:attribute:: include
 
 .. autoclass:: aiodynamo.models.BatchGetRequest
     :members: keys, projection
