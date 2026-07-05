@@ -168,9 +168,12 @@ def serialize_dict(value: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 
 def parse_amazon_timestamp(timestamp: str) -> datetime.datetime:
-    return datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ").replace(
-        tzinfo=datetime.timezone.utc
-    )
+    if "." in timestamp:
+        value = datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+    else:
+        value = datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+
+    return value.replace(tzinfo=datetime.timezone.utc)
 
 
 async def wait(
