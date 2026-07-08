@@ -1,8 +1,12 @@
 import asyncio
+import contextlib
 import datetime
+import inspect
+import json
+import sys
 from pathlib import Path
 from textwrap import dedent
-from typing import AsyncGenerator, Optional, Type, Union
+from typing import Any, AsyncGenerator, ContextManager, Optional, Type, Union
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -23,12 +27,12 @@ from aiodynamo.credentials import (
     InstanceMetadataCredentialsV2,
     Key,
     Metadata,
+    ProcessCredentials,
+    ProcessCredentialsError,
     Refresh,
     Refreshable,
 )
 from aiodynamo.http.types import HttpImplementation, Request, RequestFailed, Response
-
-pytestmark = [pytest.mark.usefixtures("fs")]
 
 
 class InstanceMetadataServer:
@@ -328,3 +332,60 @@ async def test_refreshable_background() -> None:
     await refreshable._active_refresh_task
     assert refreshable._active_refresh_task is None
     assert refreshable._current == 1
+
+
+@pytest.mark.parametrize(
+    "data,result",
+    [
+        pytest.param(
+            json.dumps(
+                {
+                    "version": 1,
+                    "access_key_id": "foo",
+                    "secret_access_key": "bar",
+                    "session_token": "baz",
+                    "expiration": (
+                        datetime.datetime.now() + datetime.timedelta(days=2)
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                }
+            ),
+            Key("foo", "bar", "baz"),
+            id="good",
+        ),
+        pytest.param(
+            json.dumps(
+                {
+                    "version": 2,
+                    "access_key_id": "foo",
+                    "secret_access_key": "bar",
+                    "session_token": "baz",
+                    "expiration": (
+                        datetime.datetime.now() + datetime.timedelta(days=2)
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                }
+            ),
+            ProcessCredentialsError,
+            id="bad-version",
+        ),
+        pytest.param(json.dumps({}), KeyError, id="bad-json"),
+        pytest.param("this is not json", ProcessCredentialsError, id="not-json"),
+        pytest.param("-x", ProcessCredentialsError, id="bad-return-code"),
+    ],
+)
+async def test_process_credentials(data: str, result: Any) -> None:
+    creds = ProcessCredentials(
+        [
+            sys.executable,
+            str(Path(__file__).parent.joinpath("process_credentials.py")),
+            data,
+        ]
+    )
+    with magic(result):
+        assert await creds.get_key(null_http) == result
+
+
+def magic(result: Any) -> ContextManager[Any]:
+    if inspect.isclass(result) and issubclass(result, Exception):
+        return pytest.raises(result)
+    else:
+        return contextlib.nullcontext()
