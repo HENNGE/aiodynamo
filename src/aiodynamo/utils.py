@@ -69,7 +69,7 @@ def deserialize_number(val: str, numeric_type: NumericTypeConverter) -> Any:
 
 def deserialize_number_set(
     val: List[str], numeric_type: NumericTypeConverter
-) -> Set[T]:
+) -> Set[Any]:
     return {numeric_type(v) for v in val}
 
 
