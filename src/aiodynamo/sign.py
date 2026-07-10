@@ -18,7 +18,10 @@ METHOD = "POST"
 ALGORITHM = "AWS4-HMAC-SHA256"
 
 
-def make_default_endpoint(region: str) -> URL:
+def make_default_endpoint(region: str, dual_stack: bool) -> URL:
+    if dual_stack:
+        return URL.build(scheme="https", host=f"{SERVICE}.{region}.api.aws", path="/")
+
     return URL.build(scheme="https", host=f"{SERVICE}.{region}.amazonaws.com", path="/")
 
 
@@ -59,10 +62,11 @@ def signed_dynamo_request(
     payload: Mapping[str, Any],
     action: str,
     region: str,
+    dual_stack: bool,
     endpoint: Optional[URL] = None,
 ) -> Request:
     instant = Instant.now()
-    endpoint = endpoint or make_default_endpoint(region)
+    endpoint = endpoint or make_default_endpoint(region, dual_stack)
     host = endpoint.host
     amz_target = f"{API_VERSION}.{action}"
 
