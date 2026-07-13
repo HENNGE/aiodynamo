@@ -34,7 +34,7 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         implementation: [
           {flavor: "dynalite", name: "dynalite"},
-          {flavor: "other", name: "dynamodb-local"},
+          {flavor: "dynamodb-local", name: "dynamodb-local"},
           {flavor: "scylla", name: "scylla"}
         ]
     runs-on: "ubuntu-latest"

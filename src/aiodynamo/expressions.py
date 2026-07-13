@@ -241,6 +241,9 @@ class KeyCondition(metaclass=abc.ABCMeta):
     def encode(self, params: Parameters) -> str:
         pass
 
+    def __and__(self, other: Condition) -> KeyCondition:
+        raise NotImplementedError
+
 
 @dataclass(frozen=True)
 class HashKey(KeyCondition):
@@ -375,6 +378,9 @@ class HashAndRangeKeyCondition(KeyCondition):
 
     def encode(self, params: Parameters) -> str:
         return f"{self.hash_key.encode(params)} AND {self.range_key_condition.encode(params)}"
+
+    def __and__(self, other: Condition) -> KeyCondition:
+        return HashAndRangeKeyCondition(self.hash_key, self.range_key_condition & other)
 
 
 class Condition(metaclass=abc.ABCMeta):
@@ -700,3 +706,57 @@ class SubConditions:
         yield self.first
         yield self.second
         yield from self.rest
+
+
+# Multi-attribute key support for GSI queries
+
+
+@dataclass(frozen=True, init=False)
+class MultiHashKey(KeyCondition):
+    """Multi-attribute partition key condition for GSI queries.
+
+    DynamoDB GSIs support up to 4 partition key attributes. All partition key
+    attributes must be specified with equality conditions.
+
+    Usage:
+        MultiHashKey(("pk1", value1), ("pk2", value2))
+
+    For sort key conditions, use the existing RangeKey class:
+        MultiHashKey(("pk1", v1), ("pk2", v2)) & RangeKey("sk").begins_with("x")
+
+    For multiple sort key conditions:
+        MultiHashKey(("pk1", v1), ("pk2", v2)) & RangeKey("sk1").equals(v1) & RangeKey("sk2").gt(0)
+    """
+
+    keys: Tuple[Tuple[str, Any], ...]
+
+    def __init__(self, *keys: Tuple[str, Any]) -> None:
+        if not (1 <= len(keys) <= 4):
+            raise ValueError("MultiHashKey requires 1-4 key attribute pairs")
+        object.__setattr__(self, "keys", keys)
+
+    def encode(self, params: Parameters) -> str:
+        parts = [
+            f"{params.encode_path(KeyPath(name))} = {params.encode_value(value)}"
+            for name, value in self.keys
+        ]
+        return " AND ".join(parts)
+
+    def __and__(self, other: Condition) -> KeyCondition:
+        return MultiHashAndRangeKeyCondition(self, other)
+
+
+@dataclass(frozen=True)
+class MultiHashAndRangeKeyCondition(KeyCondition):
+    """Multi-attribute partition key combined with sort key condition(s)."""
+
+    hash_key: MultiHashKey
+    range_key_condition: Condition
+
+    def encode(self, params: Parameters) -> str:
+        return f"{self.hash_key.encode(params)} AND {self.range_key_condition.encode(params)}"
+
+    def __and__(self, other: Condition) -> KeyCondition:
+        return MultiHashAndRangeKeyCondition(
+            self.hash_key, self.range_key_condition & other
+        )

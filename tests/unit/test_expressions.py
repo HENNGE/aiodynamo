@@ -8,9 +8,11 @@ from aiodynamo.expressions import (
     Condition,
     F,
     HashKey,
+    MultiHashKey,
     OrCondition,
     Parameters,
     ProjectionExpression,
+    RangeKey,
     SubConditions,
     UpdateExpression,
 )
@@ -248,3 +250,131 @@ def test_update_expression_debug(expr: UpdateExpression, expected: str) -> None:
 )
 def test_condition_flattening(expr: Condition, expected: Condition) -> None:
     assert expr == expected
+
+
+# Multi-attribute key tests
+
+
+@pytest.mark.parametrize(
+    "multi_hash_key,encoded,ean,eav",
+    [
+        (
+            MultiHashKey(("pk1", "v1")),
+            "#n0 = :v0",
+            {"#n0": "pk1"},
+            {":v0": {"S": "v1"}},
+        ),
+        (
+            MultiHashKey(("pk1", "v1"), ("pk2", "v2")),
+            "#n0 = :v0 AND #n1 = :v1",
+            {"#n0": "pk1", "#n1": "pk2"},
+            {":v0": {"S": "v1"}, ":v1": {"S": "v2"}},
+        ),
+        (
+            MultiHashKey(("tenant", "acme"), ("region", "us-east"), ("env", "prod")),
+            "#n0 = :v0 AND #n1 = :v1 AND #n2 = :v2",
+            {"#n0": "tenant", "#n1": "region", "#n2": "env"},
+            {":v0": {"S": "acme"}, ":v1": {"S": "us-east"}, ":v2": {"S": "prod"}},
+        ),
+    ],
+)
+def test_multi_hash_key_encoding(
+    multi_hash_key: MultiHashKey,
+    encoded: str,
+    ean: Dict[str, str],
+    eav: Dict[str, Dict[str, str]],
+) -> None:
+    params = Parameters()
+    assert multi_hash_key.encode(params) == encoded
+    payload = params.to_request_payload()
+    assert payload["ExpressionAttributeNames"] == ean
+    assert payload["ExpressionAttributeValues"] == eav
+
+
+def test_multi_hash_and_range_key_condition() -> None:
+    """Test combining multi-attribute hash key with range key condition."""
+    condition = MultiHashKey(("pk1", "v1"), ("pk2", "v2")) & RangeKey("sk1").equals("a")
+    params = Parameters()
+    encoded = condition.encode(params)
+    assert encoded == "#n0 = :v0 AND #n1 = :v1 AND #n2 = :v2"
+    payload = params.to_request_payload()
+    assert payload["ExpressionAttributeNames"] == {
+        "#n0": "pk1",
+        "#n1": "pk2",
+        "#n2": "sk1",
+    }
+    assert payload["ExpressionAttributeValues"] == {
+        ":v0": {"S": "v1"},
+        ":v1": {"S": "v2"},
+        ":v2": {"S": "a"},
+    }
+
+
+def test_multi_hash_with_chained_range_conditions() -> None:
+    """Test multi-attribute hash key with multiple range key conditions."""
+    condition = MultiHashKey(("pk1", "v1"), ("pk2", "v2")) & (
+        RangeKey("sk1").equals("a") & RangeKey("sk2").gt(0)
+    )
+    params = Parameters()
+    encoded = condition.encode(params)
+    assert encoded == "#n0 = :v0 AND #n1 = :v1 AND (#n2 = :v2 AND #n3 > :v3)"
+
+
+def test_hash_key_chained_range_without_parens() -> None:
+    """HashKey & RangeKey(...) & RangeKey(...) should work without parentheses."""
+    condition = HashKey("h", "v") & RangeKey("r1").equals("a") & RangeKey("r2").gt(0)
+    params = Parameters()
+    encoded = condition.encode(params)
+    assert encoded == "#n0 = :v0 AND (#n1 = :v1 AND #n2 > :v2)"
+    payload = params.to_request_payload()
+    assert payload["ExpressionAttributeNames"] == {
+        "#n0": "h",
+        "#n1": "r1",
+        "#n2": "r2",
+    }
+    assert payload["ExpressionAttributeValues"] == {
+        ":v0": {"S": "v"},
+        ":v1": {"S": "a"},
+        ":v2": {"N": "0"},
+    }
+
+
+def test_multi_hash_key_chained_range_without_parens() -> None:
+    """MultiHashKey & RangeKey(...) & RangeKey(...) should work without parentheses."""
+    condition = (
+        MultiHashKey(("pk1", "v1"), ("pk2", "v2"))
+        & RangeKey("sk1").equals("a")
+        & RangeKey("sk2").gt(0)
+    )
+    params = Parameters()
+    encoded = condition.encode(params)
+    assert encoded == "#n0 = :v0 AND #n1 = :v1 AND (#n2 = :v2 AND #n3 > :v3)"
+    payload = params.to_request_payload()
+    assert payload["ExpressionAttributeNames"] == {
+        "#n0": "pk1",
+        "#n1": "pk2",
+        "#n2": "sk1",
+        "#n3": "sk2",
+    }
+    assert payload["ExpressionAttributeValues"] == {
+        ":v0": {"S": "v1"},
+        ":v1": {"S": "v2"},
+        ":v2": {"S": "a"},
+        ":v3": {"N": "0"},
+    }
+
+
+def test_multi_hash_key_empty_raises() -> None:
+    """MultiHashKey with no keys should raise ValueError."""
+    with pytest.raises(
+        ValueError, match="MultiHashKey requires 1-4 key attribute pairs"
+    ):
+        MultiHashKey()
+
+
+def test_multi_hash_key_too_many_raises() -> None:
+    """MultiHashKey with more than 4 keys should raise ValueError."""
+    with pytest.raises(
+        ValueError, match="MultiHashKey requires 1-4 key attribute pairs"
+    ):
+        MultiHashKey(("a", 1), ("b", 2), ("c", 3), ("d", 4), ("e", 5))

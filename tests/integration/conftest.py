@@ -45,6 +45,8 @@ class Flavor(Enum):
     real = "real"
     scylla = "scylla"
     dynalite = "dynalite"
+    dynamodb_local = "dynamodb-local"
+    localstack = "localstack"
     other = "other"
 
 
