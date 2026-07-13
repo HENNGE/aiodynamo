@@ -45,6 +45,7 @@ from .expressions import (
     ProjectionExpression,
     UpdateExpression,
 )
+from .health import HealthMonitor, NoOpHealthMonitor
 from .http.types import HttpImplementation, Request, RequestFailed
 from .models import (
     BatchGetRequest,
@@ -59,6 +60,7 @@ from .models import (
     RetryConfig,
     RetryTimeout,
     ReturnValues,
+    ReturnValuesOnConditionCheckFailure,
     Select,
     StreamSpecification,
     TableDescription,
@@ -142,10 +144,15 @@ class Table:
         key: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
         return await self.client.delete_item(
-            self.name, key, return_values=return_values, condition=condition
+            self.name,
+            key,
+            return_values=return_values,
+            condition=condition,
+            return_values_on_condition_check_failure=return_values_on_condition_check_failure,
         )
 
     async def get_item(
@@ -169,6 +176,7 @@ class Table:
         item: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
         """
@@ -176,7 +184,11 @@ class Table:
         This will overwrite all attributes in an item.
         """
         return await self.client.put_item(
-            self.name, item, return_values=return_values, condition=condition
+            self.name,
+            item,
+            return_values=return_values,
+            return_values_on_condition_check_failure=return_values_on_condition_check_failure,
+            condition=condition,
         )
 
     def query(
@@ -345,6 +357,7 @@ class Table:
         update_expression: UpdateExpression,
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[Item, None]:
         """
@@ -356,6 +369,7 @@ class Table:
             key,
             update_expression,
             return_values=return_values,
+            return_values_on_condition_check_failure=return_values_on_condition_check_failure,
             condition=condition,
         )
 
@@ -368,6 +382,7 @@ class Client:
     endpoint: Optional[URL] = None
     numeric_type: NumericTypeConverter = float
     throttle_config: RetryConfig = RetryConfig.default()
+    health_monitor: HealthMonitor = NoOpHealthMonitor()
 
     def table(self, name: str) -> Table:
         return Table(self, name)
@@ -511,6 +526,7 @@ class Client:
         key: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
         dynamo_key = py2dy(key)
@@ -521,6 +537,7 @@ class Client:
             "TableName": table,
             "Key": dynamo_key,
             "ReturnValues": return_values.value,
+            "ReturnValuesOnConditionCheckFailure": return_values_on_condition_check_failure.value,
         }
 
         if condition:
@@ -588,6 +605,7 @@ class Client:
         item: Dict[str, Any],
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[None, Item]:
         dynamo_item = py2dy(item)
@@ -597,6 +615,7 @@ class Client:
             "TableName": table,
             "Item": dynamo_item,
             "ReturnValues": return_values.value,
+            "ReturnValuesOnConditionCheckFailure": return_values_on_condition_check_failure.value,
         }
         if condition:
             params = Parameters()
@@ -833,6 +852,7 @@ class Client:
         update_expression: UpdateExpression,
         *,
         return_values: ReturnValues = ReturnValues.none,
+        return_values_on_condition_check_failure: ReturnValuesOnConditionCheckFailure = ReturnValuesOnConditionCheckFailure.none,
         condition: Optional[Condition] = None,
     ) -> Union[Item, None]:
         params = Parameters()
@@ -846,6 +866,7 @@ class Client:
             "Key": py2dy(key),
             "UpdateExpression": expression,
             "ReturnValues": return_values.value,
+            "ReturnValuesOnConditionCheckFailure": return_values_on_condition_check_failure.value,
         }
         if condition:
             payload["ConditionExpression"] = condition.encode(params)
@@ -997,34 +1018,48 @@ class Client:
                 except asyncio.TimeoutError as exc:
                     logger.debug("http timeout")
                     exception = exc
+                    self.health_monitor.on_exception(exception)
                     continue
                 except RequestFailed as exc:
                     logger.debug("request failed")
                     exception = exc.inner
+                    self.health_monitor.on_exception(exception)
                     continue
+                except Exception as exc:
+                    self.health_monitor.on_exception(exc)
+                    raise
                 response_logger.debug("got response %r", response)
                 if response.status == 200:
+                    self.health_monitor.on_success()
                     return cast(Dict[str, Any], json.loads(response.body))
-                exception = exception_from_response(response.status, response.body)
-                if isinstance(exception, Throttled):
-                    logger.debug("request throttled")
-                elif isinstance(exception, ProvisionedThroughputExceeded):
-                    logger.debug("provisioned throughput exceeded")
-                elif isinstance(exception, ExpiredToken):
-                    logger.debug("token expired")
-                    if not self.credentials.invalidate():
-                        raise exception
-                elif isinstance(exception, ServiceUnavailable):
-                    logger.debug("service unavailable")
-                elif isinstance(exception, InternalDynamoError):
-                    logger.debug("internal dynamo error")
-                else:
-                    raise exception
+                exception = exception_from_response(
+                    response.status,
+                    response.body,
+                    self.numeric_type,
+                )
+                self.handle_exception(exception)
         except RetryTimeout:
             if exception is not None:
                 raise exception
             raise
         raise BrokenThrottleConfig()
+
+    def handle_exception(self, exception: Exception) -> None:
+        self.health_monitor.on_exception(exception)
+        if isinstance(exception, Throttled):
+            logger.debug("request throttled")
+        elif isinstance(exception, ProvisionedThroughputExceeded):
+            logger.debug("provisioned throughput exceeded")
+        elif isinstance(exception, ExpiredToken):
+            logger.debug("token expired")
+            if not self.credentials.invalidate():
+                raise exception
+        elif isinstance(exception, ServiceUnavailable):
+            logger.debug("service unavailable")
+        elif isinstance(exception, InternalDynamoError):
+            logger.debug("internal dynamo error")
+        else:
+            raise exception
 
     async def _depaginate(
         self, action: str, payload: Dict[str, Any], limit: Optional[int] = None

@@ -1,6 +1,14 @@
 Changelog
 =========
 
+26.4
+----
+
+Release Date: April 22nd, 2026
+
+* Upgrade tooling by @ojii in https://github.com/HENNGE/aiodynamo/pull/203
+* Basic health monitoring system by @ojii in https://github.com/HENNGE/aiodynamo/pull/204
+
 24.7
 ----
 

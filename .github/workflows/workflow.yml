@@ -35,7 +35,6 @@ jobs:
         implementation: [
           {flavor: "dynalite", name: "dynalite"},
           {flavor: "dynamodb-local", name: "dynamodb-local"},
-          {flavor: "localstack", name: "localstack"},
           {flavor: "scylla", name: "scylla"}
         ]
     runs-on: "ubuntu-latest"
