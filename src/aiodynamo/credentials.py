@@ -6,18 +6,11 @@ import configparser
 import datetime
 import json
 import os
+import random
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import (
-    Callable,
-    Coroutine,
-    Generic,
-    Optional,
-    Sequence,
-    TypeVar,
-    Union,
-)
+from typing import Callable, Coroutine, Generic, Optional, Sequence, TypeVar, Union
 
 from yarl import URL
 
@@ -580,23 +573,30 @@ async def fetch_with_retry_and_timeout(
     max_attempts: int,
     timeout: Timeout,
     request: Request,
+    base_delay: float = 0.1,
+    max_delay: float = 5.0,
 ) -> bytes:
     exception: Optional[Exception] = None
-    for _ in range(max_attempts):
+    for attempt in range(max_attempts):
         try:
             response = await asyncio.wait_for(http(request), timeout)
         except asyncio.TimeoutError:
             logger.debug("timed out talking to metadata service")
-            continue
         except RequestFailed as exc:
             logger.debug("request to metadata service failed")
             exception = exc.inner
-            continue
-        logger.debug(
-            "fetched metadata %s (%s bytes)", response.status, len(response.body)
-        )
-        if response.status == 200:
-            return response.body
+        else:
+            logger.debug(
+                "fetched metadata %s (%s bytes)", response.status, len(response.body)
+            )
+            if response.status == 200:
+                return response.body
+
+        if attempt < max_attempts - 1:
+            delay = min(max_delay, base_delay * (2**attempt))
+            delay *= 0.5 + random.random() / 2
+            await asyncio.sleep(delay)
+
     if exception is not None:
         raise exception
     raise TooManyRetries()

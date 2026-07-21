@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import time
 from pathlib import Path
 from textwrap import dedent
 from typing import AsyncGenerator, Optional, Type, Union
@@ -25,6 +26,8 @@ from aiodynamo.credentials import (
     Metadata,
     Refresh,
     Refreshable,
+    TooManyRetries,
+    fetch_with_retry_and_timeout,
 )
 from aiodynamo.http.types import HttpImplementation, Request, RequestFailed, Response
 
@@ -214,16 +217,14 @@ async def test_file_credentials(
     assert FileCredentials().is_disabled()
     fs.create_file(
         Path.home().joinpath(".aws", "credentials"),
-        contents=dedent(
-            """
+        contents=dedent("""
             [default]
             aws_access_key_id=foo
             aws_secret_access_key=bar
             [my-profile]
             aws_access_key_id=baz
             aws_secret_access_key=hoge
-            """
-        ),
+            """),
     )
     credentials = FileCredentials()
     assert not credentials.is_disabled()
@@ -240,8 +241,7 @@ async def test_file_credentials(
     assert FileCredentials(path=custom_path).is_disabled()
     fs.create_file(
         custom_path,
-        contents=dedent(
-            """
+        contents=dedent("""
             [default]
             aws_access_key_id=custom-foo
             aws_secret_access_key=custom-bar
@@ -249,8 +249,7 @@ async def test_file_credentials(
             aws_access_key_id=custom-baz
             aws_secret_access_key=custom-hoge
             aws_session_token=custom-token
-            """
-        ),
+            """),
     )
     credentials = FileCredentials(path=custom_path)
     assert not credentials.is_disabled()
@@ -328,3 +327,67 @@ async def test_refreshable_background() -> None:
     await refreshable._active_refresh_task
     assert refreshable._active_refresh_task is None
     assert refreshable._current == 1
+
+
+async def test_fetch_with_retry_and_timeout_backs_off() -> None:
+    call_times: list[float] = []
+    attempts = 0
+
+    async def flaky_http(request: Request) -> Response:
+        nonlocal attempts
+        call_times.append(time.monotonic())
+        attempts += 1
+        if attempts < 3:
+            raise RequestFailed(Exception("boom"))
+        return Response(status=200, body=b"ok")
+
+    result = await fetch_with_retry_and_timeout(
+        http=flaky_http,
+        max_attempts=3,
+        timeout=1,
+        request=Request(
+            method="GET", url="http://example.invalid", headers=None, body=None
+        ),
+        base_delay=0.05,
+        max_delay=1,
+    )
+
+    assert result == b"ok"
+    assert attempts == 3
+    assert 0.02 <= call_times[1] - call_times[0] <= 0.07
+    assert 0.04 <= call_times[2] - call_times[1] <= 0.13
+
+
+async def test_fetch_with_retry_and_timeout_raises_after_max_attempts() -> None:
+    async def always_fails(request: Request) -> Response:
+        raise RequestFailed(Exception("boom"))
+
+    with pytest.raises(Exception, match="boom"):
+        await fetch_with_retry_and_timeout(
+            http=always_fails,
+            max_attempts=2,
+            timeout=1,
+            request=Request(
+                method="GET", url="http://example.invalid", headers=None, body=None
+            ),
+            base_delay=0.01,
+            max_delay=0.1,
+        )
+
+
+async def test_fetch_with_retry_and_timeout_raises_toomanyretries_on_timeout() -> None:
+    async def always_times_out(request: Request) -> Response:
+        await asyncio.sleep(10)
+        return Response(status=200, body=b"unreachable")
+
+    with pytest.raises(TooManyRetries):
+        await fetch_with_retry_and_timeout(
+            http=always_times_out,
+            max_attempts=2,
+            timeout=0.01,
+            request=Request(
+                method="GET", url="http://example.invalid", headers=None, body=None
+            ),
+            base_delay=0.01,
+            max_delay=0.1,
+        )
