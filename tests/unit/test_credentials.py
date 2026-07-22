@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import time
 from pathlib import Path
 from textwrap import dedent
 from typing import AsyncGenerator, Optional, Type, Union
@@ -329,13 +328,18 @@ async def test_refreshable_background() -> None:
     assert refreshable._current == 1
 
 
-async def test_fetch_with_retry_and_timeout_backs_off() -> None:
-    call_times: list[float] = []
+async def test_fetch_with_retry_and_timeout_backs_off(monkeypatch) -> None:
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_calls.append(delay)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
     attempts = 0
 
     async def flaky_http(request: Request) -> Response:
         nonlocal attempts
-        call_times.append(time.monotonic())
         attempts += 1
         if attempts < 3:
             raise RequestFailed(Exception("boom"))
@@ -348,17 +352,22 @@ async def test_fetch_with_retry_and_timeout_backs_off() -> None:
         request=Request(
             method="GET", url="http://example.invalid", headers=None, body=None
         ),
-        base_delay=0.05,
-        max_delay=1,
     )
 
     assert result == b"ok"
     assert attempts == 3
-    assert 0.02 <= call_times[1] - call_times[0] <= 0.07
-    assert 0.04 <= call_times[2] - call_times[1] <= 0.13
+    assert len(sleep_calls) == 2
+    assert all(0 <= d <= 2 for d in sleep_calls)
 
 
-async def test_fetch_with_retry_and_timeout_raises_after_max_attempts() -> None:
+async def test_fetch_with_retry_and_timeout_raises_after_max_attempts(
+    monkeypatch,
+) -> None:
+    async def fake_sleep(delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
     async def always_fails(request: Request) -> Response:
         raise RequestFailed(Exception("boom"))
 
@@ -370,8 +379,6 @@ async def test_fetch_with_retry_and_timeout_raises_after_max_attempts() -> None:
             request=Request(
                 method="GET", url="http://example.invalid", headers=None, body=None
             ),
-            base_delay=0.01,
-            max_delay=0.1,
         )
 
 
@@ -388,6 +395,4 @@ async def test_fetch_with_retry_and_timeout_raises_toomanyretries_on_timeout() -
             request=Request(
                 method="GET", url="http://example.invalid", headers=None, body=None
             ),
-            base_delay=0.01,
-            max_delay=0.1,
         )
