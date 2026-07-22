@@ -6,7 +6,6 @@ import configparser
 import datetime
 import json
 import os
-import random
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
@@ -15,6 +14,7 @@ from typing import Callable, Coroutine, Generic, Optional, Sequence, TypeVar, Un
 from yarl import URL
 
 from .http.types import HttpImplementation, Request, RequestFailed
+from .models import ExponentialBackoffRetry
 from .types import Timeout
 from .utils import logger, parse_amazon_timestamp
 
@@ -573,10 +573,9 @@ async def fetch_with_retry_and_timeout(
     max_attempts: int,
     timeout: Timeout,
     request: Request,
-    base_delay: float = 0.1,
-    max_delay: float = 5.0,
 ) -> bytes:
     exception: Optional[Exception] = None
+    delays = iter(ExponentialBackoffRetry(max_delay_secs=2).delays())
     for attempt in range(max_attempts):
         try:
             response = await asyncio.wait_for(http(request), timeout)
@@ -593,9 +592,7 @@ async def fetch_with_retry_and_timeout(
                 return response.body
 
         if attempt < max_attempts - 1:
-            delay = min(max_delay, base_delay * (2**attempt))
-            delay *= 0.5 + random.random() / 2
-            await asyncio.sleep(delay)
+            await asyncio.sleep(next(delays))
 
     if exception is not None:
         raise exception
