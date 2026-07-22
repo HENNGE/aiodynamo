@@ -9,19 +9,12 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import (
-    Callable,
-    Coroutine,
-    Generic,
-    Optional,
-    Sequence,
-    TypeVar,
-    Union,
-)
+from typing import Callable, Coroutine, Generic, Optional, Sequence, TypeVar, Union
 
 from yarl import URL
 
 from .http.types import HttpImplementation, Request, RequestFailed
+from .models import ExponentialBackoffRetry
 from .types import Timeout
 from .utils import logger, parse_amazon_timestamp
 
@@ -582,21 +575,25 @@ async def fetch_with_retry_and_timeout(
     request: Request,
 ) -> bytes:
     exception: Optional[Exception] = None
-    for _ in range(max_attempts):
+    delays = iter(ExponentialBackoffRetry(max_delay_secs=2).delays())
+    for attempt in range(max_attempts):
         try:
             response = await asyncio.wait_for(http(request), timeout)
         except asyncio.TimeoutError:
             logger.debug("timed out talking to metadata service")
-            continue
         except RequestFailed as exc:
             logger.debug("request to metadata service failed")
             exception = exc.inner
-            continue
-        logger.debug(
-            "fetched metadata %s (%s bytes)", response.status, len(response.body)
-        )
-        if response.status == 200:
-            return response.body
+        else:
+            logger.debug(
+                "fetched metadata %s (%s bytes)", response.status, len(response.body)
+            )
+            if response.status == 200:
+                return response.body
+
+        if attempt < max_attempts - 1:
+            await asyncio.sleep(next(delays))
+
     if exception is not None:
         raise exception
     raise TooManyRetries()
